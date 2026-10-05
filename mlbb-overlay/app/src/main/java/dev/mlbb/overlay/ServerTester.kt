@@ -98,6 +98,12 @@ object ServerTester {
         return GeoDb.lookup(n.server)?.countryCode.equals("RU", true)
     }
 
+    /** Серверы «Обход» (под белые списки мобильных операторов) — медленнее, через пересылку. */
+    fun isBypass(n: Subscription.Node): Boolean {
+        val name = n.name.lowercase()
+        return name.contains("обход") || name.contains("bypass") || name.contains("мост")
+    }
+
     /** Строки-разделители в подписках («Локации под обход ⬇️») — не серверы. */
     fun isSeparator(n: Subscription.Node) = n.name.contains("⬇") || n.name.contains("⬆")
 
@@ -160,9 +166,12 @@ object ServerTester {
         if (!game) return ranked
         // Игровой режим: российские серверы всегда первыми (ближе к серверам MLBB в РФ),
         // зарубежные — только запасным вариантом
+        // Игровой режим: сначала обычные российские, потом обычные зарубежные;
+        // «Обход» — только запасным вариантом, если обычные не работают (белые списки)
         val byTag = nodes.associateBy { it.tag }
-        val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
-        return ru + other
+        val (bypass, normal) = ranked.partition { tag -> byTag[tag]?.let { isBypass(it) } == true }
+        val (ru, other) = normal.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
+        return ru + other + bypass
     }
 
     /**
@@ -174,7 +183,7 @@ object ServerTester {
         // В игровом режиме перебираем все российские, потом ещё несколько запасных
         val ruCount = if (AppSettings.gameMode) {
             val byTag = Subscription.nodes.associateBy { it.tag }
-            ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
+            ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) && !isBypass(it) } == true }.size
         } else 0
         // Игровой режим и уже известны серверы игры — выбираем по пингу ДО ИГРЫ среди нескольких рабочих
         // Матчей ещё не было — ориентируемся на пинг до Москвы (там серверы MLBB для РФ)
@@ -183,8 +192,12 @@ object ServerTester {
         val wanted = if (AppSettings.gameMode) 4 else 1
         val working = ArrayList<String>()
         gamePing.clear()
-        for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
+        // Если в первой порции ни один не ответил — идём дальше по списку (там «Обход» как запасной)
+        val limit = maxOf(maxTries, ruCount + 4)
+        for ((i, tag) in ranked.withIndex()) {
             if (working.size >= wanted) break
+            if (i >= limit && working.isNotEmpty()) break
+            if (i >= 30) break
             if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
                 results.put(tag, null)

@@ -150,7 +150,8 @@ class ServersActivity : AppCompatActivity() {
                     ServerTester.results[it.tag] == null -> 2
                     else -> 0
                 }
-            }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
+            }.thenBy { if (game && ServerTester.isBypass(it)) 1 else 0 }
+                .thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
                 .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
             if (!ServerTester.testing && header.text.isEmpty()) {
                 header.text = "${items.size} серверов · пинг напрямую до сервера · ↻ перемерить" +
@@ -188,7 +189,7 @@ class ServersActivity : AppCompatActivity() {
             val selected = n.tag == AppSettings.selectedTag
             h.root.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             h.flag.text = Ui.flagFor(n)
-            h.name.text = (if (ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
+            h.name.text = (if (ServerTester.isRussian(n) && !ServerTester.isBypass(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
             val g = ServerTester.gamePing[n.tag]
