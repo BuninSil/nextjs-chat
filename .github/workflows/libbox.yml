@@ -1,0 +1,40 @@
+name: Build sing-box libbox
+
+# Собирает VPN-ядро sing-box (libbox.aar) для встроенного VPN-клиента
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/libbox.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  libbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Build libbox.aar
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264" > /dev/null
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
+          git clone --depth 1 --branch v1.11.4 https://github.com/SagerNet/sing-box /tmp/sing-box
+          cd /tmp/sing-box
+          make lib_install
+          make lib_android
+          ls -la libbox.aar
+      - name: Publish libbox.aar to libbox branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/pub && cp /tmp/sing-box/libbox.aar /tmp/pub/
+          cd /tmp/pub && git init -q && git checkout -q -b libbox
+          git add . && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "libbox.aar sing-box v1.11.4"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" libbox
