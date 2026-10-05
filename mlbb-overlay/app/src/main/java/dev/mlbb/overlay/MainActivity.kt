@@ -11,7 +11,11 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -19,6 +23,9 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var dbStatus: TextView
+    private lateinit var updateStatus: TextView
+    @Volatile
+    private var updateBusy = false
     private val handler = Handler(Looper.getMainLooper())
     @Volatile
     private var dbBusy = false
@@ -48,6 +55,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         status = findViewById(R.id.status)
         dbStatus = findViewById(R.id.dbStatus)
+        updateStatus = findViewById(R.id.updateStatus)
+        findViewById<TextView>(R.id.author).text =
+            "Автор: ${BuildConfig.AUTHOR} · версия ${BuildConfig.VERSION_NAME}"
+        updateStatus.text = "Версия ${BuildConfig.VERSION_NAME}"
+        findViewById<Button>(R.id.btnCheckUpdate).setOnClickListener { checkUpdate(manual = true) }
+        findViewById<Button>(R.id.btnUpdateSettings).setOnClickListener { showUpdateSettings() }
 
         findViewById<Button>(R.id.btnStart).setOnClickListener { startFlow() }
         findViewById<Button>(R.id.btnStop).setOnClickListener { CaptureVpnService.stop(this) }
@@ -60,6 +73,99 @@ class MainActivity : AppCompatActivity() {
         }
 
         Thread { GeoDb.load(applicationContext) }.start()
+
+        AppSettings.load(this)
+        if (savedInstanceState == null && AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+    }
+
+    private fun checkUpdate(manual: Boolean) {
+        if (updateBusy) return
+        updateBusy = true
+        updateStatus.text = "Проверяю обновления…"
+        Thread {
+            try {
+                val rel = Updater.check()
+                runOnUiThread {
+                    if (rel == null) {
+                        updateStatus.text = "Версия ${BuildConfig.VERSION_NAME} — последняя"
+                    } else {
+                        updateStatus.text = "Доступна ${rel.tag}"
+                        if (!isFinishing) askInstall(rel)
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    updateStatus.text = "Обновления: ${e.message}"
+                    if (manual) toast("Не удалось проверить: ${e.message}")
+                }
+            } finally {
+                updateBusy = false
+            }
+        }.start()
+    }
+
+    private fun askInstall(rel: Updater.Release) {
+        AlertDialog.Builder(this)
+            .setTitle("Обновление ${rel.tag}")
+            .setMessage(rel.notes.ifBlank { "Новая сборка доступна." }.take(1500))
+            .setPositiveButton("Скачать и установить") { _, _ -> downloadUpdate(rel) }
+            .setNegativeButton("Позже", null)
+            .show()
+    }
+
+    private fun downloadUpdate(rel: Updater.Release) {
+        if (updateBusy) return
+        updateBusy = true
+        Thread {
+            try {
+                val apk = Updater.download(applicationContext, rel) { msg -> runOnUiThread { updateStatus.text = msg } }
+                runOnUiThread {
+                    updateStatus.text = "Скачано, открываю установщик"
+                    if (!Updater.install(this, apk)) {
+                        toast("Разреши установку из этого приложения и нажми «Проверить обновления» ещё раз")
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { updateStatus.text = "Ошибка обновления: ${e.message}" }
+            } finally {
+                updateBusy = false
+            }
+        }.start()
+    }
+
+    private fun showUpdateSettings() {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val repo = EditText(this).apply {
+            hint = "owner/repo"
+            setText(AppSettings.updateRepo)
+        }
+        val token = EditText(this).apply {
+            hint = "GitHub токен (только для приватного репо)"
+            setText(AppSettings.updateToken)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val auto = CheckBox(this).apply {
+            text = "Проверять при запуске"
+            isChecked = AppSettings.autoCheckUpdates
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(repo)
+            addView(token)
+            addView(auto)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Обновления")
+            .setView(box)
+            .setPositiveButton("Сохранить") { _, _ ->
+                AppSettings.updateRepo = repo.text.toString().trim().ifEmpty { BuildConfig.UPDATE_REPO }
+                AppSettings.updateToken = token.text.toString().trim()
+                AppSettings.autoCheckUpdates = auto.isChecked
+                AppSettings.save(this)
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     override fun onResume() {

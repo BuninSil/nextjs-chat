@@ -70,12 +70,46 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/updateStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnCheckUpdate"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Проверить обновления" />
+
+            <Button
+                android:id="@+id/btnUpdateSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙" />
+        </LinearLayout>
+
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:alpha="0.7"
             android:autoLink="web"
             android:text="IP Geolocation by DB-IP (https://db-ip.com), CC BY 4.0.\nПересылка трафика: zdtun (LGPL-3.0)."
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/author"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:alpha="0.6"
+            android:gravity="center"
             android:textSize="12sp" />
     </LinearLayout>
 </ScrollView>

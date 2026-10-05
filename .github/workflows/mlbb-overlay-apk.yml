@@ -35,21 +35,32 @@ jobs:
       - name: Build debug APK
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug
+          ./gradlew --no-daemon --stacktrace assembleDebug -PversionCode=${{ github.run_number }}
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/mlbb-overlay.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: mlbb-overlay-debug
-          path: mlbb-overlay/app/build/outputs/apk/debug/app-debug.apk
+          path: /tmp/mlbb-overlay.apk
 
-      # APK кладётся в отдельную ветку apk-builds (перезаписывается каждый раз),
-      # чтобы его можно было забрать обычным git fetch без доступа к artifacts API.
-      - name: Publish APK to apk-builds branch
-        if: github.event_name != 'pull_request'
+      # Релиз — источник автообновления в приложении (versionCode = номер запуска)
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p /tmp/pub && cp app/build/outputs/apk/debug/app-debug.apk /tmp/pub/mlbb-overlay-debug.apk
+          TAG="mlbb-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" /tmp/mlbb-overlay.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "MLBB Server Overlay 1.0.${{ github.run_number }}" \
+            --notes "$(git log -1 --pretty=%B "$GITHUB_SHA")"
+
+      # Копия APK в ветке apk-builds (перезаписывается), чтобы забрать её обычным git fetch
+      - name: Publish APK to apk-builds branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/pub && cp /tmp/mlbb-overlay.apk /tmp/pub/mlbb-overlay-debug.apk
           cd /tmp/pub
           echo "${GITHUB_SHA}" > SOURCE_COMMIT
           git init -q && git checkout -q -b apk-builds

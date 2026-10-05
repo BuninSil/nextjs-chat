@@ -12,8 +12,14 @@ android {
         applicationId = "dev.mlbb.overlay"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // CI передаёт номер запуска: -PversionCode=N. Он же попадает в тег релиза.
+        val ciVersion = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionCode = ciVersion
+        versionName = "1.0.$ciVersion"
+
+        // Откуда тянуть обновления (GitHub owner/repo), можно поменять в приложении
+        buildConfigField("String", "UPDATE_REPO", "\"BuninSil/nextjs-chat\"")
+        buildConfigField("String", "AUTHOR", "\"BuninSil\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -47,6 +53,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     kotlinOptions {
