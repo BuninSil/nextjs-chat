@@ -120,6 +120,7 @@ object Subscription {
                     info = parseUserInfo(it)
                 }
                 nodes = parsed
+                resetExits(ctx)
                 return parsed.size
             } catch (e: Exception) {
                 lastProblem = e.message ?: lastProblem
