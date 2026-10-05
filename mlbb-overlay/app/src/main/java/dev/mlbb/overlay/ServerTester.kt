@@ -145,8 +145,10 @@ object ServerTester {
             ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
         } else 0
         // Игровой режим и уже известны серверы игры — выбираем по пингу ДО ИГРЫ среди нескольких рабочих
+        // Матчей ещё не было — ориентируемся на пинг до Москвы (там серверы MLBB для РФ)
         val games = if (AppSettings.gameMode) GameServers.list(ctx).take(2) else emptyList()
-        val wanted = if (games.isEmpty()) 1 else 4
+        val useRefs = AppSettings.gameMode && games.isEmpty()
+        val wanted = if (AppSettings.gameMode) 4 else 1
         val working = ArrayList<String>()
         gamePing.clear()
         for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
@@ -157,10 +159,12 @@ object ServerTester {
                 continue
             }
             working.add(tag)
-            if (games.isNotEmpty()) {
-                val pings = games.mapNotNull { GameServers.ping(it.ip) }
-                if (pings.isNotEmpty()) gamePing[tag] = pings.sorted()[pings.size / 2]
+            val pings = when {
+                games.isNotEmpty() -> games.mapNotNull { GameServers.ping(it.ip) }
+                useRefs -> listOfNotNull(GameServers.pingHost(GameServers.moscowRefs.first().first))
+                else -> emptyList()
             }
+            if (pings.isNotEmpty()) gamePing[tag] = pings.sorted()[pings.size / 2]
         }
         val best = working.minByOrNull { gamePing[it] ?: Int.MAX_VALUE } ?: return null
         ClashApi.select(p.api, p.secret, "proxy", best)
