@@ -484,8 +484,17 @@ class MainActivity : AppCompatActivity() {
 
             // 3. Проверяем, что через сервер реально ходит трафик; если нет — следующий
             if (ranked.isNotEmpty()) {
-                runOnUiThread { progress.setTitle("Проверяю сервер"); progress.setMessage("Секунду…") }
-                ServerTester.pickWorking(applicationContext, ranked)
+                if (AppSettings.gameMode) {
+                    // Игре важен пинг: лучший рабочий по пингу до игры
+                    runOnUiThread { progress.setTitle("Проверяю сервер"); progress.setMessage("Секунду…") }
+                    ServerTester.pickWorking(applicationContext, ranked)
+                } else {
+                    // Обычный VPN: из быстрых по пингу — самый быстрый по скорости
+                    runOnUiThread { progress.setTitle("Ищу самый быстрый по скорости") }
+                    ServerTester.pickFastest(applicationContext, ranked) { done, total ->
+                        runOnUiThread { progress.setMessage("Сервер $done из $total…") }
+                    }
+                }
             }
             busy = false
             runOnUiThread {

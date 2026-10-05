@@ -43,6 +43,8 @@ class ServersActivity : AppCompatActivity() {
             setPadding(0, 0, d(12f), 0); setOnClickListener { finish() }
         })
         top.addView(Ui.text(this, "Серверы", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(Ui.button(this, "⚡ По скорости") { speedRank() })
+        top.addView(Ui.space(this, 0f).apply { layoutParams = LinearLayout.LayoutParams(d(8f), 1) })
         top.addView(Ui.button(this, " ↻ ") { retest() })
         root.addView(top)
         root.addView(Ui.space(this, 12f))
@@ -88,6 +90,24 @@ class ServersActivity : AppCompatActivity() {
             }
             // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий
             if (AppSettings.autoSelect && BoxVpnService.isRunning) ServerTester.pickWorking(applicationContext, ranked)
+            runOnUiThread { header.text = "" }
+        }.start()
+    }
+
+    /** Замер скорости через лучшие по пингу серверы; выбирает самый быстрый. */
+    private fun speedRank() {
+        if (!BoxVpnService.isRunning) {
+            Toast.makeText(this, "Скорость меряется через VPN — сначала подключись", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (ServerTester.testing) return
+        Thread {
+            val ranked = ServerTester.measure(applicationContext) { done, total ->
+                runOnUiThread { header.text = "Пинг: $done из $total…" }
+            }
+            ServerTester.pickFastest(applicationContext, ranked, 8) { done, total ->
+                runOnUiThread { header.text = "Скорость: сервер $done из $total…" }
+            }
             runOnUiThread { header.text = "" }
         }.start()
     }
@@ -172,8 +192,10 @@ class ServersActivity : AppCompatActivity() {
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
             val g = ServerTester.gamePing[n.tag]
+            val sp = ServerTester.speed[n.tag]
             h.sub.text = n.type + udp + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
-                (g?.let { " · 🎮 до игры $it ms" } ?: "")
+                (g?.let { " · 🎮 до игры $it ms" } ?: "") +
+                (sp?.let { " · ↓ " + String.format(java.util.Locale.US, "%.0f", it) + " Мбит/с" } ?: "")
             h.ping.text = when {
                 !ServerTester.results.containsKey(n.tag) -> if (ServerTester.testing) "…" else ""
                 r == null -> "✖"

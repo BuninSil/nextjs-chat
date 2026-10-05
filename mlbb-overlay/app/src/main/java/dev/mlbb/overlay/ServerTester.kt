@@ -52,6 +52,38 @@ object ServerTester {
     /** Пинг до серверов игры через конкретный VPN-сервер (tag -> ms), если серверы игры известны. */
     val gamePing = ConcurrentHashMap<String, Int>()
 
+    /** Скорость загрузки через сервер (tag -> Мбит/с), из короткого замера. */
+    val speed = ConcurrentHashMap<String, Double>()
+
+    /**
+     * Обычный режим: среди лучших по пингу рабочих серверов выбирает самый быстрый
+     * по загрузке (2 секунды на сервер). Нужен запущенный VPN.
+     */
+    fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
+        val p = BoxVpnService.ports ?: return null
+        var checked = 0
+        var best: String? = null
+        var bestSpeed = 0.0
+        for (tag in ranked.take(candidates * 2)) {
+            if (checked >= candidates) break
+            if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
+            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
+                results.put(tag, null)
+                continue
+            }
+            checked++
+            progress(checked, candidates)
+            val mbps = SpeedTest.quickDownload(2) ?: continue
+            speed[tag] = mbps
+            if (mbps > bestSpeed) { bestSpeed = mbps; best = tag }
+        }
+        val chosen = best ?: return pickWorking(ctx, ranked)
+        ClashApi.select(p.api, p.secret, "proxy", chosen)
+        AppSettings.selectedTag = chosen
+        AppSettings.save(ctx)
+        return chosen
+    }
+
     @Volatile
     var testing = false
         private set

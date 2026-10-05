@@ -65,6 +65,20 @@ object SpeedTest {
         }
     }
 
+    /** Короткий замер загрузки (для сравнения серверов между собой). */
+    fun quickDownload(seconds: Int = 2): Double? = parallel(seconds) { bytes, deadline ->
+        val buf = ByteArray(64 * 1024)
+        while (System.currentTimeMillis() < deadline) {
+            conn("/__down?bytes=25000000").inputStream.use { input ->
+                while (System.currentTimeMillis() < deadline) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    bytes.addAndGet(n.toLong())
+                }
+            }
+        }
+    }
+
     fun upload(progress: (Double) -> Unit): Double? {
         val started = System.nanoTime()
         val chunk = ByteArray(256 * 1024)
