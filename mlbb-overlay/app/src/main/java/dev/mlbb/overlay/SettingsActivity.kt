@@ -44,32 +44,29 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(this, "←", 22f, bold = true).apply {
-            setPadding(0, 0, d(14f), 0)
-            setOnClickListener { finish() }
-        })
+        top.addView(Ui.backButton(this) { finish() })
         top.addView(Ui.text(this, "Настройки", 22f, bold = true))
         root.addView(top)
         val simple = AppSettings.simple
 
         // ---------- Для чего приложение ----------
         root.addView(section("Приложение"))
-        root.addView(profileCard(AppSettings.PROFILE_GAME, "🎮  Fast VPN + MLBB",
+        root.addView(profileCard(AppSettings.PROFILE_GAME, R.drawable.ic_game, "Fast VPN + MLBB",
             "VPN + плашка с сервером матча, игровой режим, лог боёв, запуск игры"))
         root.addView(Ui.space(this, 8f))
-        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "⚡  Fast VPN",
+        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, R.drawable.ic_bolt, "Fast VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
 
         // ---------- Режим (только для игры) ----------
         if (!simple) {
             root.addView(section("Режим"))
-            root.addView(modeCard(AppSettings.MODE_BOX, "🛡  Встроенный VPN",
+            root.addView(modeCard(AppSettings.MODE_BOX, R.drawable.ic_shield, "Встроенный VPN",
                 "Подключение по твоей подписке, автовыбор сервера. Рекомендую."))
             root.addView(Ui.space(this, 8f))
-            root.addView(modeCard(AppSettings.MODE_DIRECT, "📶  Без VPN",
+            root.addView(modeCard(AppSettings.MODE_DIRECT, R.drawable.ic_wifi, "Без VPN",
                 "Игра напрямую. Плашка с сервером работает, пинг не меняется."))
             root.addView(Ui.space(this, 8f))
-            root.addView(modeCard(AppSettings.MODE_API, "🔌  Внешний VPN-клиент",
+            root.addView(modeCard(AppSettings.MODE_API, R.drawable.ic_plug, "Внешний VPN-клиент",
                 "Твой клиент (FlClash, Clash Meta) остаётся включённым, мы только читаем соединения."))
             highlightMode()
         }
@@ -122,9 +119,9 @@ class SettingsActivity : AppCompatActivity() {
             dbStatus = Ui.text(this@SettingsActivity, "DB-IP: ${GeoDb.description()}", 13f, Ui.MUTED)
             addView(dbStatus)
             addView(Ui.space(this@SettingsActivity, 10f))
-            addView(primary("⬇  Скачать базу") { downloadDatabase() })
+            addView(primary(Ui.iconText(this@SettingsActivity, R.drawable.ic_download_w, "Скачать базу", 18f)) { downloadDatabase() })
             addView(Ui.space(this@SettingsActivity, 8f))
-            addView(secondary("📂  Импорт файла .mmdb") { importDb.launch(arrayOf("*/*")) })
+            addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_folder_w, "Импорт файла .mmdb", 18f)) { importDb.launch(arrayOf("*/*")) })
         })
 
         // ---------- Обновления ----------
@@ -138,7 +135,7 @@ class SettingsActivity : AppCompatActivity() {
                 AutoUpdate.schedule(applicationContext)
             })
             addView(Ui.space(this@SettingsActivity, 10f))
-            addView(secondary("↻  Проверить обновления") {
+            addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_refresh_w, "Проверить обновления", 18f)) {
                 UpdateFlow.check(this@SettingsActivity, true) { msg -> updStatus.text = msg }
             })
             updStatus = Ui.text(this@SettingsActivity, "", 12f, Ui.MUTED).apply { setPadding(0, d(6f), 0, 0) }
@@ -162,7 +159,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(apiCard)
         apiCard.visibility = if (AppSettings.mode == AppSettings.MODE_API) View.VISIBLE else View.GONE
 
-        root.addView(Ui.text(this, Ui.SLOGAN, 13f, Ui.GREEN, bold = true).apply {
+        root.addView(Ui.slogan(this, 13f, bold = true).apply {
             gravity = Gravity.CENTER
             setPadding(0, d(28f), 0, d(2f))
         }, LinearLayout.LayoutParams(-1, -2))
@@ -246,7 +243,7 @@ class SettingsActivity : AppCompatActivity() {
             })
         }
 
-    private fun primary(text: String, onClick: () -> Unit) = TextView(this).apply {
+    private fun primary(text: CharSequence, onClick: () -> Unit) = TextView(this).apply {
         this.text = text
         gravity = Gravity.CENTER
         setTextColor(0xFFFFFFFF.toInt())
@@ -257,7 +254,7 @@ class SettingsActivity : AppCompatActivity() {
         setOnClickListener { onClick() }
     }
 
-    private fun secondary(text: String, onClick: () -> Unit) = TextView(this).apply {
+    private fun secondary(text: CharSequence, onClick: () -> Unit) = TextView(this).apply {
         this.text = text
         gravity = Gravity.CENTER
         setTextColor(Ui.TEXT)
@@ -268,9 +265,9 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /** Карточка «для чего приложение»; выбор сразу перестраивает приложение. */
-    private fun profileCard(value: String, title: String, sub: String): LinearLayout {
+    private fun profileCard(value: String, iconRes: Int, title: String, sub: String): LinearLayout {
         val c = Ui.card(this)
-        c.addView(Ui.text(this, title, 15f, bold = true))
+        c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f) })
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
         val selected = AppSettings.profile == value
         c.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, d(18f).toFloat()).apply {
@@ -286,9 +283,9 @@ class SettingsActivity : AppCompatActivity() {
         return c
     }
 
-    private fun modeCard(mode: Int, title: String, sub: String): LinearLayout {
+    private fun modeCard(mode: Int, iconRes: Int, title: String, sub: String): LinearLayout {
         val c = Ui.card(this)
-        c.addView(Ui.text(this, title, 15f, bold = true))
+        c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f) })
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
         c.setOnClickListener {
             if (AppSettings.mode != mode) vpnChanged = true

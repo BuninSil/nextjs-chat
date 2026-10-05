@@ -95,7 +95,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             .setContentTitle("Fast VPN")
             .setContentText(
                 if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры"
-                else "Подключено · быстрее нас — только свет ⚡"
+                else "Подключено · быстрее нас — только свет"
             )
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())

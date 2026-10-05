@@ -40,21 +40,19 @@ class ServersActivity : AppCompatActivity() {
             setPadding(d(16f), d(20f), d(16f), 0)
         }
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(this, "←", 22f, bold = true).apply {
-            setPadding(0, 0, d(12f), 0); setOnClickListener { finish() }
-        })
+        top.addView(Ui.backButton(this) { finish() })
         top.addView(Ui.text(this, "Серверы", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(Ui.button(this, " ↻ ") { retest() })
+        top.addView(Ui.iconButton(this, R.drawable.ic_refresh_w) { retest() })
         root.addView(top)
         root.addView(Ui.space(this, 10f))
         // Отдельные проверки: страна выхода (запоминается) и скорость
         val actions = LinearLayout(this)
-        actions.addView(Ui.tile(this, "🌍  Выходы", "в какой стране сервер выходит в интернет") { checkExits() },
+        actions.addView(Ui.tile(this, R.drawable.ic_exits, "Выходы", "в какой стране сервер выходит в интернет") { checkExits() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
-        actions.addView(Ui.tile(this, "⚡  По скорости", "найти и включить самый быстрый") { speedRank() },
+        actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         root.addView(actions)
-        root.addView(Ui.text(this, "↻ вверху — перемерить пинг. Тапни сервер в списке, чтобы подключиться к нему вручную.", 12f, Ui.MUTED)
+        root.addView(Ui.text(this, "Круглая стрелка вверху — перемерить пинг. Тапни сервер в списке, чтобы подключиться к нему вручную.", 12f, Ui.MUTED)
             .apply { setPadding(d(4f), d(10f), d(4f), 0) })
         root.addView(Ui.space(this, 12f))
 
@@ -216,7 +214,7 @@ class ServersActivity : AppCompatActivity() {
             val n = items[pos]
             val selected = n.tag == AppSettings.selectedTag
             h.root.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
-            h.flag.text = Ui.flagFor(n)
+            Ui.setFlag(h.flag, Ui.flagFor(n), 24f)
             h.name.text = (if (AppSettings.gameMode && ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""

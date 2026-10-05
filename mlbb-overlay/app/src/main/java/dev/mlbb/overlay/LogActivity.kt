@@ -128,7 +128,7 @@ class LogActivity : AppCompatActivity() {
             val place = geo?.let { "${GeoDb.flag(it.countryCode)} ${it.city.ifEmpty { it.country }}" } ?: ""
             val isBattle = c.key == battleKey
             h.line1.text = "${time.format(Date(c.firstSeenMs))}  ${ConnTracker.protoName(c.proto)}  ${c.dstIp}:${c.dstPort}  $place" +
-                if (isBattle) "  ⚔" else ""
+                if (isBattle) "  · бой" else ""
             h.line1.setTypeface(null, if (isBattle) Typeface.BOLD else Typeface.NORMAL)
             val rtt = if (c.hsRttMs >= 0) " · hs ${c.hsRttMs} ms" else ""
             h.line2.text = "↑ ${fmt(c.bytesOut)} (${c.pktsOut})  ↓ ${fmt(c.bytesIn)} (${c.pktsIn})$rtt · " +

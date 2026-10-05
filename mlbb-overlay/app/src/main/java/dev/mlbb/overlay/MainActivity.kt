@@ -97,19 +97,37 @@ class MainActivity : AppCompatActivity() {
 
     /** Первый запуск: Fast VPN или Fast VPN + MLBB. Потом меняется в Настройках. */
     private fun askProfile() {
-        AlertDialog.Builder(this)
-            .setTitle("Для чего тебе приложение?")
-            .setMessage(
-                "${Ui.SLOGAN}\n\n" +
-                "🎮 Fast VPN + MLBB — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
-                    "в приоритете, запуск игры одной кнопкой.\n\n" +
-                    "⚡ Fast VPN — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
-                    "Поменять можно потом в Настройках."
-            )
-            .setCancelable(false)
-            .setPositiveButton("🎮 + MLBB") { _, _ -> chooseProfile(AppSettings.PROFILE_GAME) }
-            .setNegativeButton("⚡ Fast VPN") { _, _ -> chooseProfile(AppSettings.PROFILE_SIMPLE) }
-            .show()
+        val d = { v: Float -> Ui.dp(this, v) }
+        val dlg = android.app.Dialog(this)
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(Ui.CARD, d(22f).toFloat())
+            setPadding(d(20f), d(22f), d(20f), d(18f))
+        }
+        card.addView(Ui.text(this, "Для чего тебе приложение?", 20f, bold = true))
+        card.addView(Ui.slogan(this, 13f).apply { setPadding(0, d(4f), 0, d(8f)) })
+        fun choice(icon: Int, title: String, sub: String, value: String) = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(0xFF23272D.toInt(), d(16f).toFloat())
+            setPadding(d(14f), d(12f), d(14f), d(12f))
+            addView(Ui.text(this@MainActivity, "", 16f, bold = true).apply { text = Ui.iconText(this@MainActivity, icon, title, 22f, 10f) })
+            addView(Ui.text(this@MainActivity, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
+            setOnClickListener { dlg.dismiss(); chooseProfile(value) }
+        }
+        card.addView(choice(R.drawable.ic_bolt, "Fast VPN", "Быстрый VPN по твоей подписке. Ничего лишнего", AppSettings.PROFILE_SIMPLE),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10f) })
+        card.addView(choice(R.drawable.ic_game, "Fast VPN + MLBB",
+            "VPN + плашка с сервером матча поверх игры, российские серверы в приоритете, запуск игры кнопкой", AppSettings.PROFILE_GAME),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10f) })
+        card.addView(Ui.text(this, "Поменять можно потом в Настройках", 12f, Ui.MUTED).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, d(14f), 0, 0)
+        }, LinearLayout.LayoutParams(-1, -2))
+        dlg.setContentView(card)
+        dlg.setCancelable(false)
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dlg.window?.setLayout((resources.displayMetrics.widthPixels * 0.9).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dlg.show()
     }
 
     private fun chooseProfile(value: String) {
@@ -174,9 +192,9 @@ class MainActivity : AppCompatActivity() {
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titleCol.addView(Ui.text(this, "Fast VPN", 22f, bold = true))
-        titleCol.addView(Ui.text(this, Ui.SLOGAN, 12f, Ui.GREEN))
+        titleCol.addView(Ui.slogan(this, 12f))
         top.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(Ui.button(this, " ⚙ ") { showSettings() })
+        top.addView(Ui.iconButton(this, R.drawable.ic_settings_w) { showSettings() })
         root.addView(top)
         root.addView(Ui.space(this, 14f))
 
@@ -205,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         statusLine = Ui.text(this, "", 15f, bold = true)
         status.addView(statusLine)
         val srv = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(10f), 0, 0) }
-        serverFlag = Ui.text(this, "🌐", 28f)
+        serverFlag = Ui.text(this, "", 28f).apply { Ui.setFlag(this, "🌐") }
         srv.addView(serverFlag)
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(d(12f), 0, d(8f), 0) }
         serverName = Ui.text(this, "", 16f, bold = true)
@@ -248,7 +266,10 @@ class MainActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, x -> onChange(x) }
         }
         val gameRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(6f)) }
-        gameRow.addView(Ui.text(this, "🎮  Игровой режим", 15f, bold = true).apply { setPadding(0, 0, d(10f), 0) })
+        gameRow.addView(Ui.text(this, "", 15f, bold = true).apply {
+            text = Ui.iconText(this@MainActivity, R.drawable.ic_game_bg, "Игровой режим", 20f)
+            setPadding(0, 0, d(10f), 0)
+        })
         gameRow.addView(greenSwitch(AppSettings.gameMode) { v ->
             AppSettings.gameMode = v
             AppSettings.save(this@MainActivity)
@@ -279,7 +300,8 @@ class MainActivity : AppCompatActivity() {
         }
         launchRow.addView(launchSwitch)
         root.addView(launchRow, LinearLayout.LayoutParams(-1, -2))
-        stopButton = Ui.text(this, "▶  Запустить MLBB", 15f, Ui.GREEN, bold = true).apply {
+        stopButton = Ui.text(this, "", 15f, Ui.GREEN, bold = true).apply {
+            text = Ui.iconText(this@MainActivity, R.drawable.ic_play, "Запустить MLBB", 16f)
             gravity = Gravity.CENTER
             setPadding(0, d(8f), 0, d(4f))
             setOnClickListener { launchGame() }
@@ -318,22 +340,22 @@ class MainActivity : AppCompatActivity() {
             addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         }
         root.addView(row(
-            Ui.tile(this, "🌐  Серверы", "список, пинг, выбрать вручную") { startActivity(Intent(this, ServersActivity::class.java)) },
-            Ui.tile(this, "🔗  Подписка", "ссылка твоего VPN") { showSubscription() },
+            Ui.tile(this, R.drawable.ic_servers, "Серверы", "список, пинг, выбрать вручную") { startActivity(Intent(this, ServersActivity::class.java)) },
+            Ui.tile(this, R.drawable.ic_link, "Подписка", "ссылка твоего VPN") { showSubscription() },
         ))
         root.addView(Ui.space(this, 10f))
         if (AppSettings.simple) {
             root.addView(row(
-                Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача") { speedTest() },
-                Ui.tile(this, "⚙  Настройки", "автовыбор, Wi-Fi, обновления") { showSettings() },
+                Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача") { speedTest() },
+                Ui.tile(this, R.drawable.ic_settings, "Настройки", "автовыбор, Wi-Fi, обновления") { showSettings() },
             ))
         } else {
             root.addView(row(
-                Ui.tile(this, "📋  Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
-                Ui.tile(this, "⚙  Настройки", "режимы, база стран, обновления") { showSettings() },
+                Ui.tile(this, R.drawable.ic_log, "Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
+                Ui.tile(this, R.drawable.ic_settings, "Настройки", "режимы, база стран, обновления") { showSettings() },
             ))
             root.addView(Ui.space(this, 10f))
-            root.addView(Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача — через VPN, если он включён") { speedTest() },
+            root.addView(Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача — через VPN, если он включён") { speedTest() },
                 LinearLayout.LayoutParams(-1, -2))
         }
 
@@ -365,13 +387,13 @@ class MainActivity : AppCompatActivity() {
             AppSettings.MODE_BOX -> {
                 val n = nodeByTag(AppSettings.selectedTag) ?: Subscription.usable(this).firstOrNull()
                 if (n == null) {
-                    serverFlag.text = "🔗"
+                    serverFlag.text = Ui.iconText(this, R.drawable.ic_link, "", 26f)
                     serverName.text = "Нет подписки"
                     serverSub.text = "Нажми «Подписка» и вставь ссылку"
                     serverPing.text = ""
                 } else {
                     val r = ServerTester.results[n.tag]
-                    serverFlag.text = Ui.flagFor(n)
+                    Ui.setFlag(serverFlag, Ui.flagFor(n))
                     serverName.text = Ui.cleanName(n)
                     serverSub.text = "${n.type}" + (if (AppSettings.autoSelect) " · автовыбор" else "") +
                         " · ${Subscription.usable(this).size} серверов"
@@ -380,10 +402,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             AppSettings.MODE_DIRECT -> {
-                serverFlag.text = "📶"; serverName.text = "Без VPN"; serverSub.text = "игра напрямую"; serverPing.text = ""
+                serverFlag.text = Ui.iconText(this, R.drawable.ic_wifi, "", 26f); serverName.text = "Без VPN"; serverSub.text = "игра напрямую"; serverPing.text = ""
             }
             else -> {
-                serverFlag.text = "🔌"; serverName.text = "Внешний VPN-клиент"
+                serverFlag.text = Ui.iconText(this, R.drawable.ic_plug, "", 26f); serverName.text = "Внешний VPN-клиент"
                 serverSub.text = "через Clash API / Shizuku"; serverPing.text = ""
             }
         }
@@ -423,8 +445,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             wifiCard.visibility = android.view.View.VISIBLE
             val router = wi.routerPingMs?.let { " · роутер $it ms" } ?: ""
-            val boost = if (WifiBoost.active) (if (AppSettings.simple) "  ⚡ ускорен" else "  ⚡ игровой режим") else ""
-            wifiLine.text = "📶 Wi-Fi ${wi.band} · сигнал ${WifiBoost.signalText(wi.rssi)} (${wi.rssi} dBm)$router$boost"
+            val boost = if (WifiBoost.active) (if (AppSettings.simple) " · ускорен" else " · игровой режим") else ""
+            wifiLine.text = Ui.iconText(this, R.drawable.ic_wifi, "Wi-Fi ${wi.band} · сигнал ${WifiBoost.signalText(wi.rssi)} (${wi.rssi} dBm)$router$boost", 16f)
             val adv = WifiBoost.advice(wi)
             wifiAdvice.text = adv.joinToString("\n") { "• $it" }
             wifiAdvice.visibility = if (adv.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
@@ -437,7 +459,8 @@ class MainActivity : AppCompatActivity() {
             battleCard.visibility = android.view.View.VISIBLE
             val geo = GeoDb.lookup(battle.conn.dstIp)
             val ping = (MonitorService.lastPing ?: CaptureVpnService.pinger?.last)?.takeIf { it.ip == battle.conn.dstIp }
-            battleName.text = (geo?.let { "${GeoDb.flag(it.countryCode)} ${it.city.ifEmpty { it.country }}" } ?: "🏳 неизвестно")
+            battleName.text = geo?.let { "${GeoDb.flag(it.countryCode)} ${it.city.ifEmpty { it.country }}" }
+                ?: Ui.iconText(this, R.drawable.ic_servers, "неизвестно", 18f)
             battleSub.text = "${battle.conn.dstIp}:${battle.conn.dstPort} · UDP"
             battlePing.text = ping?.takeIf { it.ms >= 0 }?.let { "${it.ms} ms" } ?: ""
             battlePing.setTextColor(Ui.pingColor(ping?.ms))
@@ -472,13 +495,13 @@ class MainActivity : AppCompatActivity() {
             needSub -> {
                 setupTitle.text = if (total > 1) "Шаг $n из $total: добавь подписку" else "Добавь подписку"
                 setupText.text = "Скопируй ссылку подписки своего VPN (ту же, что в Karing / Hiddify / v2rayNG) и вставь сюда."
-                setupButton.text = "🔗  Вставить ссылку"
+                setupButton.text = Ui.iconText(this, R.drawable.ic_link_w, "Вставить ссылку", 18f)
                 setupButton.setOnClickListener { showSubscription() }
             }
             needDb -> {
                 setupTitle.text = "Шаг $n из $total: скачай базу стран"
                 setupText.text = "Нужна, чтобы показывать страну и город сервера игры. Один раз, около 100 МБ."
-                setupButton.text = if (dbDownloading) infoLine.text.ifEmpty { "Скачиваю…" } else "⬇  Скачать базу"
+                setupButton.text = if (dbDownloading) infoLine.text.ifEmpty { "Скачиваю…" } else Ui.iconText(this, R.drawable.ic_download_w, "Скачать базу", 18f)
                 setupButton.setOnClickListener { downloadDbFromSetup() }
             }
             else -> {
@@ -754,7 +777,7 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(input)
         box.addView(TextView(this).apply {
-            text = "📋  Вставить из буфера"
+            text = Ui.iconText(this@MainActivity, R.drawable.ic_paste, "Вставить из буфера", 18f)
             setPadding(0, d(10f), 0, d(10f))
             setTextColor(Ui.GREEN)
             setOnClickListener {
@@ -871,7 +894,7 @@ class MainActivity : AppCompatActivity() {
             background = Ui.rounded(Ui.CARD, d(22f).toFloat())
             setPadding(d(22f), d(22f), d(22f), d(18f))
         }
-        card.addView(Ui.text(this, "⚡ Тест скорости", 20f, bold = true))
+        card.addView(Ui.text(this, "", 20f, bold = true).apply { text = Ui.iconText(this@MainActivity, R.drawable.ic_speedtest, "Тест скорости", 22f) })
         card.addView(Ui.text(this, "Cloudflare · $via", 13f, Ui.MUTED).apply { setPadding(0, d(4f), 0, d(16f)) })
         fun metric(title: String): TextView {
             val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(6f), 0, d(6f)) }
@@ -917,7 +940,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (p == null && dn == null) state.text = "Нет доступа к интернету"
                 else {
-                    state.text = "Готово · быстрее нас — только свет ⚡"
+                    state.text = "Готово · быстрее нас — только свет"
                     state.setTextColor(Ui.GREEN)
                 }
                 speedRunning = false

@@ -65,13 +65,14 @@ object UpdateFlow {
             background = Ui.rounded(Ui.CARD, d(22f).toFloat())
             setPadding(d(22f), d(22f), d(22f), d(16f))
         }
-        card.addView(Ui.text(a, "⬆", 30f, Ui.GREEN))
+        card.addView(android.widget.ImageView(a).apply { setImageDrawable(Ui.icon(a, R.drawable.ic_update, 34f)) },
+            LinearLayout.LayoutParams(-2, -2))
         card.addView(Ui.text(a, "Доступно обновление", 20f, bold = true).apply { setPadding(0, d(6f), 0, 0) })
-        card.addView(Ui.text(a, Ui.SLOGAN, 13f, Ui.GREEN).apply { setPadding(0, d(4f), 0, 0) })
+        card.addView(Ui.slogan(a, 13f).apply { setPadding(0, d(4f), 0, 0) })
         card.addView(Ui.text(a, "Версия ${rel.tag.removePrefix("mlbb-v")} · сейчас ${BuildConfig.VERSION_NAME}", 13f, Ui.MUTED)
             .apply { setPadding(0, d(4f), 0, d(12f)) })
-        val notes = Ui.text(a, rel.notes.ifBlank { "Исправления и улучшения." }.take(1500), 14f, 0xFFC9CCD1.toInt())
-        card.addView(ScrollView(a).apply { addView(notes) }, LinearLayout.LayoutParams(-1, -2).apply { height = -2 })
+        val notes = Ui.text(a, rel.notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, 0xFFC9CCD1.toInt())
+        card.addView(notesScroll(a).apply { addView(notes) }, LinearLayout.LayoutParams(-1, -2))
         card.addView(TextView(a).apply {
             text = "Обновить"
             gravity = Gravity.CENTER
@@ -99,6 +100,14 @@ object UpdateFlow {
         dlg.show()
     }
 
+    /** Прокрутка для описания: не выше половины экрана, чтобы кнопки всегда были видны. */
+    private fun notesScroll(a: Activity) = object : ScrollView(a) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val max = (a.resources.displayMetrics.heightPixels * 0.5).toInt()
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST))
+        }
+    }
+
     /** Окно «Обновлено» после установки новой версии: что нового. */
     fun showUpdated(a: Activity, notes: String) {
         val d = { v: Float -> Ui.dp(a, v) }
@@ -108,11 +117,12 @@ object UpdateFlow {
             background = Ui.rounded(Ui.CARD, d(22f).toFloat())
             setPadding(d(22f), d(22f), d(22f), d(16f))
         }
-        card.addView(Ui.text(a, "⬆", 30f, Ui.GREEN))
+        card.addView(android.widget.ImageView(a).apply { setImageDrawable(Ui.icon(a, R.drawable.ic_update, 34f)) },
+            LinearLayout.LayoutParams(-2, -2))
         card.addView(Ui.text(a, "Обновлено до ${BuildConfig.VERSION_NAME}", 20f, bold = true).apply { setPadding(0, d(6f), 0, 0) })
-        card.addView(Ui.text(a, Ui.SLOGAN, 13f, Ui.GREEN).apply { setPadding(0, d(4f), 0, d(12f)) })
-        val text = Ui.text(a, notes.ifBlank { "Исправления и улучшения." }.take(1500), 14f, 0xFFC9CCD1.toInt())
-        card.addView(ScrollView(a).apply { addView(text) }, LinearLayout.LayoutParams(-1, -2))
+        card.addView(Ui.slogan(a, 13f).apply { setPadding(0, d(4f), 0, d(12f)) })
+        val text = Ui.text(a, notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, 0xFFC9CCD1.toInt())
+        card.addView(notesScroll(a).apply { addView(text) }, LinearLayout.LayoutParams(-1, -2))
         card.addView(TextView(a).apply {
             this.text = "Отлично"
             gravity = Gravity.CENTER

@@ -5,7 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.FileProvider
-import org.json.JSONObject
+import org.json.JSONArray
 import java.io.File
 
 /**
@@ -15,9 +15,13 @@ import java.io.File
 object Updater {
     data class Release(val versionCode: Int, val tag: String, val notes: String, val apkUrl: String)
 
-    /** Возвращает свежий релиз, если он новее установленной версии, иначе null. */
+    /**
+     * Возвращает свежий релиз, если он новее установленной версии, иначе null.
+     * В описание попадают изменения всех версий, вышедших после установленной, —
+     * чтобы при прыжке через несколько версий было видно всё, что поменялось.
+     */
     fun check(): Release? {
-        val c = Net.open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest")
+        val c = Net.open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases?per_page=40")
         c.setRequestProperty("Accept", "application/vnd.github+json")
         c.setRequestProperty("User-Agent", "mlbb-overlay/${BuildConfig.VERSION_NAME}")
         when (c.responseCode) {
@@ -26,34 +30,68 @@ object Updater {
             403 -> throw RuntimeException("GitHub временно ограничил запросы, попробуй позже")
             else -> throw RuntimeException("GitHub HTTP ${c.responseCode}")
         }
-        val json = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
-        val tag = json.getString("tag_name")
-        val code = tag.substringAfterLast('.').toIntOrNull() ?: return null
-        if (code <= BuildConfig.VERSION_CODE) return null
-        // Тот же коммит, собранный повторно (ветка и main) — это не обновление
-        val sha = json.optString("target_commitish")
-        if (BuildConfig.GIT_SHA.isNotEmpty() && sha == BuildConfig.GIT_SHA) return null
-        val assets = json.getJSONArray("assets")
-        for (i in 0 until assets.length()) {
-            val a = assets.getJSONObject(i)
-            if (a.getString("name").endsWith(".apk")) {
-                return Release(code, tag, cleanNotes(json.optString("body", "")), a.getString("browser_download_url"))
+        val arr = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
+
+        class Item(val code: Int, val tag: String, val sha: String, val body: String, val apk: String)
+        val newer = ArrayList<Item>()
+        for (i in 0 until arr.length()) {
+            val r = arr.getJSONObject(i)
+            if (r.optBoolean("draft") || r.optBoolean("prerelease")) continue
+            val tag = r.optString("tag_name")
+            if (!tag.startsWith("mlbb-v")) continue
+            val code = tag.substringAfterLast('.').toIntOrNull() ?: continue
+            if (code <= BuildConfig.VERSION_CODE) continue
+            val sha = r.optString("target_commitish")
+            // Тот же код, что уже установлен (собран повторно) — не обновление
+            if (BuildConfig.GIT_SHA.isNotEmpty() && sha == BuildConfig.GIT_SHA) continue
+            val assets = r.optJSONArray("assets") ?: continue
+            var apk = ""
+            for (j in 0 until assets.length()) {
+                val a = assets.getJSONObject(j)
+                if (a.getString("name").endsWith(".apk")) apk = a.getString("browser_download_url")
             }
+            if (apk.isEmpty()) continue
+            newer.add(Item(code, tag, sha, r.optString("body", ""), apk))
         }
-        return null
+        if (newer.isEmpty()) return null
+        // Один коммит часто собирается дважды (ветка и main) — оставляем по одному релизу на коммит
+        val versions = newer.sortedByDescending { it.code }.distinctBy { it.sha.ifEmpty { it.tag } }
+        val latest = versions.first()
+        val notes = if (versions.size == 1) cleanNotes(latest.body)
+        else versions.joinToString("\n\n") { v ->
+            "Версия ${v.tag.removePrefix("mlbb-v")}\n" + cleanNotes(v.body).ifBlank { "Исправления и улучшения." }
+        }
+        return Release(latest.code, latest.tag, notes, latest.apk)
     }
 
-    /** Убирает из описания релиза служебные строки коммита (соавторы, ссылки на сессии). */
-    private fun cleanNotes(body: String): String =
-        body.lines()
-            .filterNot { line ->
-                val l = line.trim()
-                l.startsWith("Co-Authored-By:", ignoreCase = true) ||
-                    l.startsWith("Claude-Session:", ignoreCase = true) ||
-                    l.startsWith("Signed-off-by:", ignoreCase = true)
+    /**
+     * Приводит описание релиза (текст коммита) к читаемому виду: убирает служебные строки
+     * и склеивает строки, перенесённые посреди фразы; пункты «- …» превращает в «• …».
+     */
+    private fun cleanNotes(body: String): String {
+        val out = ArrayList<StringBuilder>()
+        var paragraphBreak = true
+        for (raw in body.lines()) {
+            val l = raw.trim()
+            if (l.startsWith("Co-Authored-By:", true) || l.startsWith("Claude-Session:", true) ||
+                l.startsWith("Signed-off-by:", true)
+            ) continue
+            when {
+                l.isEmpty() -> paragraphBreak = true
+                l.startsWith("- ") || l.startsWith("* ") || l.startsWith("• ") -> {
+                    out.add(StringBuilder("• ").append(l.substring(2).trim()))
+                    paragraphBreak = false
+                }
+                paragraphBreak || out.isEmpty() -> {
+                    if (out.isNotEmpty()) out.add(StringBuilder())
+                    out.add(StringBuilder(l))
+                    paragraphBreak = false
+                }
+                else -> out.last().append(' ').append(l)
             }
-            .joinToString("\n")
-            .trim()
+        }
+        return out.joinToString("\n") { it.toString() }.replace(Regex("\n{3,}"), "\n\n").trim()
+    }
 
     fun download(ctx: Context, rel: Release, progress: (String) -> Unit): File {
         val c = Net.open(rel.apkUrl)
