@@ -158,6 +158,14 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(apiCard)
         apiCard.visibility = if (AppSettings.mode == AppSettings.MODE_API) View.VISIBLE else View.GONE
 
+        root.addView(Ui.text(this, Ui.SLOGAN, 13f, Ui.GREEN, bold = true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, d(28f), 0, d(2f))
+        }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(Ui.text(this, "${if (AppSettings.simple) "Fast VPN" else "MLBB Server"} · версия ${BuildConfig.VERSION_NAME}", 11f, Ui.MUTED).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+
         setContentView(ScrollView(this).apply { addView(root) })
     }
 

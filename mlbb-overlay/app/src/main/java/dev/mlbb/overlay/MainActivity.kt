@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Для чего тебе приложение?")
             .setMessage(
+                "${Ui.SLOGAN}\n\n" +
                 "🎮 Для Mobile Legends — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
                     "в приоритете, запуск игры одной кнопкой.\n\n" +
                     "🌐 Просто VPN (Fast VPN) — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
@@ -167,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titleCol.addView(Ui.text(this, if (AppSettings.simple) "Fast VPN" else "MLBB Server", 22f, bold = true))
-        titleCol.addView(Ui.text(this, "⚡ Быстрее нас — только свет", 12f, Ui.GREEN))
+        titleCol.addView(Ui.text(this, Ui.SLOGAN, 12f, Ui.GREEN))
         top.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(Ui.button(this, " ⚙ ") { showSettings() })
         root.addView(top)
@@ -912,7 +913,11 @@ class MainActivity : AppCompatActivity() {
                 up.text = upv?.let { mbps(it) } ?: "✖"
             }
             runOnUiThread {
-                state.text = if (p == null && dn == null) "Нет доступа к интернету" else "Готово"
+                if (p == null && dn == null) state.text = "Нет доступа к интернету"
+                else {
+                    state.text = "Готово · быстрее нас — только свет ⚡"
+                    state.setTextColor(Ui.GREEN)
+                }
                 speedRunning = false
             }
         }.start()

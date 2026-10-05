@@ -92,8 +92,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
         )
         val n = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
-            .setContentTitle("MLBB Server — VPN")
-            .setContentText("Подключено, оверлей следит за сервером игры")
+            .setContentTitle(if (AppSettings.simple) "Fast VPN" else "MLBB Server — VPN")
+            .setContentText(
+                if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры"
+                else "Подключено · быстрее нас — только свет ⚡"
+            )
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())
             .setOngoing(true)

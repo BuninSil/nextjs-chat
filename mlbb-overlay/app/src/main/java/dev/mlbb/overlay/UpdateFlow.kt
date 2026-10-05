@@ -55,6 +55,7 @@ object UpdateFlow {
         }
         card.addView(Ui.text(a, "⬆", 30f, Ui.GREEN))
         card.addView(Ui.text(a, "Доступно обновление", 20f, bold = true).apply { setPadding(0, d(6f), 0, 0) })
+        card.addView(Ui.text(a, Ui.SLOGAN, 13f, Ui.GREEN).apply { setPadding(0, d(4f), 0, 0) })
         card.addView(Ui.text(a, "Версия ${rel.tag.removePrefix("mlbb-v")} · сейчас ${BuildConfig.VERSION_NAME}", 13f, Ui.MUTED)
             .apply { setPadding(0, d(4f), 0, d(12f)) })
         val notes = Ui.text(a, rel.notes.ifBlank { "Исправления и улучшения." }.take(1500), 14f, 0xFFC9CCD1.toInt())

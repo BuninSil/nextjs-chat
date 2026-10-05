@@ -11,6 +11,8 @@ import android.widget.TextView
 
 /** Палитра и маленькие помощники для экранов в стиле макета (тёмная тема). */
 object Ui {
+    /** Слоган приложения */
+    const val SLOGAN = "⚡ Быстрее нас — только свет"
     const val BG = 0xFF121417.toInt()
     const val CARD = 0xFF1A1D22.toInt()
     const val TEXT = 0xFFE8EAED.toInt()
