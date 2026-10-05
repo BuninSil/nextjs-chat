@@ -173,8 +173,24 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(ScrollView(this).apply { addView(root) })
     }
 
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Показывает ход обновления, даже если его запустили до того, как зашли сюда. */
+    private val updRefresher = object : Runnable {
+        override fun run() {
+            if (updStatus.text.toString() != UpdateFlow.statusText) updStatus.text = UpdateFlow.statusText
+            handler.postDelayed(this, 500)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        handler.post(updRefresher)
+    }
+
     override fun onPause() {
         super.onPause()
+        handler.removeCallbacks(updRefresher)
         AppSettings.save(this)
         if (vpnChanged && (BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning)) {
             Toast.makeText(this, "Применится после переподключения: Отключить → ИГРАТЬ", Toast.LENGTH_LONG).show()

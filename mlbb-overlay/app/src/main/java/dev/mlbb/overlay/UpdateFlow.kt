@@ -18,8 +18,20 @@ object UpdateFlow {
     var busy = false
         private set
 
-    fun check(a: Activity, manual: Boolean, status: (String) -> Unit) {
-        if (busy) return
+    /**
+     * Текущее состояние обновления («Обновление: 45%», ошибка…). Живёт в объекте, а не в экране,
+     * поэтому не сбрасывается, если выйти из настроек или приложения и вернуться.
+     */
+    @Volatile
+    var statusText = ""
+        private set
+
+    fun check(a: Activity, manual: Boolean, onStatus: (String) -> Unit) {
+        if (busy) {
+            if (manual) Toast.makeText(a, statusText.ifEmpty { "Уже проверяю…" }, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val status: (String) -> Unit = { msg -> statusText = msg; onStatus(msg) }
         busy = true
         if (manual) status("Проверяю обновления…")
         Thread {

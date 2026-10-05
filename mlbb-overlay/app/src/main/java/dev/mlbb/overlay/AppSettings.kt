@@ -81,7 +81,8 @@ object AppSettings {
         clientPackage = p.getString("clientPkg", "") ?: ""
         alertEnabled = p.getBoolean("alert", false)
         allowedCountries = parseCountries(p.getString("allowed", "RU") ?: "RU")
-        autoCheckUpdates = p.getBoolean("updAuto", true)
+        // Автообновления теперь бесшовные — включаем всем (новый ключ, старый «проверять при запуске» не учитываем)
+        autoCheckUpdates = p.getBoolean("updAuto2", true)
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
         if (simple) applySimple()
@@ -122,7 +123,7 @@ object AppSettings {
             .putString("clientPkg", clientPackage)
             .putBoolean("alert", alertEnabled)
             .putString("allowed", allowedCountries.joinToString(","))
-            .putBoolean("updAuto", autoCheckUpdates)
+            .putBoolean("updAuto2", autoCheckUpdates)
             .putString("profile", profile)
             .apply()
     }

@@ -443,10 +443,9 @@ class MainActivity : AppCompatActivity() {
             battlePing.setTextColor(Ui.pingColor(ping?.ms))
         }
 
-        if (!UpdateFlow.busy) {
-            // Про базу стран теперь говорит мастер первого запуска
-            if (!dbDownloading) infoLine.text = ""
-        }
+        // Ход обновления берём из общего состояния — переживает выход из приложения
+        if (UpdateFlow.busy) infoLine.text = UpdateFlow.statusText
+        else if (!dbDownloading) infoLine.text = ""
 
         if (err != null && err != shownError) {
             shownError = err
