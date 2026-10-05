@@ -137,6 +137,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val config = BoxConfig.build(
                 nodes, selected, p, packageName,
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
+                gameMode = AppSettings.gameMode,
             )
             val service = Libbox.newService(config, this)
             service.start()
@@ -144,7 +145,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             ports = p
             isRunning = true
             // Оверлей и лог: читаем соединения игры у своего же ядра
-            MonitorService.start(this, p.api, p.secret, p.mixed)
+            if (AppSettings.gameMode) MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
             val tail = VpnLog.tail(8)

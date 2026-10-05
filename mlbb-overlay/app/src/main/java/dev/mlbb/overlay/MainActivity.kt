@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playButton: TextView
     private lateinit var stopButton: TextView
     private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var launchRow: LinearLayout
     private lateinit var infoLine: TextView
     private lateinit var wifiCard: LinearLayout
     private lateinit var wifiLine: TextView
@@ -166,8 +167,24 @@ class MainActivity : AppCompatActivity() {
         playWrap.addView(playButton, LinearLayout.LayoutParams(d(200f), d(200f)))
         root.addView(playWrap)
 
-        // Под кнопкой: тумблер автозапуска игры и ссылка «Запустить MLBB», пока подключено
+        // Под кнопкой: игровой режим, автозапуск игры и ссылка «Запустить MLBB»
+        fun greenSwitch(v: Boolean, onChange: (Boolean) -> Unit) = androidx.appcompat.widget.SwitchCompat(this).apply {
+            isChecked = v
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
+            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, 0xFF3A3F46.toInt()))
+            setOnCheckedChangeListener { _, x -> onChange(x) }
+        }
+        val gameRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(6f)) }
+        gameRow.addView(Ui.text(this, "🎮  Игровой режим", 15f, bold = true).apply { setPadding(0, 0, d(10f), 0) })
+        gameRow.addView(greenSwitch(AppSettings.gameMode) { v ->
+            AppSettings.gameMode = v
+            AppSettings.save(this@MainActivity)
+            if (anyRunning()) toast("Применится после переподключения")
+        })
+        root.addView(gameRow, LinearLayout.LayoutParams(-1, -2))
         val launchRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(4f)) }
+        this.launchRow = launchRow
         launchRow.addView(Ui.text(this, "Запускать MLBB после подключения", 14f, Ui.MUTED).apply {
             setPadding(0, 0, d(10f), 0)
         })
@@ -290,7 +307,7 @@ class MainActivity : AppCompatActivity() {
 
         val label = when {
             running -> "ОТКЛЮЧИТЬ"
-            AppSettings.autoLaunch -> "ИГРАТЬ"
+            AppSettings.gameMode && AppSettings.autoLaunch -> "ИГРАТЬ"
             else -> "ПОДКЛЮЧИТЬ"
         }
         if (playButton.text != label) {
@@ -302,7 +319,8 @@ class MainActivity : AppCompatActivity() {
             playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                 .apply { shape = GradientDrawable.OVAL }
         }
-        stopButton.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
+        stopButton.visibility = if (running && AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
+        launchRow.visibility = if (AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
 
         val wi = wifiInfo
         if (wi == null) {
@@ -317,7 +335,7 @@ class MainActivity : AppCompatActivity() {
             wifiAdvice.visibility = if (adv.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         }
 
-        val battle = ConnTracker.battleServer()
+        val battle = if (AppSettings.gameMode) ConnTracker.battleServer() else null
         if (battle == null) {
             battleCard.visibility = android.view.View.GONE
         } else {
@@ -431,9 +449,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun playBox() {
         busy = true
-        BoxVpnService.start(this)
         val progress = AlertDialog.Builder(this).setTitle("Подключаю VPN").setMessage("Секунду…").setCancelable(false).show()
         Thread {
+            // 1. Пинг до всех серверов напрямую — ещё до подключения, это быстро
+            var ranked: List<String> = emptyList()
+            if (AppSettings.autoSelect) {
+                runOnUiThread { progress.setTitle("Меряю пинг до серверов") }
+                ranked = ServerTester.measure(applicationContext) { done, total ->
+                    runOnUiThread { progress.setMessage("$done из $total…") }
+                }
+                ranked.firstOrNull()?.let { ServerTester.use(this, it) }
+            }
+
+            // 2. Подключаемся сразу к лучшему
+            runOnUiThread { progress.setTitle("Подключаю VPN"); progress.setMessage("Секунду…") }
+            BoxVpnService.start(this)
+            Thread.sleep(300)
             val deadline = System.currentTimeMillis() + 20_000
             while ((BoxVpnService.isStarting || !BoxVpnService.isRunning) && BoxVpnService.lastError == null &&
                 System.currentTimeMillis() < deadline
@@ -448,12 +479,10 @@ class MainActivity : AppCompatActivity() {
                 return@Thread
             }
 
-            if (AppSettings.autoSelect) {
-                runOnUiThread { progress.setTitle("Ищу самый быстрый сервер") }
-                val best = ServerTester.testAll { done, total ->
-                    runOnUiThread { progress.setMessage("Проверено $done из $total…") }
-                }
-                if (best != null) ServerTester.use(this, best)
+            // 3. Проверяем, что через сервер реально ходит трафик; если нет — следующий
+            if (ranked.isNotEmpty()) {
+                runOnUiThread { progress.setTitle("Проверяю сервер"); progress.setMessage("Секунду…") }
+                ServerTester.pickWorking(applicationContext, ranked)
             }
             busy = false
             runOnUiThread {
@@ -461,7 +490,7 @@ class MainActivity : AppCompatActivity() {
                 val n = nodeByTag(AppSettings.selectedTag)
                 val r = n?.let { ServerTester.results[it.tag] }
                 if (n != null) toast("Сервер: ${Ui.cleanName(n)}" + (r?.let { " · ${it.medianMs} ms" } ?: ""))
-                if (AppSettings.autoLaunch) launchGame()
+                if (AppSettings.gameMode && AppSettings.autoLaunch) launchGame()
             }
         }.start()
     }

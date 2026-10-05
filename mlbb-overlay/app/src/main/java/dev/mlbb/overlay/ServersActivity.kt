@@ -81,17 +81,14 @@ class ServersActivity : AppCompatActivity() {
     }
 
     private fun retest() {
-        if (!BoxVpnService.isRunning) {
-            Toast.makeText(this, "Пинг меряется через VPN — сначала нажми ИГРАТЬ", Toast.LENGTH_LONG).show()
-            return
-        }
         if (ServerTester.testing) return
         Thread {
-            val best = ServerTester.testAll { done, total -> runOnUiThread { header.text = "Проверено $done из $total…" } }
-            runOnUiThread {
-                header.text = ""
-                if (best != null && AppSettings.autoSelect) ServerTester.use(this, best)
+            val ranked = ServerTester.measure(applicationContext) { done, total ->
+                runOnUiThread { header.text = "Проверено $done из $total…" }
             }
+            // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий
+            if (AppSettings.autoSelect && BoxVpnService.isRunning) ServerTester.pickWorking(applicationContext, ranked)
+            runOnUiThread { header.text = "" }
         }.start()
     }
 
@@ -133,7 +130,8 @@ class ServersActivity : AppCompatActivity() {
                 }
             }.thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
             if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${items.size} серверов · ★ ближе к серверам игры в РФ"
+                header.text = "${items.size} серверов · пинг напрямую до сервера · ↻ перемерить" +
+                    if (AppSettings.gameMode) " · ★ ближе к серверам игры" else ""
             }
             notifyDataSetChanged()
         }

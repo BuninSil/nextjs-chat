@@ -24,6 +24,8 @@ object BoxConfig {
         selfPackage: String,
         onlyGame: Boolean,
         battleDirect: Boolean,
+        /** Игровой режим: плюшки для MLBB. Без него — просто быстрый VPN на всё. */
+        gameMode: Boolean,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -46,7 +48,7 @@ object BoxConfig {
             .put("strict_route", false)
             .put("stack", "mixed")
         // Иначе через VPN идёт всё, включая нас самих (обновления и база DB-IP под блокировками)
-        if (onlyGame) tun.put("include_package", JSONArray().put(GAME).put(selfPackage))
+        if (gameMode && onlyGame) tun.put("include_package", JSONArray().put(GAME).put(selfPackage))
 
         val mixed = JSONObject().put("type", "mixed").put("tag", "mixed-in")
             .put("listen", "127.0.0.1").put("listen_port", ports.mixed)
@@ -55,7 +57,7 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
-        if (battleDirect) {
+        if (gameMode && battleDirect) {
             // Матч напрямую: UDP игры мимо туннеля (минимальный пинг, если оператор пускает)
             rules.put(
                 JSONObject().put("type", "logical").put("mode", "and")
@@ -66,12 +68,18 @@ object BoxConfig {
             )
         }
 
+        // FakeIP: приложения сразу получают адрес, домен разрешает VPN-сервер — без задержек DNS.
+        // Адреса самих VPN-серверов резолвим через DNS сети (local).
         val dns = JSONObject()
             .put("servers", JSONArray()
-                .put(JSONObject().put("tag", "remote").put("address", "tls://1.1.1.1").put("detour", "proxy"))
-                .put(JSONObject().put("tag", "local").put("address", "local").put("detour", "direct")))
+                .put(JSONObject().put("tag", "remote").put("address", "https://1.1.1.1/dns-query").put("detour", "proxy"))
+                .put(JSONObject().put("tag", "local").put("address", "local").put("detour", "direct"))
+                .put(JSONObject().put("tag", "fakeip").put("address", "fakeip")))
             .put("rules", JSONArray()
-                .put(JSONObject().put("outbound", "any").put("server", "local")))
+                .put(JSONObject().put("outbound", "any").put("server", "local"))
+                .put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fakeip")))
+            .put("fakeip", JSONObject().put("enabled", true).put("inet4_range", "198.18.0.0/15"))
+            .put("independent_cache", true)
             .put("final", "remote")
             .put("strategy", "ipv4_only")
 
@@ -84,7 +92,8 @@ object BoxConfig {
                 .put("rules", rules)
                 .put("final", "proxy")
                 .put("auto_detect_interface", true)
-                .put("find_process", true))
+                // Определение приложения по каждому соединению — только для игровых функций
+                .put("find_process", gameMode))
             .put("experimental", JSONObject()
                 .put("clash_api", JSONObject()
                     .put("external_controller", "127.0.0.1:${ports.api}")
