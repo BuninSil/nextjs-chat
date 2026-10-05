@@ -220,6 +220,10 @@ object Subscription {
         if (scheme == "ss") return parseSs(link, tag)
 
         val uri = Uri.parse(link)
+        // Транспорты только из xray (xhttp, kcp и т.п.) ядро sing-box не умеет — такие серверы
+        // подключались бы как обычный TCP и не работали; пропускаем их
+        val transportType = uri.getQueryParameter("type")?.lowercase()
+        if (transportType != null && transportType !in setOf("tcp", "grpc", "ws", "http", "h2", "httpupgrade", "")) return null
         val name = dec(uri.fragment ?: uri.encodedFragment).ifEmpty { uri.host ?: tag }
         val server = uri.host ?: return null
         val port = if (uri.port > 0) uri.port else 443
