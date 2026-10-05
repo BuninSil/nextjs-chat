@@ -95,8 +95,11 @@ class ServersActivity : AppCompatActivity() {
             val ranked = ServerTester.measure(applicationContext) { done, total ->
                 runOnUiThread { header.text = "Проверено $done из $total…" }
             }
-            // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий
-            if (AppSettings.autoSelect && BoxVpnService.isRunning) ServerTester.pickWorking(applicationContext, ranked)
+            // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий.
+            // В игровом режиме — нет: смена сервера посреди матча = скачок пинга и вылет
+            if (AppSettings.autoSelect && BoxVpnService.isRunning && !AppSettings.gameMode) {
+                ServerTester.pickWorking(applicationContext, ranked)
+            }
             runOnUiThread { header.text = "" }
         }.start()
     }
