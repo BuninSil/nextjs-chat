@@ -146,7 +146,7 @@ class MainActivity : AppCompatActivity() {
             text = "Через сторонний VPN (SOCKS5)"
             isChecked = AppSettings.chainEnabled
         }
-        val hint = TextView(this).apply {
+        val chainHint = TextView(this).apply {
             alpha = 0.7f
             textSize = 12f
             text = "В клиенте (v2rayNG, Hiddify и т.п.) включи режим «только прокси» и UDP " +
@@ -209,7 +209,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, pad / 2, pad, 0)
             addView(label("Режим VPN"))
             addView(chain)
-            addView(hint)
+            addView(chainHint)
             addView(host)
             addView(port)
             addView(user)
