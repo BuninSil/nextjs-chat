@@ -49,11 +49,13 @@ class ServersActivity : AppCompatActivity() {
         root.addView(Ui.space(this, 10f))
         // Отдельные проверки: страна выхода (запоминается) и скорость
         val actions = LinearLayout(this)
-        actions.addView(Ui.button(this, "🌍  Выходы") { checkExits() }.apply { gravity = Gravity.CENTER },
+        actions.addView(Ui.tile(this, "🌍  Выходы", "в какой стране сервер выходит в интернет") { checkExits() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
-        actions.addView(Ui.button(this, "⚡  По скорости") { speedRank() }.apply { gravity = Gravity.CENTER },
+        actions.addView(Ui.tile(this, "⚡  По скорости", "найти и включить самый быстрый") { speedRank() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         root.addView(actions)
+        root.addView(Ui.text(this, "↻ вверху — перемерить пинг. Тапни сервер в списке, чтобы подключиться к нему вручную.", 12f, Ui.MUTED)
+            .apply { setPadding(d(4f), d(10f), d(4f), 0) })
         root.addView(Ui.space(this, 12f))
 
         val autoCard = Ui.card(this)

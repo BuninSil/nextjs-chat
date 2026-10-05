@@ -44,6 +44,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var launchRow: LinearLayout
     private lateinit var infoLine: TextView
+    private lateinit var setupCard: LinearLayout
+    private lateinit var setupTitle: TextView
+    private lateinit var setupText: TextView
+    private lateinit var setupButton: TextView
+    private lateinit var playHint: TextView
+    @Volatile private var dbDownloading = false
     private lateinit var wifiCard: LinearLayout
     private lateinit var wifiLine: TextView
     private lateinit var wifiAdvice: TextView
@@ -133,6 +139,26 @@ class MainActivity : AppCompatActivity() {
         root.addView(top)
         root.addView(Ui.space(this, 14f))
 
+        // Мастер первого запуска: что сделать по шагам, пока не всё готово
+        setupCard = Ui.card(this).apply {
+            background = Ui.rounded(0xFF182A20.toInt(), d(18f).toFloat()).apply { setStroke(d(2f), Ui.GREEN) }
+        }
+        setupTitle = Ui.text(this, "", 16f, bold = true)
+        setupText = Ui.text(this, "", 13f, 0xFFC9CCD1.toInt()).apply { setPadding(0, d(6f), 0, d(12f)) }
+        setupButton = TextView(this).apply {
+            gravity = Gravity.CENTER
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            background = Ui.rounded(0xFF2FB565.toInt(), d(14f).toFloat())
+            setPadding(0, d(12f), 0, d(12f))
+        }
+        setupCard.addView(setupTitle)
+        setupCard.addView(setupText)
+        setupCard.addView(setupButton, LinearLayout.LayoutParams(-1, -2))
+        root.addView(setupCard)
+        root.addView(Ui.space(this, 12f))
+
         // Карточка статуса и сервера
         val status = Ui.card(this)
         statusLine = Ui.text(this, "", 15f, bold = true)
@@ -166,6 +192,11 @@ class MainActivity : AppCompatActivity() {
         val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, d(22f), 0, d(18f)) }
         playWrap.addView(playButton, LinearLayout.LayoutParams(d(200f), d(200f)))
         root.addView(playWrap)
+        playHint = Ui.text(this, "", 13f, Ui.MUTED).apply {
+            gravity = Gravity.CENTER
+            setPadding(d(16f), 0, d(16f), d(14f))
+        }
+        root.addView(playHint, LinearLayout.LayoutParams(-1, -2))
 
         // Под кнопкой: игровой режим, автозапуск игры и ссылка «Запустить MLBB»
         fun greenSwitch(v: Boolean, onChange: (Boolean) -> Unit) = androidx.appcompat.widget.SwitchCompat(this).apply {
@@ -183,6 +214,10 @@ class MainActivity : AppCompatActivity() {
             if (anyRunning()) toast("Применится после переподключения")
         })
         root.addView(gameRow, LinearLayout.LayoutParams(-1, -2))
+        root.addView(Ui.text(this, "плашка с сервером матча поверх игры, российские серверы в приоритете", 12f, Ui.MUTED).apply {
+            gravity = Gravity.CENTER
+            setPadding(d(24f), 0, d(24f), d(10f))
+        }, LinearLayout.LayoutParams(-1, -2))
         val launchRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(4f)) }
         this.launchRow = launchRow
         launchRow.addView(Ui.text(this, "Запускать MLBB после подключения", 14f, Ui.MUTED).apply {
@@ -234,21 +269,22 @@ class MainActivity : AppCompatActivity() {
         root.addView(Ui.space(this, 12f))
 
         // Сетка кнопок
-        fun row(a: TextView, c: TextView) = LinearLayout(this).apply {
+        fun row(a: android.view.View, c: android.view.View) = LinearLayout(this).apply {
             addView(a, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
             addView(c, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         }
         root.addView(row(
-            Ui.button(this, "🌐  Серверы") { startActivity(Intent(this, ServersActivity::class.java)) },
-            Ui.button(this, "🔗  Подписка") { showSubscription() },
+            Ui.tile(this, "🌐  Серверы", "список, пинг, выбрать вручную") { startActivity(Intent(this, ServersActivity::class.java)) },
+            Ui.tile(this, "🔗  Подписка", "ссылка твоего VPN") { showSubscription() },
         ))
         root.addView(Ui.space(this, 10f))
         root.addView(row(
-            Ui.button(this, "📋  Лог") { startActivity(Intent(this, LogActivity::class.java)) },
-            Ui.button(this, "⚙  Настройки") { showSettings() },
+            Ui.tile(this, "📋  Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
+            Ui.tile(this, "⚙  Настройки", "режимы, база стран, обновления") { showSettings() },
         ))
         root.addView(Ui.space(this, 10f))
-        root.addView(Ui.button(this, "⚡  Тест скорости интернета") { speedTest() }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача — через VPN, если он включён") { speedTest() },
+            LinearLayout.LayoutParams(-1, -2))
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
@@ -322,6 +358,17 @@ class MainActivity : AppCompatActivity() {
         stopButton.visibility = if (running && AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
         launchRow.visibility = if (AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
 
+        updateSetup()
+        playHint.text = when {
+            BoxVpnService.isStarting || busy -> "Подключаюсь, подбираю сервер…"
+            running -> "VPN работает. Нажми кнопку, чтобы отключить."
+            AppSettings.mode != AppSettings.MODE_BOX -> "Нажми — включу слежение за сервером игры" +
+                if (AppSettings.autoLaunch) " и запущу MLBB" else ""
+            AppSettings.gameMode && AppSettings.autoLaunch -> "Нажми — подключу лучший сервер для игры и запущу MLBB"
+            AppSettings.gameMode -> "Нажми — подключу лучший сервер для игры"
+            else -> "Нажми — подключу самый быстрый VPN-сервер"
+        }
+
         val wi = wifiInfo
         if (wi == null) {
             wifiCard.visibility = android.view.View.GONE
@@ -349,13 +396,67 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!UpdateFlow.busy) {
-            infoLine.text = if (GeoDb.isLoaded) "" else "Нет базы стран DB-IP — Настройки → «Скачать базу»"
+            // Про базу стран теперь говорит мастер первого запуска
+            if (!dbDownloading) infoLine.text = ""
         }
 
         if (err != null && err != shownError) {
             shownError = err
             showInfo("Не получилось", err)
         }
+    }
+
+    /** Мастер первого запуска: показывает первый невыполненный шаг с кнопкой «сделать». */
+    private fun updateSetup() {
+        val needSub = AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isEmpty()
+        val needDb = !GeoDb.isLoaded
+        val needOverlay = !Settings.canDrawOverlays(this)
+        val steps = listOf(needSub, needDb, needOverlay)
+        val total = steps.size
+        val done = steps.count { !it }
+        if (done == total) {
+            setupCard.visibility = android.view.View.GONE
+            return
+        }
+        setupCard.visibility = android.view.View.VISIBLE
+        val n = done + 1
+        when {
+            needSub -> {
+                setupTitle.text = "Шаг $n из $total: добавь подписку"
+                setupText.text = "Скопируй ссылку подписки своего VPN (ту же, что в Karing / Hiddify / v2rayNG) и вставь сюда."
+                setupButton.text = "🔗  Вставить ссылку"
+                setupButton.setOnClickListener { showSubscription() }
+            }
+            needDb -> {
+                setupTitle.text = "Шаг $n из $total: скачай базу стран"
+                setupText.text = "Нужна, чтобы показывать страну и город сервера игры. Один раз, около 100 МБ."
+                setupButton.text = if (dbDownloading) infoLine.text.ifEmpty { "Скачиваю…" } else "⬇  Скачать базу"
+                setupButton.setOnClickListener { downloadDbFromSetup() }
+            }
+            else -> {
+                setupTitle.text = "Шаг $n из $total: разреши плашку поверх игры"
+                setupText.text = "В открывшемся списке найди «MLBB Server» и включи «Поверх других окон», потом вернись сюда."
+                setupButton.text = "Открыть разрешение"
+                setupButton.setOnClickListener {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                }
+            }
+        }
+    }
+
+    private fun downloadDbFromSetup() {
+        if (dbDownloading) return
+        dbDownloading = true
+        Thread {
+            try {
+                GeoDb.download(applicationContext) { msg -> runOnUiThread { infoLine.text = msg } }
+            } catch (e: Exception) {
+                runOnUiThread { showInfo("База не скачалась", "${e.message}\n\nМожно попробовать ещё раз или импортировать файл в Настройках.") }
+            } finally {
+                dbDownloading = false
+                runOnUiThread { infoLine.text = "" }
+            }
+        }.start()
     }
 
     private fun showInfo(title: String, msg: String, action: Pair<String, () -> Unit>? = null) {

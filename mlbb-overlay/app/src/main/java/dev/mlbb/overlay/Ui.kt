@@ -54,6 +54,17 @@ object Ui {
         setOnClickListener { onClick() }
     }
 
+    /** Плитка: заголовок + пояснение мелким шрифтом, чтобы было понятно, что делает кнопка. */
+    fun tile(ctx: Context, title: String, hint: String, onClick: () -> Unit) = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        background = rounded(CARD, dp(ctx, 14f).toFloat())
+        val p = dp(ctx, 14f)
+        setPadding(p, dp(ctx, 12f), p, dp(ctx, 12f))
+        addView(text(ctx, title, 15f, bold = true))
+        addView(text(ctx, hint, 12f, MUTED).apply { setPadding(0, dp(ctx, 3f), 0, 0) })
+        setOnClickListener { onClick() }
+    }
+
     fun space(ctx: Context, h: Float) = View(ctx).apply {
         layoutParams = LinearLayout.LayoutParams(1, dp(ctx, h))
     }
