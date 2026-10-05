@@ -18,8 +18,24 @@ object ServerTester {
 
     data class Result(val medianMs: Int, val jitterMs: Int, val score: Int)
 
-    /** tag -> результат; null — сервер не ответил */
-    val results = ConcurrentHashMap<String, Result?>()
+    /**
+     * Результаты замеров. results[tag] == null и containsKey(tag) — сервер не ответил.
+     * ConcurrentHashMap не хранит null, поэтому неответившие лежат отдельным множеством.
+     */
+    class Results {
+        private val ok = ConcurrentHashMap<String, Result>()
+        private val failed = ConcurrentHashMap.newKeySet<String>()
+
+        operator fun get(tag: String): Result? = ok[tag]
+        fun containsKey(tag: String) = ok.containsKey(tag) || failed.contains(tag)
+        fun clear() { ok.clear(); failed.clear() }
+        fun put(tag: String, r: Result?) {
+            if (r == null) { ok.remove(tag); failed.add(tag) } else { failed.remove(tag); ok[tag] = r }
+        }
+        fun best(): String? = ok.entries.minByOrNull { it.value.score }?.key
+    }
+
+    val results = Results()
 
     @Volatile
     var testing = false
@@ -52,7 +68,7 @@ object ServerTester {
                 repeat(3) {
                     ClashApi.delay(p.api, p.secret, n.tag, TEST_URL, 2500)?.let { samples.add(it) }
                 }
-                results[n.tag] = if (samples.size >= 2) {
+                results.put(n.tag, if (samples.size >= 2) {
                     samples.sort()
                     val median = samples[samples.size / 2]
                     val jitter = samples.last() - samples.first()
@@ -60,14 +76,14 @@ object ServerTester {
                     if (isRussian(n)) score -= RU_BONUS
                     if (n.nativeUdp) score -= UDP_BONUS
                     Result(median, jitter, score)
-                } else null
+                } else null)
                 progress(done.incrementAndGet(), nodes.size)
             }
         }
         pool.shutdown()
         pool.awaitTermination(90, TimeUnit.SECONDS)
         testing = false
-        return results.entries.filter { it.value != null }.minByOrNull { it.value!!.score }?.key
+        return results.best()
     }
 
     /** Переключает ядро на сервер и запоминает выбор. */
