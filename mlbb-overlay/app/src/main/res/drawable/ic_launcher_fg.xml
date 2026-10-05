@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Щит с молнией: защита (VPN) + скорость. Всё внутри безопасной зоны 66dp -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M54,27L77,35.5L77,53C77,67.5 67.5,77.5 54,82C40.5,77.5 31,67.5 31,53L31,35.5Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="40"
+                android:startY="28"
+                android:endX="70"
+                android:endY="82"
+                android:startColor="#FF5BE08F"
+                android:endColor="#FF1E8F4E" />
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M58.5,36L44,57.5L52.5,57.5L49.5,72L64.5,49.5L56,49.5Z" />
+</vector>

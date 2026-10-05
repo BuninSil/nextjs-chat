@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Монохромная версия для тематических иконок Android 13+: щит с вырезанной молнией -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,27L77,35.5L77,53C77,67.5 67.5,77.5 54,82C40.5,77.5 31,67.5 31,53L31,35.5Z M58.5,36L56,49.5L64.5,49.5L49.5,72L52.5,57.5L44,57.5Z" />
+</vector>

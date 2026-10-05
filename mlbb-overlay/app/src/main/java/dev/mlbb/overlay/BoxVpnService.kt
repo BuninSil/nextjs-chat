@@ -91,7 +91,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             this, 3, Intent(this, BoxVpnService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE
         )
         val n = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setSmallIcon(R.drawable.ic_launcher_mono)
             .setContentTitle("MLBB Server — VPN")
             .setContentText("Подключено, оверлей следит за сервером игры")
             .setContentIntent(open)

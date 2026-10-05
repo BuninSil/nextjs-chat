@@ -118,7 +118,7 @@ class MonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         val n = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setSmallIcon(R.drawable.ic_launcher_mono)
             .setContentTitle("MLBB Server")
             .setContentText("Слежу за сервером игры через VPN-клиент")
             .setContentIntent(open)
