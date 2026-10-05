@@ -13,7 +13,11 @@ import java.net.Socket
  *  3. TCP-проба на 443 порт: время до SYN/ACK или RST (RST тоже даёт честный RTT).
  * В режиме цепочки вместо 2–3 — проба через SOCKS5 клиента (путь как у игры).
  */
-class Pinger(private val minValidMs: Int = 0) {
+class Pinger(
+    private val minValidMs: Int = 0,
+    /** Локальный SOCKS5 (встроенный VPN): мерить путь до сервера игры через туннель */
+    private val socksPort: Int = 0,
+) {
     data class Result(val ip: String, val ms: Int, val method: String)
 
     @Volatile
@@ -49,7 +53,7 @@ class Pinger(private val minValidMs: Int = 0) {
             icmpFails[ip] = (icmpFails[ip] ?: 0) + 1
         }
 
-        if (AppSettings.chainEnabled) {
+        if (socksPort > 0 || AppSettings.chainEnabled) {
             socksProbe(ip)?.let { last = Result(ip, it, "SOCKS~"); return }
             last = Result(ip, -1, "")
             return
@@ -74,12 +78,13 @@ class Pinger(private val minValidMs: Int = 0) {
         val addr = InetAddress.getByName(ip).address.takeIf { it.size == 4 } ?: return null
         return try {
             Socket().use { s ->
-                s.connect(InetSocketAddress(AppSettings.socksHost, AppSettings.socksPort), 1000)
+                if (socksPort > 0) s.connect(InetSocketAddress("127.0.0.1", socksPort), 1000)
+                else s.connect(InetSocketAddress(AppSettings.socksHost, AppSettings.socksPort), 1000)
                 s.soTimeout = 1500
                 s.tcpNoDelay = true
                 val out = s.getOutputStream()
                 val inp = DataInputStream(s.getInputStream())
-                val user = AppSettings.socksUser
+                val user = if (socksPort > 0) "" else AppSettings.socksUser
                 if (user.isEmpty()) out.write(byteArrayOf(5, 1, 0)) else out.write(byteArrayOf(5, 2, 0, 2))
                 val hello = ByteArray(2).also { inp.readFully(it) }
                 if (hello[1].toInt() == 2) {

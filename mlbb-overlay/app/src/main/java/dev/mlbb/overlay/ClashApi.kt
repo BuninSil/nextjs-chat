@@ -142,6 +142,29 @@ object ClashApi {
         return System.currentTimeMillis()
     }
 
+    /** Задержка через конкретный сервер (мс) или null, если не прошло. */
+    fun delay(port: Int, secret: String, tag: String, url: String, timeoutMs: Int): Int? = try {
+        val q = "/proxies/" + java.net.URLEncoder.encode(tag, "UTF-8") +
+            "/delay?timeout=$timeoutMs&url=" + java.net.URLEncoder.encode(url, "UTF-8")
+        val c = open(port, q, secret, timeoutMs + 1500)
+        if (c.responseCode != 200) null
+        else JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optInt("delay", -1).takeIf { it > 0 }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Переключает селектор group на сервер tag. */
+    fun select(port: Int, secret: String, group: String, tag: String): Boolean = try {
+        val c = open(port, "/proxies/" + java.net.URLEncoder.encode(group, "UTF-8"), secret, 3000)
+        c.requestMethod = "PUT"
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/json")
+        c.outputStream.use { it.write(JSONObject().put("name", tag).toString().toByteArray()) }
+        c.responseCode in 200..299
+    } catch (_: Exception) {
+        false
+    }
+
     /** Текущие соединения клиента. Бросает исключение, если контроллер недоступен. */
     fun connections(port: Int, secret: String, gamePackage: String): List<Conn> {
         val c = open(port, "/connections", secret, 1500)

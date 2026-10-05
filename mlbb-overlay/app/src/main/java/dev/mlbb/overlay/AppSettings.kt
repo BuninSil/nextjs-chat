@@ -9,6 +9,16 @@ object AppSettings {
     const val MODE_API = 1
     /** Старый режим: наш VPN + SOCKS5 клиента */
     const val MODE_CHAIN = 2
+    /** Встроенный VPN-клиент по подписке (основной режим) */
+    const val MODE_BOX = 3
+
+    @Volatile var subUrl = ""
+    @Volatile var selectedTag = ""
+    @Volatile var autoSelect = true
+    /** Через VPN только игра (весь канал — ей) */
+    @Volatile var onlyGame = false
+    /** Матч (UDP игры) напрямую, мимо туннеля */
+    @Volatile var battleDirect = false
 
     @Volatile var mode = MODE_DIRECT
     val chainEnabled get() = mode == MODE_CHAIN
@@ -31,9 +41,19 @@ object AppSettings {
 
     fun load(ctx: Context) {
         val p = prefs(ctx)
-        mode = p.getInt("mode", if (p.getBoolean("chain", false)) MODE_API else MODE_DIRECT)
+        mode = p.getInt("mode", MODE_BOX)
+        subUrl = p.getString("subUrl", "") ?: ""
+        selectedTag = p.getString("selectedTag", "") ?: ""
+        autoSelect = p.getBoolean("autoSelect", true)
+        onlyGame = p.getBoolean("onlyGame", false)
+        battleDirect = p.getBoolean("battleDirect", false)
         // Режим цепочки убран из интерфейса: он включал наш VPN и выбивал VPN пользователя
         if (mode == MODE_CHAIN) mode = MODE_API
+        // Версия 2.0: основной режим — встроенный VPN
+        if (!p.getBoolean("v2", false)) {
+            mode = MODE_BOX
+            p.edit().putBoolean("v2", true).putInt("mode", MODE_BOX).apply()
+        }
         apiPort = p.getInt("apiPort", 0)
         apiSecret = p.getString("apiSecret", "") ?: ""
         socksHost = p.getString("socksHost", "127.0.0.1") ?: "127.0.0.1"
@@ -49,6 +69,11 @@ object AppSettings {
     fun save(ctx: Context) {
         prefs(ctx).edit()
             .putInt("mode", mode)
+            .putString("subUrl", subUrl)
+            .putString("selectedTag", selectedTag)
+            .putBoolean("autoSelect", autoSelect)
+            .putBoolean("onlyGame", onlyGame)
+            .putBoolean("battleDirect", battleDirect)
             .putInt("apiPort", apiPort)
             .putString("apiSecret", apiSecret)
             .putString("socksHost", socksHost)

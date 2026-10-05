@@ -53,8 +53,12 @@ class MonitorService : Service() {
         var lastPing: Pinger.Result? = null
             private set
 
-        fun start(ctx: Context) {
-            ctx.startForegroundService(Intent(ctx, MonitorService::class.java))
+        /** apiPort > 0 — Clash API нашего встроенного ядра (порт/секрет известны заранее). */
+        fun start(ctx: Context, apiPort: Int = 0, secret: String = "", socksPort: Int = 0) {
+            ctx.startForegroundService(
+                Intent(ctx, MonitorService::class.java)
+                    .putExtra("api_port", apiPort).putExtra("secret", secret).putExtra("socks_port", socksPort)
+            )
         }
 
         fun stop(ctx: Context) {
@@ -66,7 +70,10 @@ class MonitorService : Service() {
     private var overlay: OverlayController? = null
     private var pollThread: Thread? = null
     private var pingThread: Thread? = null
-    private val pinger = Pinger(minValidMs = 3)
+    private var pinger = Pinger(minValidMs = 3)
+    private var fixedApiPort = 0
+    private var fixedSecret = ""
+    private var socksPort = 0
     private var lastAlertIp: String? = null
 
     /** id соединения в Clash API -> наш числовой id для ConnTracker */
@@ -90,6 +97,9 @@ class MonitorService : Service() {
             return START_NOT_STICKY
         }
         startForegroundCompat()
+        fixedApiPort = intent?.getIntExtra("api_port", 0) ?: 0
+        fixedSecret = intent?.getStringExtra("secret") ?: ""
+        socksPort = intent?.getIntExtra("socks_port", 0) ?: 0
         if (!isRunning) startMonitor()
         return START_STICKY
     }
@@ -132,9 +142,11 @@ class MonitorService : Service() {
         lastAlertIp = null
         isRunning = true
 
-        val port = AppSettings.apiPort
-        val secret = AppSettings.apiSecret
-        val useShizuku = ShizukuSource.granted()
+        val builtIn = fixedApiPort > 0
+        val port = if (builtIn) fixedApiPort else AppSettings.apiPort
+        val secret = if (builtIn) fixedSecret else AppSettings.apiSecret
+        pinger = Pinger(minValidMs = 3, socksPort = socksPort)
+        val useShizuku = !builtIn && ShizukuSource.granted()
         sourceName = if (useShizuku) "Shizuku" else "Clash API"
         ConnTracker.metricBytes = !useShizuku
         // У Shizuku нет счётчиков трафика: боевой — самый свежий UDP-сокет игры
