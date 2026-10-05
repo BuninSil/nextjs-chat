@@ -1,5 +1,7 @@
 # MLBB Server
 
+> ⚡ **Быстрее нас — только свет.**
+
 Android-приложение для игроков **Mobile Legends: Bang Bang** (`com.mobile.legends`) из России.
 
 Делает три вещи:

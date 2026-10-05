@@ -165,7 +165,10 @@ class MainActivity : AppCompatActivity() {
 
         // Заголовок
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(this, if (AppSettings.simple) "Fast VPN" else "MLBB Server", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleCol.addView(Ui.text(this, if (AppSettings.simple) "Fast VPN" else "MLBB Server", 22f, bold = true))
+        titleCol.addView(Ui.text(this, "⚡ Быстрее нас — только свет", 12f, Ui.GREEN))
+        top.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(Ui.button(this, " ⚙ ") { showSettings() })
         root.addView(top)
         root.addView(Ui.space(this, 14f))
