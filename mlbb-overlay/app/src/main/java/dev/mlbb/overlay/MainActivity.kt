@@ -697,7 +697,7 @@ class MainActivity : AppCompatActivity() {
             val exp = if (info.expireSec > 0) " · до " + java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.US)
                 .format(java.util.Date(info.expireSec * 1000)) else ""
             box.addView(TextView(this).apply {
-                text = String.format(java.util.Locale.US, "Серверов: %d · израсходовано %.1f ГБ%s", Subscription.usable(this).size, gb, exp)
+                text = String.format(java.util.Locale.US, "Серверов: %d · израсходовано %.1f ГБ%s", Subscription.usable(this@MainActivity).size, gb, exp)
             })
         }
 
