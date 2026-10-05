@@ -1,0 +1,57 @@
+name: MLBB overlay APK
+
+on:
+  push:
+    paths:
+      - "mlbb-overlay/**"
+      - ".github/workflows/mlbb-overlay-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mlbb-overlay
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install NDK, CMake, platform
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;26.3.11579264" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mlbb-overlay-debug
+          path: mlbb-overlay/app/build/outputs/apk/debug/app-debug.apk
+
+      # APK кладётся в отдельную ветку apk-builds (перезаписывается каждый раз),
+      # чтобы его можно было забрать обычным git fetch без доступа к artifacts API.
+      - name: Publish APK to apk-builds branch
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/pub && cp app/build/outputs/apk/debug/app-debug.apk /tmp/pub/mlbb-overlay-debug.apk
+          cd /tmp/pub
+          echo "${GITHUB_SHA}" > SOURCE_COMMIT
+          git init -q && git checkout -q -b apk-builds
+          git add . && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "Debug APK from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" apk-builds
