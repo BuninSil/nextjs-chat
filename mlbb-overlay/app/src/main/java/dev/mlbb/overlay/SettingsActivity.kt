@@ -54,10 +54,10 @@ class SettingsActivity : AppCompatActivity() {
 
         // ---------- Для чего приложение ----------
         root.addView(section("Приложение"))
-        root.addView(profileCard(AppSettings.PROFILE_GAME, "🎮  Для Mobile Legends",
+        root.addView(profileCard(AppSettings.PROFILE_GAME, "🎮  Fast VPN + MLBB",
             "VPN + плашка с сервером матча, игровой режим, лог боёв, запуск игры"))
         root.addView(Ui.space(this, 8f))
-        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "🌐  Просто VPN",
+        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "⚡  Fast VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
 
         // ---------- Режим (только для игры) ----------
@@ -260,7 +260,7 @@ class SettingsActivity : AppCompatActivity() {
             if (AppSettings.profile == value) return@setOnClickListener
             AppSettings.setProfile(this, value)
             vpnChanged = true
-            Toast.makeText(this, if (AppSettings.simple) "Включён режим «Просто VPN»" else "Включён режим для MLBB", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (AppSettings.simple) "Включён режим Fast VPN" else "Включён режим Fast VPN + MLBB", Toast.LENGTH_SHORT).show()
             recreate()
         }
         return c

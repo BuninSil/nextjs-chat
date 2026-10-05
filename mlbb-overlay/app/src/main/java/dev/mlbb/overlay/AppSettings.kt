@@ -28,7 +28,7 @@ object AppSettings {
 
     /**
      * Для чего приложение: "game" — для Mobile Legends (оверлей, игровой режим, лог боёв),
-     * "simple" — просто VPN (Fast VPN), всё про игру скрыто; "" — ещё не выбрано (спросим при запуске).
+     * "simple" — Fast VPN без игры, всё про игру скрыто; "" — ещё не выбрано (спросим при запуске).
      */
     @Volatile var profile = ""
     val simple get() = profile == PROFILE_SIMPLE

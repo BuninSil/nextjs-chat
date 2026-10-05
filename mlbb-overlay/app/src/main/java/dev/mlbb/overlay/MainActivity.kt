@@ -91,20 +91,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Первый запуск: для игры или просто VPN. Потом меняется в Настройках. */
+    /** Первый запуск: Fast VPN или Fast VPN + MLBB. Потом меняется в Настройках. */
     private fun askProfile() {
         AlertDialog.Builder(this)
             .setTitle("Для чего тебе приложение?")
             .setMessage(
                 "${Ui.SLOGAN}\n\n" +
-                "🎮 Для Mobile Legends — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
+                "🎮 Fast VPN + MLBB — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
                     "в приоритете, запуск игры одной кнопкой.\n\n" +
-                    "🌐 Просто VPN — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
+                    "⚡ Fast VPN — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
                     "Поменять можно потом в Настройках."
             )
             .setCancelable(false)
-            .setPositiveButton("🎮 Для MLBB") { _, _ -> chooseProfile(AppSettings.PROFILE_GAME) }
-            .setNegativeButton("🌐 Просто VPN") { _, _ -> chooseProfile(AppSettings.PROFILE_SIMPLE) }
+            .setPositiveButton("🎮 + MLBB") { _, _ -> chooseProfile(AppSettings.PROFILE_GAME) }
+            .setNegativeButton("⚡ Fast VPN") { _, _ -> chooseProfile(AppSettings.PROFILE_SIMPLE) }
             .show()
     }
 
@@ -248,7 +248,7 @@ class MainActivity : AppCompatActivity() {
             AppSettings.save(this@MainActivity)
             if (anyRunning()) toast("Применится после переподключения")
         })
-        // В простом режиме (просто VPN) про игру ничего не показываем
+        // В режиме Fast VPN (без игры) про игру ничего не показываем
         if (!AppSettings.simple) {
             root.addView(gameRow, LinearLayout.LayoutParams(-1, -2))
             root.addView(Ui.text(this, "плашка с сервером матча поверх игры, российские серверы в приоритете", 12f, Ui.MUTED).apply {
@@ -547,7 +547,7 @@ class MainActivity : AppCompatActivity() {
             stopAll()
             return
         }
-        // Игра и плашка нужны только для игровых функций; просто VPN работает без них
+        // Игра и плашка нужны только для игровых функций; Fast VPN без игры работает без них
         val forGame = !AppSettings.simple && (AppSettings.gameMode || AppSettings.mode != AppSettings.MODE_BOX)
         if (forGame && !isGameInstalled()) {
             showInfo("Игра не найдена", "Mobile Legends (${CaptureVpnService.GAME_PACKAGE}) не установлена.")
