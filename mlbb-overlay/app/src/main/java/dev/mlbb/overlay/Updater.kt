@@ -34,11 +34,23 @@ object Updater {
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
             if (a.getString("name").endsWith(".apk")) {
-                return Release(code, tag, json.optString("body", ""), a.getString("browser_download_url"))
+                return Release(code, tag, cleanNotes(json.optString("body", "")), a.getString("browser_download_url"))
             }
         }
         return null
     }
+
+    /** Убирает из описания релиза служебные строки коммита (соавторы, ссылки на сессии). */
+    private fun cleanNotes(body: String): String =
+        body.lines()
+            .filterNot { line ->
+                val l = line.trim()
+                l.startsWith("Co-Authored-By:", ignoreCase = true) ||
+                    l.startsWith("Claude-Session:", ignoreCase = true) ||
+                    l.startsWith("Signed-off-by:", ignoreCase = true)
+            }
+            .joinToString("\n")
+            .trim()
 
     fun download(ctx: Context, rel: Release, progress: (String) -> Unit): File {
         val c = Net.open(rel.apkUrl)
