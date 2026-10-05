@@ -113,7 +113,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             VpnLog.clear()
             AppSettings.load(this)
             Subscription.load(this)
-            val nodes = Subscription.nodes
+            val nodes = Subscription.usable(this)
             if (nodes.isEmpty()) throw RuntimeException("Нет серверов: добавь ссылку подписки")
             // Серверы XHTTP — через ядро Xray, каждому свой локальный порт
             val xrayPorts = if (XrayCore.available(this)) {

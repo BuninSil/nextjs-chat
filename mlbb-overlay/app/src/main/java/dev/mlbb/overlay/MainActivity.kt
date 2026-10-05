@@ -260,7 +260,7 @@ class MainActivity : AppCompatActivity() {
         return ScrollView(this).apply { addView(root) }
     }
 
-    private fun nodeByTag(tag: String) = Subscription.nodes.firstOrNull { it.tag == tag }
+    private fun nodeByTag(tag: String) = Subscription.usable(this).firstOrNull { it.tag == tag }
 
     private fun anyRunning() = BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning
 
@@ -280,7 +280,7 @@ class MainActivity : AppCompatActivity() {
 
         when (AppSettings.mode) {
             AppSettings.MODE_BOX -> {
-                val n = nodeByTag(AppSettings.selectedTag) ?: Subscription.nodes.firstOrNull()
+                val n = nodeByTag(AppSettings.selectedTag) ?: Subscription.usable(this).firstOrNull()
                 if (n == null) {
                     serverFlag.text = "🔗"
                     serverName.text = "Нет подписки"
@@ -291,7 +291,7 @@ class MainActivity : AppCompatActivity() {
                     serverFlag.text = Ui.flagFor(n)
                     serverName.text = Ui.cleanName(n)
                     serverSub.text = "${n.type}" + (if (AppSettings.autoSelect) " · автовыбор" else "") +
-                        " · ${Subscription.nodes.size} серверов"
+                        " · ${Subscription.usable(this).size} серверов"
                     // В игровом режиме важнее пинг до сервера игры, если он измерен
                     val g = if (AppSettings.gameMode) ServerTester.gamePing[n.tag] else null
                     val shown = g ?: r?.medianMs
@@ -428,7 +428,7 @@ class MainActivity : AppCompatActivity() {
         clearErrors()
         when (AppSettings.mode) {
             AppSettings.MODE_BOX -> {
-                if (Subscription.nodes.isEmpty()) {
+                if (Subscription.usable(this).isEmpty()) {
                     showSubscription()
                     return
                 }
@@ -599,7 +599,7 @@ class MainActivity : AppCompatActivity() {
             val exp = if (info.expireSec > 0) " · до " + java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.US)
                 .format(java.util.Date(info.expireSec * 1000)) else ""
             box.addView(TextView(this).apply {
-                text = String.format(java.util.Locale.US, "Серверов: %d · израсходовано %.1f ГБ%s", Subscription.nodes.size, gb, exp)
+                text = String.format(java.util.Locale.US, "Серверов: %d · израсходовано %.1f ГБ%s", Subscription.usable(this).size, gb, exp)
             })
         }
 

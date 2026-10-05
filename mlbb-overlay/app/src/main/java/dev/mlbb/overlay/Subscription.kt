@@ -36,6 +36,12 @@ object Subscription {
     var info: Info? = null
         private set
 
+    /** Серверы, которые работают на этом устройстве: XHTTP — только если есть ядро Xray (64 бита). */
+    fun usable(ctx: Context): List<Node> {
+        val xray = XrayCore.available(ctx)
+        return nodes.filter { it.xrayLink == null || xray }
+    }
+
     private fun file(ctx: Context) = File(ctx.filesDir, "subscription.txt")
     private fun infoFile(ctx: Context) = File(ctx.filesDir, "subscription-info.txt")
 

@@ -141,7 +141,7 @@ class ServersActivity : AppCompatActivity() {
 
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
-            val all = Subscription.nodes.filterNot { ServerTester.isSeparator(it) }
+            val all = Subscription.usable(this@ServersActivity).filterNot { ServerTester.isSeparator(it) }
             // Рабочие сверху; в игровом режиме среди них российские первыми
             val game = AppSettings.gameMode
             items = all.sortedWith(compareBy<Subscription.Node> {

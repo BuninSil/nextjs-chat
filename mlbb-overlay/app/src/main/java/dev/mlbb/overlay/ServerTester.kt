@@ -125,7 +125,7 @@ object ServerTester {
 
     /** Меряет пинг до всех серверов напрямую. Возвращает теги от лучшего к худшему. VPN не нужен. */
     fun measure(ctx: Context, progress: (Int, Int) -> Unit): List<String> {
-        val nodes = Subscription.nodes.filterNot { isSeparator(it) }
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
         val net = underlying(ctx)
         val game = AppSettings.gameMode
         testing = true
