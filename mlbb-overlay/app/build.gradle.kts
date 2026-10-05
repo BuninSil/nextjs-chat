@@ -57,6 +57,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        aidl = true
     }
 
     kotlinOptions {
@@ -68,4 +69,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // Shizuku: чтение таблицы сокетов с правами adb-шелла, без своего VPN
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

@@ -83,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         val modeGroup = findViewById<RadioGroup>(R.id.modeGroup)
         modeGroup.check(if (AppSettings.chainEnabled) R.id.modeChain else R.id.modeDirect)
         modeGroup.setOnCheckedChangeListener { _, id ->
-            AppSettings.chainEnabled = id == R.id.modeChain
+            AppSettings.mode = if (id == R.id.modeChain) AppSettings.MODE_CHAIN else AppSettings.MODE_DIRECT
             AppSettings.save(this)
             if (CaptureVpnService.isRunning) toast("Режим поменяется после СТОП → СТАРТ")
         }

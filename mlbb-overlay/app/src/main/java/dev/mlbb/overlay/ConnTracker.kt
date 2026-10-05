@@ -35,6 +35,7 @@ object ConnTracker {
         val history = ArrayDeque<LongArray>()
 
         val totalPkts get() = pktsIn + pktsOut
+        val activity get() = if (metricBytes) bytesIn + bytesOut else pktsIn + pktsOut
         fun copy() = Conn(key, proto, srcPort, dstIp, dstPort, firstSeenMs).also {
             it.lastSeenMs = lastSeenMs; it.bytesOut = bytesOut; it.bytesIn = bytesIn
             it.pktsOut = pktsOut; it.pktsIn = pktsIn; it.hsRttMs = hsRttMs; it.closed = closed
@@ -42,6 +43,13 @@ object ConnTracker {
     }
 
     data class Battle(val conn: Conn, val pktsLast10s: Long)
+
+    /**
+     * true — источник не знает пакетов (Clash API клиента), активность считаем в байтах.
+     * Тогда Battle.pktsLast10s — это байты за 10 секунд.
+     */
+    @Volatile
+    var metricBytes = false
 
     private val conns = LinkedHashMap<Long, Conn>()
     private var generation = 0L
@@ -73,7 +81,7 @@ object ConnTracker {
         c.closed = closed
 
         val now = System.currentTimeMillis()
-        c.history.addLast(longArrayOf(now, c.totalPkts))
+        c.history.addLast(longArrayOf(now, c.activity))
         // Храним одну точку старше окна — это и есть база для разности.
         while (c.history.size > 2 && c.history[1][0] <= now - WINDOW_MS) c.history.removeFirst()
 
@@ -97,12 +105,17 @@ object ConnTracker {
             // Соединение моложе окна — считаем все его пакеты.
             base = if (c.firstSeenMs >= from) 0 else c.history.firstOrNull()?.get(1) ?: 0
         }
-        return (c.totalPkts - base).coerceAtLeast(0)
+        return (c.activity - base).coerceAtLeast(0)
     }
 
     /** «Боевой сервер» — UDP-поток с наибольшим числом пакетов за последние 10 секунд. */
+    /** Внешний выбор боевого сервера (режим Shizuku: счётчиков трафика нет). */
+    @Volatile
+    var battleOverride: (() -> Battle?)? = null
+
     @Synchronized
     fun battleServer(now: Long = System.currentTimeMillis()): Battle? {
+        battleOverride?.let { return it() }
         var best: Conn? = null
         var bestPkts = 0L
         for (c in conns.values) {

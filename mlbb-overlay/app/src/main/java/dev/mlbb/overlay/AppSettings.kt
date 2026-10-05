@@ -3,8 +3,18 @@ package dev.mlbb.overlay
 import android.content.Context
 
 object AppSettings {
-    /** Режим VPN: только игра напрямую, или всё через сторонний VPN-клиент (SOCKS5). */
-    @Volatile var chainEnabled = false
+    /** Только игра через наш VPN, без стороннего VPN */
+    const val MODE_DIRECT = 0
+    /** Свой VPN не поднимаем: читаем соединения у VPN-клиента через его Clash API */
+    const val MODE_API = 1
+    /** Старый режим: наш VPN + SOCKS5 клиента */
+    const val MODE_CHAIN = 2
+
+    @Volatile var mode = MODE_DIRECT
+    val chainEnabled get() = mode == MODE_CHAIN
+
+    @Volatile var apiPort = 0
+    @Volatile var apiSecret = ""
     @Volatile var socksHost = "127.0.0.1"
     @Volatile var socksPort = 10808
     @Volatile var socksUser = ""
@@ -21,7 +31,9 @@ object AppSettings {
 
     fun load(ctx: Context) {
         val p = prefs(ctx)
-        chainEnabled = p.getBoolean("chain", false)
+        mode = p.getInt("mode", if (p.getBoolean("chain", false)) MODE_CHAIN else MODE_DIRECT)
+        apiPort = p.getInt("apiPort", 0)
+        apiSecret = p.getString("apiSecret", "") ?: ""
         socksHost = p.getString("socksHost", "127.0.0.1") ?: "127.0.0.1"
         socksPort = p.getInt("socksPort", 10808)
         socksUser = p.getString("socksUser", "") ?: ""
@@ -34,7 +46,9 @@ object AppSettings {
 
     fun save(ctx: Context) {
         prefs(ctx).edit()
-            .putBoolean("chain", chainEnabled)
+            .putInt("mode", mode)
+            .putInt("apiPort", apiPort)
+            .putString("apiSecret", apiSecret)
             .putString("socksHost", socksHost)
             .putInt("socksPort", socksPort)
             .putString("socksUser", socksUser)

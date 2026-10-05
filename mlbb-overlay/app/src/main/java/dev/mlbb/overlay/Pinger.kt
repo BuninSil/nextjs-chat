@@ -13,7 +13,7 @@ import java.net.Socket
  *  3. TCP-проба на 443 порт: время до SYN/ACK или RST (RST тоже даёт честный RTT).
  * В режиме цепочки вместо 2–3 — проба через SOCKS5 клиента (путь как у игры).
  */
-class Pinger {
+class Pinger(private val minValidMs: Int = 0) {
     data class Result(val ip: String, val ms: Int, val method: String)
 
     @Volatile
@@ -22,7 +22,17 @@ class Pinger {
 
     private var icmpFails = HashMap<String, Int>()
 
+    /**
+     * Когда наш трафик идёт через TUN VPN-клиента, его стек может отвечать на
+     * ICMP/TCP сам, мгновенно. Такие «0–2 ms» — враньё, их отбрасываем.
+     */
     fun probe(ip: String) {
+        probeRaw(ip)
+        val l = last
+        if (l != null && l.ms in 0 until minValidMs) last = Result(ip, -1, "")
+    }
+
+    private fun probeRaw(ip: String) {
         if (ip.contains(':')) { // IPv6 — только TCP
             tcpProbe(ip)?.let { last = Result(ip, it, "TCP"); return }
             last = Result(ip, -1, "")
