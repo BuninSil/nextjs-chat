@@ -26,11 +26,18 @@ object BoxConfig {
         battleDirect: Boolean,
         /** Игровой режим: плюшки для MLBB. Без него — просто быстрый VPN на всё. */
         gameMode: Boolean,
+        /** tag XHTTP-сервера -> локальный SOCKS-порт Xray */
+        xrayPorts: Map<String, Int> = emptyMap(),
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
         for (n in nodes) {
-            outbounds.put(JSONObject(n.outbound.toString()))
+            val o = JSONObject(n.outbound.toString())
+            if (n.xrayLink != null) {
+                val port = xrayPorts[n.tag] ?: continue // Xray недоступен — сервер пропускаем
+                o.put("server_port", port)
+            }
+            outbounds.put(o)
             tags.put(n.tag)
         }
         outbounds.put(
@@ -43,12 +50,17 @@ object BoxConfig {
         val tun = JSONObject()
             .put("type", "tun").put("tag", "tun-in")
             .put("address", JSONArray().put("172.19.0.1/30"))
-            .put("mtu", 1500) // без джамбо-кадров: меньше фрагментации на мобильной сети
+            // Обычный режим — 9000 (больше данных за пакет, выше скорость, как по умолчанию в sing-box);
+            // игровой — 1500, без лишней буферизации для мелких пакетов игры
+            .put("mtu", if (gameMode) 1500 else 9000)
             .put("auto_route", true)
             .put("strict_route", false)
             .put("stack", "mixed")
         // Иначе через VPN идёт всё, включая нас самих (обновления и база DB-IP под блокировками)
-        if (gameMode && onlyGame) tun.put("include_package", JSONArray().put(GAME).put(selfPackage))
+        // Наше приложение — мимо туннеля: соединения ядра Xray (отдельный процесс) иначе ушли бы
+        // обратно в VPN. Свои замеры через VPN приложение делает явно, через SOCKS-вход.
+        if (gameMode && onlyGame) tun.put("include_package", JSONArray().put(GAME))
+        else tun.put("exclude_package", JSONArray().put(selfPackage))
 
         val mixed = JSONObject().put("type", "mixed").put("tag", "mixed-in")
             .put("listen", "127.0.0.1").put("listen_port", ports.mixed)

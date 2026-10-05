@@ -21,7 +21,7 @@ jobs:
         run: |
           git clone --depth 1 --branch v26.9.30 https://github.com/XTLS/Xray-core /tmp/xray
           cd /tmp/xray
-          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid=" -o libxray.so ./main
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid= -checklinkname=0" -o libxray.so ./main
           ls -la libxray.so
       - name: Publish to xraybin branch
         env:

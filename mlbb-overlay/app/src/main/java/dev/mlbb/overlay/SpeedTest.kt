@@ -13,12 +13,17 @@ object SpeedTest {
 
     private const val BASE = "https://speed.cloudflare.com"
 
-    private fun conn(path: String): HttpURLConnection =
-        (URL(BASE + path).openConnection() as HttpURLConnection).apply {
+    private fun conn(path: String): HttpURLConnection {
+        val mixed = BoxVpnService.ports?.mixed
+        val c = if (mixed != null) URL(BASE + path).openConnection(
+            java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", mixed))
+        ) else URL(BASE + path).openConnection()
+        return (c as HttpURLConnection).apply {
             connectTimeout = 8000
             readTimeout = 8000
             setRequestProperty("User-Agent", "mlbb-overlay")
         }
+    }
 
     fun ping(): Pair<Int, Int>? {
         val samples = ArrayList<Int>()

@@ -22,6 +22,8 @@ object Subscription {
         /** true — протокол с настоящим UDP (лучше для игры), false — UDP поверх TCP */
         val nativeUdp: Boolean,
         val outbound: JSONObject,
+        /** Ссылка для ядра Xray (XHTTP), если sing-box такой транспорт не умеет */
+        val xrayLink: String? = null,
     )
 
     data class Info(val upload: Long, val download: Long, val total: Long, val expireSec: Long)
@@ -223,10 +225,17 @@ object Subscription {
         // Транспорты только из xray (xhttp, kcp и т.п.) ядро sing-box не умеет — такие серверы
         // подключались бы как обычный TCP и не работали; пропускаем их
         val transportType = uri.getQueryParameter("type")?.lowercase()
-        if (transportType != null && transportType !in setOf("tcp", "grpc", "ws", "http", "h2", "httpupgrade", "")) return null
         val name = dec(uri.fragment ?: uri.encodedFragment).ifEmpty { uri.host ?: tag }
         val server = uri.host ?: return null
         val port = if (uri.port > 0) uri.port else 443
+        // XHTTP — через второе ядро Xray; outbound sing-box для него подставится при запуске (SOCKS к Xray)
+        if (transportType in XrayCore.TRANSPORTS && (scheme == "vless" || scheme == "trojan")) {
+            val placeholder = JSONObject().put("tag", tag).put("type", "socks")
+                .put("server", "127.0.0.1").put("server_port", 1).put("version", "5")
+            return Node(tag, name, "xhttp", server, port, false, placeholder, xrayLink = link)
+        }
+        // Прочие транспорты только из xray (kcp и т.п.) не поддерживаем
+        if (transportType != null && transportType !in setOf("tcp", "grpc", "ws", "http", "h2", "httpupgrade", "")) return null
         val user = dec(uri.encodedUserInfo)
         val q: (String) -> String? = { uri.getQueryParameter(it) }
         val o = JSONObject().put("tag", tag).put("server", server).put("server_port", port)

@@ -13,7 +13,11 @@ import java.net.URL
 object Net {
     fun open(url: String): HttpURLConnection {
         val u = URL(url)
-        val conn = if (AppSettings.chainEnabled && CaptureVpnService.isRunning) {
+        val boxSocks = BoxVpnService.ports?.mixed
+        val conn = if (boxSocks != null) {
+            // Встроенный VPN: приложение вне туннеля, поэтому свои запросы шлём через него явно
+            u.openConnection(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", boxSocks)))
+        } else if (AppSettings.chainEnabled && CaptureVpnService.isRunning) {
             u.openConnection(Proxy(Proxy.Type.SOCKS, InetSocketAddress(AppSettings.socksHost, AppSettings.socksPort)))
         } else {
             u.openConnection()

@@ -115,6 +115,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
             Subscription.load(this)
             val nodes = Subscription.nodes
             if (nodes.isEmpty()) throw RuntimeException("Нет серверов: добавь ссылку подписки")
+            // Серверы XHTTP — через ядро Xray, каждому свой локальный порт
+            val xrayPorts = if (XrayCore.available(this)) {
+                nodes.filter { it.xrayLink != null }.associate { it.tag to freePort() }
+            } else emptyMap()
+            XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) })
 
             if (!setupDone) {
                 val work = File(filesDir, "box").apply { mkdirs() }
@@ -133,11 +138,15 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
             val secret = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
             val p = BoxConfig.Ports(freePort(), secret, freePort())
-            val selected = AppSettings.selectedTag.takeIf { t -> nodes.any { it.tag == t } } ?: nodes.first().tag
+            // Выбранный сервер должен попасть в конфиг (XHTTP без Xray туда не попадает)
+            val usable = nodes.filter { it.xrayLink == null || it.tag in xrayPorts }
+            if (usable.isEmpty()) throw RuntimeException("Нет серверов, которые поддерживает это устройство")
+            val selected = AppSettings.selectedTag.takeIf { t -> usable.any { it.tag == t } } ?: usable.first().tag
             val config = BoxConfig.build(
                 nodes, selected, p, packageName,
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
                 gameMode = AppSettings.gameMode,
+                xrayPorts = xrayPorts,
             )
             val service = Libbox.newService(config, this)
             service.start()
@@ -160,6 +169,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private fun stopBox() {
         isRunning = false
         ports = null
+        XrayCore.stop()
         MonitorService.stop(this)
         try {
             box?.close()

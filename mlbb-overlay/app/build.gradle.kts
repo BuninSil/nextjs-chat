@@ -53,6 +53,11 @@ android {
         }
     }
 
+    packaging {
+        // Ядро Xray — исполняемый файл в jniLibs: должен распаковаться на устройство
+        jniLibs { useLegacyPackaging = true }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
