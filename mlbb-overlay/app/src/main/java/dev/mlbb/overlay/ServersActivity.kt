@@ -44,10 +44,16 @@ class ServersActivity : AppCompatActivity() {
             setPadding(0, 0, d(12f), 0); setOnClickListener { finish() }
         })
         top.addView(Ui.text(this, "Серверы", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(Ui.button(this, "⚡ По скорости") { speedRank() })
-        top.addView(Ui.space(this, 0f).apply { layoutParams = LinearLayout.LayoutParams(d(8f), 1) })
         top.addView(Ui.button(this, " ↻ ") { retest() })
         root.addView(top)
+        root.addView(Ui.space(this, 10f))
+        // Отдельные проверки: страна выхода (запоминается) и скорость
+        val actions = LinearLayout(this)
+        actions.addView(Ui.button(this, "🌍  Выходы") { checkExits() }.apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
+        actions.addView(Ui.button(this, "⚡  По скорости") { speedRank() }.apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
+        root.addView(actions)
         root.addView(Ui.space(this, 12f))
 
         val autoCard = Ui.card(this)
@@ -92,6 +98,24 @@ class ServersActivity : AppCompatActivity() {
             // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий
             if (AppSettings.autoSelect && BoxVpnService.isRunning) ServerTester.pickWorking(applicationContext, ranked)
             runOnUiThread { header.text = "" }
+        }.start()
+    }
+
+    /** Проверка реальной страны выхода у всех серверов (запоминается до обновления подписки). */
+    private fun checkExits() {
+        if (!BoxVpnService.isRunning) {
+            Toast.makeText(this, "Страна выхода проверяется через VPN — сначала подключись", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (ServerTester.testing) return
+        Thread {
+            val n = ServerTester.checkAllExits(applicationContext) { done, total ->
+                runOnUiThread { header.text = "Выходы: $done из $total…" }
+            }
+            runOnUiThread {
+                header.text = ""
+                Toast.makeText(this, "Проверено выходов: $n", Toast.LENGTH_SHORT).show()
+            }
         }.start()
     }
 

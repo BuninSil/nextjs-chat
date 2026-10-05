@@ -186,8 +186,8 @@ object ServerTester {
             }
             if (!game) { chosen = tag; break }
             if (fallback == null) fallback = tag
-            val loc = traceExit(p.mixed)
-            if (loc != null) exitCountry[tag] = loc
+            // Страна выхода проверяется один раз и дальше берётся из памяти
+            val loc = exitCountry[tag] ?: traceExit(p.mixed)?.also { exitCountry[tag] = it }
             if (loc == "RU") { chosen = tag; break }
         }
         saveExits(ctx)
@@ -217,6 +217,30 @@ object ServerTester {
         val o = org.json.JSONObject()
         for ((k, v) in exitCountry) o.put(k, v)
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("exits", o.toString()).apply()
+    }
+
+    /**
+     * Проверяет страну выхода у всех серверов заново (кнопка «Выходы»). Нужен запущенный VPN.
+     * В конце возвращает ядро на выбранный сервер.
+     */
+    fun checkAllExits(ctx: Context, progress: (Int, Int) -> Unit): Int {
+        val p = BoxVpnService.ports ?: return 0
+        loadExits(ctx)
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
+        val keep = AppSettings.selectedTag
+        var found = 0
+        nodes.forEachIndexed { i, n ->
+            progress(i + 1, nodes.size)
+            if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) return@forEachIndexed
+            val loc = traceExit(p.mixed)
+            if (loc != null) {
+                exitCountry[n.tag] = loc
+                found++
+            }
+        }
+        saveExits(ctx)
+        if (keep.isNotEmpty()) ClashApi.select(p.api, p.secret, "proxy", keep)
+        return found
     }
 
     /** Через текущий сервер (SOCKS-вход ядра) спрашивает у Cloudflare, из какой страны пришёл запрос. */
