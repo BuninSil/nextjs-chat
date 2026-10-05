@@ -552,9 +552,13 @@ class MainActivity : AppCompatActivity() {
         busy = true
         val progress = AlertDialog.Builder(this).setTitle("Подключаю VPN").setMessage("Секунду…").setCancelable(false).show()
         Thread {
+            // Чужой VPN не пускает мимо себя — прямой пинг до серверов при нём не мерится.
+            // Тогда сначала поднимаем свой VPN (Android сам отключит чужой), а мерим после.
+            val otherVpn = ServerTester.otherVpnActive(applicationContext)
+
             // 1. Пинг до всех серверов напрямую — ещё до подключения, это быстро
             var ranked: List<String> = emptyList()
-            if (AppSettings.autoSelect) {
+            if (AppSettings.autoSelect && !otherVpn) {
                 runOnUiThread { progress.setTitle("Меряю пинг до серверов") }
                 ranked = ServerTester.measure(applicationContext) { done, total ->
                     runOnUiThread { progress.setMessage("$done из $total…") }
@@ -563,21 +567,23 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 2. Подключаемся сразу к лучшему
-            runOnUiThread { progress.setTitle("Подключаю VPN"); progress.setMessage("Секунду…") }
-            BoxVpnService.start(this)
-            Thread.sleep(300)
-            val deadline = System.currentTimeMillis() + 20_000
-            while ((BoxVpnService.isStarting || !BoxVpnService.isRunning) && BoxVpnService.lastError == null &&
-                System.currentTimeMillis() < deadline
-            ) Thread.sleep(200)
-
-            if (!BoxVpnService.isRunning) {
+            runOnUiThread {
+                progress.setTitle("Подключаю VPN")
+                progress.setMessage(if (otherVpn) "Отключаю другой VPN и подключаю свой…" else "Секунду…")
+            }
+            if (!startBoxAndWait()) {
                 busy = false
-                runOnUiThread {
-                    progress.dismiss()
-                    if (BoxVpnService.lastError == null) BoxVpnService.lastError = "VPN не подключился за 20 секунд"
-                }
+                runOnUiThread { progress.dismiss() }
                 return@Thread
+            }
+
+            // Пинг не намерился (мешал чужой VPN или сеть) — меряем теперь, когда свой VPN поднят
+            if (AppSettings.autoSelect && ranked.isEmpty()) {
+                Thread.sleep(1000)
+                runOnUiThread { progress.setTitle("Меряю пинг до серверов"); progress.setMessage("Секунду…") }
+                ranked = ServerTester.measure(applicationContext) { done, total ->
+                    runOnUiThread { progress.setMessage("$done из $total…") }
+                }
             }
 
             // 3. Проверяем, что через сервер реально ходит трафик; если нет — следующий
@@ -603,6 +609,21 @@ class MainActivity : AppCompatActivity() {
                 if (AppSettings.gameMode && AppSettings.autoLaunch) launchGame()
             }
         }.start()
+    }
+
+    /** Запускает встроенный VPN и ждёт подключения (до 20 с). Вызывать не с главного потока. */
+    private fun startBoxAndWait(): Boolean {
+        BoxVpnService.lastError = null
+        BoxVpnService.start(this)
+        Thread.sleep(300)
+        val deadline = System.currentTimeMillis() + 20_000
+        while ((BoxVpnService.isStarting || !BoxVpnService.isRunning) && BoxVpnService.lastError == null &&
+            System.currentTimeMillis() < deadline
+        ) Thread.sleep(200)
+        if (!BoxVpnService.isRunning && BoxVpnService.lastError == null) {
+            BoxVpnService.lastError = "VPN не подключился за 20 секунд"
+        }
+        return BoxVpnService.isRunning
     }
 
     private fun stopAll() {
@@ -735,7 +756,51 @@ class MainActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 progress.dismiss()
-                if (error != null) showInfo("Подписка не загрузилась", error!!) else toast(msg)
+                when {
+                    error == null -> toast(msg)
+                    // Напрямую адрес подписки часто заблокирован — пробуем через свой VPN на старых серверах
+                    canUpdateViaOwnVpn() -> withVpnPermission { updateSubscriptionViaVpn(url) }
+                    else -> showInfo("Подписка не загрузилась", error!!)
+                }
+            }
+        }.start()
+    }
+
+    private fun canUpdateViaOwnVpn() =
+        !BoxVpnService.isRunning && !CaptureVpnService.isRunning && !ServerTester.otherVpnActive(this) &&
+            AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isNotEmpty()
+
+    /**
+     * Подписка не скачалась напрямую: поднимаем свой VPN на уже сохранённых серверах,
+     * качаем подписку через него и отключаемся. Сторонний VPN для обновления не нужен.
+     */
+    private fun updateSubscriptionViaVpn(url: String) {
+        busy = true
+        val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку через VPN")
+            .setMessage("Напрямую не открылась — подключаюсь к сохранённому серверу…").setCancelable(false).show()
+        Thread {
+            var error: String? = null
+            var n = 0
+            if (!startBoxAndWait()) {
+                error = BoxVpnService.lastError ?: "VPN не подключился"
+            } else {
+                // Берём рабочий сервер: замер пинга и проверка, что через него ходит трафик
+                runOnUiThread { progress.setMessage("Ищу рабочий сервер…") }
+                val ranked = ServerTester.measure(applicationContext) { _, _ -> }
+                if (ranked.isNotEmpty()) ServerTester.pickWorking(applicationContext, ranked, 6)
+                runOnUiThread { progress.setMessage("Скачиваю подписку…") }
+                try {
+                    n = Subscription.update(applicationContext, url)
+                } catch (e: Exception) {
+                    error = e.message
+                }
+                BoxVpnService.stop(this)
+            }
+            busy = false
+            runOnUiThread {
+                progress.dismiss()
+                if (error != null) showInfo("Подписка не загрузилась", error!!)
+                else toast("Готово: серверов $n (обновлено через VPN)")
             }
         }.start()
     }

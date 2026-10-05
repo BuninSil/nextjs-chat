@@ -185,6 +185,9 @@ class BoxVpnService : VpnService(), PlatformInterface {
     }
 
     override fun onRevoke() {
+        // Android забирает VPN, когда его включает другое приложение (или его выключили в настройках)
+        if (isRunning) lastError = "VPN отключился: его забрало другое VPN-приложение. Если оно включается само — " +
+            "выключи у него автоподключение и «Постоянный VPN» (Настройки → Сеть и интернет → VPN)."
         Thread { stopBox(); stopSelf() }.start()
     }
 
@@ -225,7 +228,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
             }
         }
 
-        val pfd = b.establish() ?: throw Exception("Android не дал поднять VPN")
+        val pfd = b.establish() ?: throw Exception(
+            "Android не дал поднять VPN. Скорее всего, у другого VPN-приложения включён «Постоянный VPN»: " +
+                "Настройки → Сеть и интернет → VPN → шестерёнка у того приложения → выключи «Постоянный VPN» " +
+                "и «Блокировать соединения без VPN»."
+        )
         tunPfd = pfd
         return pfd.fd
     }

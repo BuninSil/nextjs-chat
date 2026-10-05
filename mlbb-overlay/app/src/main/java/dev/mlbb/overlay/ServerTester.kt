@@ -111,6 +111,17 @@ object ServerTester {
         }
     }
 
+    /**
+     * Работает чужой VPN (не наш). Пока он включён, Android не пускает приложение мимо него,
+     * и прямой замер пинга до серверов не проходит — мерить надо после подключения своего VPN.
+     */
+    fun otherVpnActive(ctx: Context): Boolean {
+        if (BoxVpnService.isRunning || CaptureVpnService.isRunning) return false
+        val cm = ctx.getSystemService(ConnectivityManager::class.java)
+        @Suppress("DEPRECATION")
+        return cm.allNetworks.any { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true }
+    }
+
     private fun tcpRtt(net: Network?, addr: InetAddress, port: Int): Int? = try {
         Socket().use { s ->
             try { net?.bindSocket(s) } catch (_: Exception) {}
