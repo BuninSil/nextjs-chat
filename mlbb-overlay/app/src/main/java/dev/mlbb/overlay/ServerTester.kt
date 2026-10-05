@@ -223,12 +223,13 @@ object ServerTester {
      * Проверяет страну выхода у всех серверов заново (кнопка «Выходы»). Нужен запущенный VPN.
      * В конце возвращает ядро на выбранный сервер.
      */
-    fun checkAllExits(ctx: Context, progress: (Int, Int) -> Unit): Int {
-        val p = BoxVpnService.ports ?: return 0
+    fun checkAllExits(ctx: Context, progress: (Int, Int) -> Unit): Pair<Int, Int> {
+        val p = BoxVpnService.ports ?: return 0 to 0
         loadExits(ctx)
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
         val keep = AppSettings.selectedTag
         var found = 0
+        var ru = 0
         nodes.forEachIndexed { i, n ->
             progress(i + 1, nodes.size)
             if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) return@forEachIndexed
@@ -236,25 +237,47 @@ object ServerTester {
             if (loc != null) {
                 exitCountry[n.tag] = loc
                 found++
+                if (loc == "RU") ru++
             }
         }
         saveExits(ctx)
         if (keep.isNotEmpty()) ClashApi.select(p.api, p.secret, "proxy", keep)
-        return found
+        return found to ru
     }
 
-    /** Через текущий сервер (SOCKS-вход ядра) спрашивает у Cloudflare, из какой страны пришёл запрос. */
-    private fun traceExit(mixedPort: Int): String? = try {
-        val c = java.net.URL("http://www.cloudflare.com/cdn-cgi/trace").openConnection(
-            java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
-        ) as java.net.HttpURLConnection
-        c.connectTimeout = 4000
-        c.readTimeout = 4000
-        c.inputStream.bufferedReader().use { r ->
-            r.lineSequence().firstOrNull { it.startsWith("loc=") }?.substringAfter("loc=")?.trim()?.uppercase()
+    /** Адреса, где Cloudflare отвечает, с какого IP и из какой страны пришёл запрос (только https — с http редирект). */
+    private val TRACE_URLS = listOf(
+        "https://speed.cloudflare.com/cdn-cgi/trace",
+        "https://www.cloudflare.com/cdn-cgi/trace",
+        "https://1.1.1.1/cdn-cgi/trace",
+    )
+
+    /**
+     * Через текущий сервер (SOCKS-вход ядра) спрашивает у Cloudflare, из какой страны пришёл запрос.
+     * Если страны в ответе нет — определяет её по IP выхода через базу DB-IP.
+     */
+    private fun traceExit(mixedPort: Int): String? {
+        for (url in TRACE_URLS) {
+            val fields = try {
+                val c = java.net.URL(url).openConnection(
+                    java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
+                ) as java.net.HttpURLConnection
+                c.connectTimeout = 4000
+                c.readTimeout = 4000
+                c.instanceFollowRedirects = true
+                c.inputStream.bufferedReader().use { r ->
+                    r.readLines().mapNotNull { line ->
+                        val i = line.indexOf('=')
+                        if (i > 0) line.substring(0, i) to line.substring(i + 1).trim() else null
+                    }.toMap()
+                }
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            fields["loc"]?.uppercase()?.takeIf { it.length == 2 && it != "XX" }?.let { return it }
+            fields["ip"]?.let { ip -> GeoDb.lookup(ip)?.countryCode?.uppercase()?.let { return it } }
         }
-    } catch (_: Exception) {
-        null
+        return null
     }
 
     /** Переключает ядро на сервер и запоминает выбор. */

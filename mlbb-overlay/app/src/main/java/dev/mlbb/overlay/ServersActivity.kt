@@ -111,12 +111,14 @@ class ServersActivity : AppCompatActivity() {
         }
         if (ServerTester.testing) return
         Thread {
-            val n = ServerTester.checkAllExits(applicationContext) { done, total ->
+            val (n, ru) = ServerTester.checkAllExits(applicationContext) { done, total ->
                 runOnUiThread { header.text = "Выходы: $done из $total…" }
             }
             runOnUiThread {
                 header.text = ""
-                Toast.makeText(this, "Проверено выходов: $n", Toast.LENGTH_SHORT).show()
+                val msg = if (n == 0) "Не удалось определить выход ни у одного сервера — проверь, что VPN работает"
+                else "Выход определён у $n серверов, в России: $ru"
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
         }.start()
     }
