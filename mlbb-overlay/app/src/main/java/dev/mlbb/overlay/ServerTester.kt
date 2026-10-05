@@ -49,8 +49,6 @@ object ServerTester {
 
     val results = Results()
 
-    /** Пинг до серверов игры через конкретный VPN-сервер (tag -> ms), если серверы игры известны. */
-    val gamePing = ConcurrentHashMap<String, Int>()
 
     /** Скорость загрузки через сервер (tag -> Мбит/с), из короткого замера. */
     val speed = ConcurrentHashMap<String, Double>()
@@ -177,12 +175,8 @@ object ServerTester {
             ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
         } else 0
         // Игровой режим и уже известны серверы игры — выбираем по пингу ДО ИГРЫ среди нескольких рабочих
-        // Матчей ещё не было — ориентируемся на пинг до Москвы (там серверы MLBB для РФ)
-        val games = if (AppSettings.gameMode) GameServers.list(ctx).take(2) else emptyList()
-        val useRefs = AppSettings.gameMode && games.isEmpty()
-        val wanted = if (AppSettings.gameMode) 4 else 1
+        val wanted = 1
         val working = ArrayList<String>()
-        gamePing.clear()
         for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
             if (working.size >= wanted) break
             if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
@@ -191,14 +185,8 @@ object ServerTester {
                 continue
             }
             working.add(tag)
-            val pings = when {
-                games.isNotEmpty() -> games.mapNotNull { GameServers.ping(it.ip) }
-                useRefs -> listOfNotNull(GameServers.pingHost(GameServers.moscowRefs.first().first))
-                else -> emptyList()
-            }
-            if (pings.isNotEmpty()) gamePing[tag] = pings.sorted()[pings.size / 2]
         }
-        val best = working.minByOrNull { gamePing[it] ?: Int.MAX_VALUE } ?: return null
+        val best = working.firstOrNull() ?: return null
         ClashApi.select(p.api, p.secret, "proxy", best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)

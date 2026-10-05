@@ -292,11 +292,8 @@ class MainActivity : AppCompatActivity() {
                     serverName.text = Ui.cleanName(n)
                     serverSub.text = "${n.type}" + (if (AppSettings.autoSelect) " · автовыбор" else "") +
                         " · ${Subscription.usable(this).size} серверов"
-                    // В игровом режиме важнее пинг до сервера игры, если он измерен
-                    val g = if (AppSettings.gameMode) ServerTester.gamePing[n.tag] else null
-                    val shown = g ?: r?.medianMs
-                    serverPing.text = shown?.let { if (g != null) "🎮 $it ms" else "$it ms" } ?: ""
-                    serverPing.setTextColor(Ui.pingColor(shown))
+                    serverPing.text = r?.let { "${it.medianMs} ms" } ?: ""
+                    serverPing.setTextColor(Ui.pingColor(r?.medianMs))
                 }
             }
             AppSettings.MODE_DIRECT -> {
@@ -672,23 +669,6 @@ class MainActivity : AppCompatActivity() {
         val jitter = metric("Разброс")
         val down = metric("Загрузка")
         val up = metric("Отдача")
-        // Игровой режим: отдельно пинг до серверов MLBB, где реально шли матчи
-        val gameServers = if (AppSettings.gameMode) GameServers.list(this).take(5) else emptyList()
-        val gameRows = ArrayList<Pair<GameServers.Server, TextView>>()
-        val refRows = ArrayList<Pair<String, TextView>>()
-        if (AppSettings.gameMode) {
-            card.addView(Ui.text(this, "Пинг до серверов MLBB", 15f, bold = true).apply { setPadding(0, d(14f), 0, d(4f)) })
-            if (gameServers.isEmpty()) {
-                card.addView(Ui.text(this, "Серверов игры пока не знаю — меряю до Москвы, там серверы MLBB для РФ. " +
-                    "Сыграй матч с плашкой, и я запомню настоящие.", 13f, Ui.MUTED))
-                for ((host, name) in GameServers.moscowRefs) refRows.add(host to metric(name))
-            }
-            for (gs in gameServers) {
-                val geo = GeoDb.lookup(gs.ip)
-                val name = geo?.let { "${GeoDb.flag(it.countryCode)} ${it.city.ifEmpty { it.country }}" } ?: "🏳 ${gs.ip}"
-                gameRows.add(gs to metric(name))
-            }
-        }
         val state = Ui.text(this, "Меряю пинг…", 13f, Ui.MUTED).apply { setPadding(0, d(10f), 0, 0) }
         card.addView(state)
         val dlg = android.app.Dialog(this)
@@ -717,23 +697,6 @@ class MainActivity : AppCompatActivity() {
             val upv = SpeedTest.upload { v -> runOnUiThread { up.text = mbps(v) } }
             runOnUiThread {
                 up.text = upv?.let { mbps(it) } ?: "✖"
-                if (gameRows.isNotEmpty() || refRows.isNotEmpty()) state.text = "Меряю пинг до серверов игры…"
-            }
-            for ((host, view) in refRows) {
-                if (!speedRunning) return@Thread
-                val ms = GameServers.pingHost(host)
-                runOnUiThread {
-                    view.text = ms?.let { "$it ms" } ?: "✖"
-                    view.setTextColor(Ui.pingColor(ms))
-                }
-            }
-            for ((gs, view) in gameRows) {
-                if (!speedRunning) return@Thread
-                val ms = GameServers.ping(gs.ip)
-                runOnUiThread {
-                    view.text = ms?.let { "$it ms" } ?: "✖"
-                    view.setTextColor(Ui.pingColor(ms))
-                }
             }
             runOnUiThread {
                 state.text = if (p == null && dn == null) "Нет доступа к интернету" else "Готово"

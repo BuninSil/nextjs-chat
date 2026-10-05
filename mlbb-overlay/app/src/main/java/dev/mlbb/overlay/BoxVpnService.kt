@@ -258,22 +258,45 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         val cb = object : ConnectivityManager.NetworkCallback() {
+            // Ядру сообщаем только о реальной смене сети (интерфейса): каждое такое сообщение
+            // может сбросить соединения, а мобильная сеть дёргает свойства постоянно.
+            private var lastKey: String? = null
+            private var current: Network? = null
+            private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
             private fun update(network: Network?) {
                 val lp: LinkProperties? = network?.let { cm.getLinkProperties(it) }
                 val name = lp?.interfaceName
                 if (name == null) {
-                    listener.updateDefaultInterface("", -1, false, false)
+                    if (lastKey != "") {
+                        lastKey = ""
+                        listener.updateDefaultInterface("", -1, false, false)
+                    }
                     return
                 }
                 val idx = try { JavaInterface.getByName(name)?.index ?: -1 } catch (_: Exception) { -1 }
+                val key = "$name/$idx"
+                if (key == lastKey) return
+                lastKey = key
                 val caps = cm.getNetworkCapabilities(network)
                 val expensive = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
                 listener.updateDefaultInterface(name, idx, expensive, false)
             }
 
-            override fun onAvailable(network: Network) = update(network)
-            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = update(network)
-            override fun onLost(network: Network) = update(null)
+            override fun onAvailable(network: Network) {
+                current = network
+                update(network)
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                current = network
+                update(network)
+            }
+            override fun onLost(network: Network) {
+                if (current == network) current = null
+                // При переключении сетей новая обычно приходит следом — не дёргаем ядро зря
+                main.postDelayed({ if (current == null) update(null) }, 1500)
+            }
         }
         networkCallback = cb
         // Важно: не «сеть по умолчанию» — после подъёма VPN ею для нас станет сам туннель,
