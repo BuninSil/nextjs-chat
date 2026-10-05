@@ -185,6 +185,8 @@ object AutoUpdate {
         val seen = p.getInt("seenVersion", 0)
         p.edit().putInt("seenVersion", BuildConfig.VERSION_CODE).apply()
         if (seen == 0 || seen >= BuildConfig.VERSION_CODE) return null
+        // Обновились — скачанные APK больше не нужны
+        Updater.cleanup(ctx)
         ctx.getSystemService(NotificationManager::class.java).cancel(NOTIF_DONE)
         return updatedNotes(ctx) ?: ""
     }

@@ -13,7 +13,8 @@ import java.io.File
  * и ассетом mlbb-overlay.apk в публичном репозитории BuildConfig.UPDATE_REPO.
  */
 object Updater {
-    data class Release(val versionCode: Int, val tag: String, val notes: String, val apkUrl: String)
+    /** apkSize — размер APK из релиза: по нему узнаём, что файл уже скачан целиком. */
+    data class Release(val versionCode: Int, val tag: String, val notes: String, val apkUrl: String, val apkSize: Long = -1)
 
     /**
      * Возвращает свежий релиз, если он новее установленной версии, иначе null.
@@ -32,7 +33,7 @@ object Updater {
         }
         val arr = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
 
-        class Item(val code: Int, val tag: String, val sha: String, val body: String, val apk: String)
+        class Item(val code: Int, val tag: String, val sha: String, val body: String, val apk: String, val size: Long)
         val newer = ArrayList<Item>()
         for (i in 0 until arr.length()) {
             val r = arr.getJSONObject(i)
@@ -46,12 +47,16 @@ object Updater {
             if (BuildConfig.GIT_SHA.isNotEmpty() && sha == BuildConfig.GIT_SHA) continue
             val assets = r.optJSONArray("assets") ?: continue
             var apk = ""
+            var size = -1L
             for (j in 0 until assets.length()) {
                 val a = assets.getJSONObject(j)
-                if (a.getString("name").endsWith(".apk")) apk = a.getString("browser_download_url")
+                if (a.getString("name").endsWith(".apk")) {
+                    apk = a.getString("browser_download_url")
+                    size = a.optLong("size", -1)
+                }
             }
             if (apk.isEmpty()) continue
-            newer.add(Item(code, tag, sha, r.optString("body", ""), apk))
+            newer.add(Item(code, tag, sha, r.optString("body", ""), apk, size))
         }
         if (newer.isEmpty()) return null
         // Один коммит часто собирается дважды (ветка и main) — оставляем по одному релизу на коммит
@@ -61,7 +66,7 @@ object Updater {
         else versions.joinToString("\n\n") { v ->
             "Версия ${v.tag.removePrefix("mlbb-v")}\n" + cleanNotes(v.body).ifBlank { "Исправления и улучшения." }
         }
-        return Release(latest.code, latest.tag, notes, latest.apk)
+        return Release(latest.code, latest.tag, notes, latest.apk, latest.size)
     }
 
     /**
@@ -93,16 +98,33 @@ object Updater {
         return out.joinToString("\n") { it.toString() }.replace(Regex("\n{3,}"), "\n\n").trim()
     }
 
+    private fun dir(ctx: Context) = File(ctx.cacheDir, "updates").apply { mkdirs() }
+
+    /** Удаляет скачанные APK, которые уже не нужны (версия установлена или устарела). */
+    fun cleanup(ctx: Context, keepCode: Int = -1) {
+        dir(ctx).listFiles()?.forEach { f ->
+            val code = f.name.removePrefix("mlbb-overlay-").substringBefore('.').toIntOrNull()
+            if (code == null || code != keepCode) f.delete()
+        }
+    }
+
+    /**
+     * Скачивает APK. Если эта версия уже скачана целиком (размер совпал с релизом) — берёт её,
+     * не качая заново. Качает во временный файл и переименовывает только в конце,
+     * чтобы оборванная загрузка не считалась готовой.
+     */
     fun download(ctx: Context, rel: Release, progress: (String) -> Unit): File {
+        val out = File(dir(ctx), "mlbb-overlay-${rel.versionCode}.apk")
+        cleanup(ctx, keepCode = rel.versionCode)
+        if (out.exists() && rel.apkSize > 0 && out.length() == rel.apkSize) return out
+        out.delete()
         val c = Net.open(rel.apkUrl)
         c.instanceFollowRedirects = true
         if (c.responseCode != 200) throw RuntimeException("скачивание: HTTP ${c.responseCode}")
         val total = c.contentLengthLong
-        val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val out = File(dir, "mlbb-overlay-${rel.versionCode}.apk")
+        val part = File(dir(ctx), "mlbb-overlay-${rel.versionCode}.part")
         c.inputStream.use { input ->
-            out.outputStream().use { o ->
+            part.outputStream().use { o ->
                 val buf = ByteArray(64 * 1024)
                 var done = 0L
                 var last = 0L
@@ -119,6 +141,11 @@ object Updater {
                 }
             }
         }
+        if (total > 0 && part.length() != total) {
+            part.delete()
+            throw RuntimeException("загрузка оборвалась, попробуй ещё раз")
+        }
+        if (!part.renameTo(out)) throw RuntimeException("не удалось сохранить файл обновления")
         return out
     }
 
