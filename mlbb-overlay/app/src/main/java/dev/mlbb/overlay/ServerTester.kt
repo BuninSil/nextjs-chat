@@ -291,6 +291,62 @@ object ServerTester {
         return null
     }
 
+    // ------------------- нужен ли полный подбор при подключении -------------------
+
+    /** Полный подбор (пинг до всех + скорость) не чаще, чем раз в столько, если сеть не менялась. */
+    private const val RANK_TTL_MS = 6 * 60 * 60 * 1000L
+
+    /** Тип текущей сети: Wi-Fi или мобильная — при смене лучший сервер обычно другой. */
+    fun netKey(ctx: Context): String {
+        val cm = ctx.getSystemService(ConnectivityManager::class.java)
+        val c = underlying(ctx)?.let { cm.getNetworkCapabilities(it) } ?: return "none"
+        return when {
+            c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
+            c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "eth"
+            else -> "other"
+        }
+    }
+
+    /** Подбор устарел: давно не делали, сменилась сеть или режим. */
+    fun rankingStale(ctx: Context): Boolean {
+        val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val at = p.getLong("rankAt", 0)
+        return System.currentTimeMillis() - at > RANK_TTL_MS ||
+            p.getString("rankNet", "") != netKey(ctx) ||
+            p.getBoolean("rankGame", false) != AppSettings.gameMode
+    }
+
+    fun markRanked(ctx: Context) {
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+            .putLong("rankAt", System.currentTimeMillis())
+            .putString("rankNet", netKey(ctx))
+            .putBoolean("rankGame", AppSettings.gameMode)
+            .apply()
+    }
+
+    /** Сбросить подбор — например, после обновления подписки. */
+    fun resetRanking(ctx: Context) {
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("rankAt").apply()
+    }
+
+    /** Быстрая проверка: ходит ли трафик через выбранный сервер прямо сейчас. */
+    fun alive(tag: String): Boolean {
+        val p = BoxVpnService.ports ?: return false
+        return ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 3000) != null
+    }
+
+    /** Подходит ли сервер для игры: выход в России (если уже проверяли) — иначе проверяем сейчас. */
+    fun exitOkForGame(ctx: Context, tag: String): Boolean {
+        loadExits(ctx)
+        exitCountry[tag]?.let { return it == "RU" }
+        val p = BoxVpnService.ports ?: return false
+        val loc = traceExit(p.mixed) ?: return false
+        exitCountry[tag] = loc
+        saveExits(ctx)
+        return loc == "RU"
+    }
+
     /** Переключает ядро на сервер и запоминает выбор. */
     fun use(ctx: Context, tag: String): Boolean {
         val p = BoxVpnService.ports

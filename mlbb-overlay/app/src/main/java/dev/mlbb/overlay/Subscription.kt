@@ -64,6 +64,8 @@ object Subscription {
     private fun resetExits(ctx: Context) {
         ServerTester.exitCountry.clear()
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("exits").apply()
+        // Серверы новые — при следующем подключении подберём заново
+        ServerTester.resetRanking(ctx)
     }
 
     /** Подписка, вставленная текстом (ссылки серверов или base64), а не URL. */

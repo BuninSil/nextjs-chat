@@ -145,6 +145,10 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val usable = nodes.filter { it.xrayLink == null || it.tag in xrayPorts }
             if (usable.isEmpty()) throw RuntimeException("Нет серверов, которые поддерживает это устройство")
             val selected = AppSettings.selectedTag.takeIf { t -> usable.any { it.tag == t } } ?: usable.first().tag
+            if (selected != AppSettings.selectedTag) {
+                AppSettings.selectedTag = selected
+                AppSettings.save(this)
+            }
             val config = BoxConfig.build(
                 nodes, selected, p, packageName,
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
