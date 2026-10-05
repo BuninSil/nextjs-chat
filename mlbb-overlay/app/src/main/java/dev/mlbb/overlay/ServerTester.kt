@@ -121,7 +121,13 @@ object ServerTester {
         pool.shutdown()
         pool.awaitTermination(60, TimeUnit.SECONDS)
         testing = false
-        return results.ranked()
+        val ranked = results.ranked()
+        if (!game) return ranked
+        // Игровой режим: российские серверы всегда первыми (ближе к серверам MLBB в РФ),
+        // зарубежные — только запасным вариантом
+        val byTag = nodes.associateBy { it.tag }
+        val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
+        return ru + other
     }
 
     /**
@@ -130,7 +136,12 @@ object ServerTester {
      */
     fun pickWorking(ctx: Context, ranked: List<String>, maxTries: Int = 8): String? {
         val p = BoxVpnService.ports ?: return null
-        for (tag in ranked.take(maxTries)) {
+        // В игровом режиме перебираем все российские, потом ещё несколько запасных
+        val ruCount = if (AppSettings.gameMode) {
+            val byTag = Subscription.nodes.associateBy { it.tag }
+            ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
+        } else 0
+        for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
             if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) != null) {
                 AppSettings.selectedTag = tag

@@ -122,13 +122,16 @@ class ServersActivity : AppCompatActivity() {
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
             val all = Subscription.nodes.filterNot { ServerTester.isSeparator(it) }
+            // Рабочие сверху; в игровом режиме среди них российские первыми
+            val game = AppSettings.gameMode
             items = all.sortedWith(compareBy<Subscription.Node> {
                 when {
                     !ServerTester.results.containsKey(it.tag) -> 1
                     ServerTester.results[it.tag] == null -> 2
                     else -> 0
                 }
-            }.thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
+            }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
+                .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
             if (!ServerTester.testing && header.text.isEmpty()) {
                 header.text = "${items.size} серверов · пинг напрямую до сервера · ↻ перемерить" +
                     if (AppSettings.gameMode) " · ★ ближе к серверам игры" else ""
