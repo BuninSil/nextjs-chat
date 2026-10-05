@@ -31,7 +31,9 @@ object AppSettings {
 
     fun load(ctx: Context) {
         val p = prefs(ctx)
-        mode = p.getInt("mode", if (p.getBoolean("chain", false)) MODE_CHAIN else MODE_DIRECT)
+        mode = p.getInt("mode", if (p.getBoolean("chain", false)) MODE_API else MODE_DIRECT)
+        // Режим цепочки убран из интерфейса: он включал наш VPN и выбивал VPN пользователя
+        if (mode == MODE_CHAIN) mode = MODE_API
         apiPort = p.getInt("apiPort", 0)
         apiSecret = p.getString("apiSecret", "") ?: ""
         socksHost = p.getString("socksHost", "127.0.0.1") ?: "127.0.0.1"
