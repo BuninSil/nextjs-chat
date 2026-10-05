@@ -10,6 +10,33 @@
         android:padding="16dp">
 
         <TextView
+            android:id="@+id/statusBig"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/modeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/modeDirect"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Без VPN — игра напрямую" />
+
+            <RadioButton
+                android:id="@+id/modeChain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="С моим VPN (Karing, v2rayNG, Hiddify…)" />
+        </RadioGroup>
+
+        <TextView
             android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -27,21 +54,21 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Старт" />
+                android:text="СТАРТ" />
 
             <Button
                 android:id="@+id/btnStop"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Стоп" />
+                android:text="СТОП" />
         </LinearLayout>
 
         <Button
             android:id="@+id/btnSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Настройки: режим VPN, предупреждения" />
+            android:text="Дополнительные настройки" />
 
         <Button
             android:id="@+id/btnLog"

@@ -14,6 +14,8 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import android.widget.Toast
@@ -22,6 +24,8 @@ import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
+    private lateinit var statusBig: TextView
+    private var shownError: String? = null
     private lateinit var dbStatus: TextView
     private lateinit var updateStatus: TextView
     @Volatile
@@ -31,8 +35,8 @@ class MainActivity : AppCompatActivity() {
     private var dbBusy = false
 
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == RESULT_OK) CaptureVpnService.start(this)
-        else toast("Без разрешения на VPN ничего не выйдет")
+        if (it.resultCode == RESULT_OK) startService()
+        else showInfo("Нужно разрешение", "Без разрешения на VPN приложение не видит трафик игры. Нажми СТАРТ и согласись.")
     }
 
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -54,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         status = findViewById(R.id.status)
+        statusBig = findViewById(R.id.statusBig)
         dbStatus = findViewById(R.id.dbStatus)
         updateStatus = findViewById(R.id.updateStatus)
         findViewById<TextView>(R.id.author).text =
@@ -75,7 +80,27 @@ class MainActivity : AppCompatActivity() {
         Thread { GeoDb.load(applicationContext) }.start()
 
         AppSettings.load(this)
+        val modeGroup = findViewById<RadioGroup>(R.id.modeGroup)
+        modeGroup.check(if (AppSettings.chainEnabled) R.id.modeChain else R.id.modeDirect)
+        modeGroup.setOnCheckedChangeListener { _, id ->
+            AppSettings.chainEnabled = id == R.id.modeChain
+            AppSettings.save(this)
+            if (CaptureVpnService.isRunning) toast("Режим поменяется после СТОП → СТАРТ")
+        }
+
         if (savedInstanceState == null && AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+    }
+
+    private fun showInfo(title: String, msg: String, action: Pair<String, () -> Unit>? = null) {
+        if (isFinishing) return
+        val b = AlertDialog.Builder(this).setTitle(title).setMessage(msg)
+        if (action != null) {
+            b.setPositiveButton(action.first) { _, _ -> action.second() }
+            b.setNegativeButton("Отмена", null)
+        } else {
+            b.setPositiveButton("Понятно", null)
+        }
+        b.show()
     }
 
     private fun checkUpdate(manual: Boolean) {
@@ -142,15 +167,11 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
 
-        val chain = CheckBox(this).apply {
-            text = "Через сторонний VPN (SOCKS5)"
-            isChecked = AppSettings.chainEnabled
-        }
         val chainHint = TextView(this).apply {
             alpha = 0.7f
             textSize = 12f
-            text = "В клиенте (v2rayNG, Hiddify и т.п.) включи режим «только прокси» и UDP " +
-                "для SOCKS-входа. Весь трафик телефона пойдёт через него, игра — тоже."
+            text = "Для режима «С моим VPN». Порт и клиент находятся сами при нажатии СТАРТ — " +
+                "трогай, только если автоматика не справилась."
         }
         val host = EditText(this).apply {
             hint = "SOCKS5 IP (127.0.0.1)"
@@ -207,8 +228,7 @@ class MainActivity : AppCompatActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            addView(label("Режим VPN"))
-            addView(chain)
+            addView(label("Прокси VPN-клиента"))
             addView(chainHint)
             addView(host)
             addView(port)
@@ -225,7 +245,6 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Настройки")
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setPositiveButton("Сохранить") { _, _ ->
-                AppSettings.chainEnabled = chain.isChecked
                 AppSettings.socksHost = host.text.toString().trim().ifEmpty { "127.0.0.1" }
                 AppSettings.socksPort = port.text.toString().toIntOrNull()?.takeIf { it in 1..65535 } ?: 10808
                 AppSettings.socksUser = user.text.toString()
@@ -235,7 +254,7 @@ class MainActivity : AppCompatActivity() {
                 AppSettings.allowedCountries = AppSettings.parseCountries(countries.text.toString())
                 AppSettings.autoCheckUpdates = auto.isChecked
                 AppSettings.save(this)
-                if (CaptureVpnService.isRunning) toast("Режим VPN применится после перезапуска (Стоп → Старт)")
+                if (CaptureVpnService.isRunning) toast("Применится после СТОП → СТАРТ")
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -259,9 +278,14 @@ class MainActivity : AppCompatActivity() {
         pkg
     }
 
+    /** СТАРТ: проверяем всё по шагам и на каждой проблеме объясняем, что нажать. */
     private fun startFlow() {
+        CaptureVpnService.lastError = null
+        shownError = null
+        AppSettings.load(this)
+
         if (!isGameInstalled()) {
-            toast("Mobile Legends (${CaptureVpnService.GAME_PACKAGE}) не найдена на устройстве")
+            showInfo("Игра не найдена", "Mobile Legends (${CaptureVpnService.GAME_PACKAGE}) не установлена на этом телефоне.")
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -273,14 +297,142 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!Settings.canDrawOverlays(this)) {
-            toast("Разреши показ поверх других окон и нажми «Старт» ещё раз")
-            startActivity(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+            showInfo(
+                "Шаг 1: разреши оверлей",
+                "Чтобы плашка показывалась поверх игры, найди в списке «MLBB Server» и включи «Поверх других окон». Потом вернись и снова нажми СТАРТ.",
+                "Открыть настройки" to {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                }
             )
             return
         }
+        if (AppSettings.chainEnabled) prepareChain { launchVpn() } else launchVpn()
+    }
+
+    private fun launchVpn() {
         val prep = VpnService.prepare(this)
-        if (prep != null) vpnPermission.launch(prep) else CaptureVpnService.start(this)
+        if (prep != null) vpnPermission.launch(prep) else startService()
+    }
+
+    private fun startService() {
+        CaptureVpnService.start(this)
+        if (AppSettings.chainEnabled) {
+            // Некоторые клиенты гасят прокси, когда у них отбирают VPN — ловим это
+            val port = AppSettings.socksPort
+            handler.postDelayed({
+                Thread {
+                    if (CaptureVpnService.isRunning && !ProxyDetector.isSocks5(port, AppSettings.socksHost)) {
+                        runOnUiThread {
+                            CaptureVpnService.stop(this)
+                            showInfo(
+                                "VPN-клиент выключился",
+                                "${appLabel(AppSettings.clientPackage)} перестал отвечать, когда включился наш VPN. " +
+                                    "Значит, в нём включён режим VPN/TUN.\n\n" + clientInstructions()
+                            )
+                        }
+                    }
+                }.start()
+            }, 3000)
+        }
+    }
+
+    private fun clientInstructions(): String {
+        val name = appLabel(AppSettings.clientPackage).ifBlank { "свой VPN-клиент" }
+        return "1. Открой $name.\n" +
+            "2. В настройках переключи режим с «VPN»/«TUN» на «Прокси» (в Karing — выключи TUN; " +
+            "в v2rayNG — режим «Только прокси»; в Hiddify — «Прокси»).\n" +
+            "3. Подключись (нажми большую кнопку включения).\n" +
+            "4. Вернись сюда и нажми СТАРТ."
+    }
+
+    private fun isInstalled(pkg: String) = try {
+        packageManager.getPackageInfo(pkg, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    /** Режим «с моим VPN»: находим клиент, его порт и проверяем UDP. */
+    private fun prepareChain(onReady: () -> Unit) {
+        if (AppSettings.clientPackage.isBlank() || !isInstalled(AppSettings.clientPackage)) {
+            val apps = vpnClients()
+            when {
+                apps.isEmpty() -> {
+                    showInfo("VPN-клиент не найден", "Не вижу на телефоне ни одного VPN-приложения. Установи свой клиент (Karing, v2rayNG, Hiddify…) или выбери режим «Без VPN».")
+                    return
+                }
+                apps.size == 1 -> {
+                    AppSettings.clientPackage = apps[0].first
+                    AppSettings.save(this)
+                }
+                else -> {
+                    AlertDialog.Builder(this)
+                        .setTitle("Каким VPN пользуешься?")
+                        .setItems(apps.map { it.second }.toTypedArray()) { _, i ->
+                            AppSettings.clientPackage = apps[i].first
+                            AppSettings.save(this)
+                            prepareChain(onReady)
+                        }
+                        .show()
+                    return
+                }
+            }
+        }
+
+        // Свой адрес или логин — значит человек всё настроил сам, не лезем
+        if (AppSettings.socksHost != "127.0.0.1" || AppSettings.socksUser.isNotEmpty()) {
+            onReady()
+            return
+        }
+
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Ищу прокси ${appLabel(AppSettings.clientPackage)}")
+            .setMessage("Секунду…")
+            .setCancelable(false)
+            .show()
+        Thread {
+            val port = ProxyDetector.findPort(AppSettings.socksPort) { msg ->
+                runOnUiThread { progress.setMessage(msg) }
+            }
+            val udp = port != null && run {
+                runOnUiThread { progress.setMessage("Прокси на порту $port. Проверяю, проходит ли UDP…") }
+                ProxyDetector.udpWorks(port)
+            }
+            runOnUiThread {
+                progress.dismiss()
+                if (port == null) {
+                    showInfo(
+                        "Прокси не найден",
+                        "Не вижу локального прокси VPN-клиента. Скорее всего, он выключен или работает в режиме VPN.\n\n" +
+                            clientInstructions(),
+                        "Открыть ${appLabel(AppSettings.clientPackage)}" to { openClient() }
+                    )
+                    return@runOnUiThread
+                }
+                AppSettings.socksHost = "127.0.0.1"
+                AppSettings.socksPort = port
+                AppSettings.save(this)
+                if (udp) {
+                    toast("Прокси найден: порт $port, UDP работает")
+                    onReady()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("UDP через прокси не проходит")
+                        .setMessage(
+                            "Прокси найден (порт $port), но UDP через него не идёт. Без UDP игра скорее всего не подключится к матчу.\n\n" +
+                                "В настройках ${appLabel(AppSettings.clientPackage)} поищи «UDP» и включи его для локального прокси, " +
+                                "либо смени сервер/протокол на поддерживающий UDP."
+                        )
+                        .setPositiveButton("Всё равно запустить") { _, _ -> onReady() }
+                        .setNegativeButton("Отмена", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun openClient() {
+        packageManager.getLaunchIntentForPackage(AppSettings.clientPackage)?.let { startActivity(it) }
     }
 
     private fun isGameInstalled() = try {
@@ -291,9 +443,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        val err = CaptureVpnService.lastError
+        when {
+            CaptureVpnService.isRunning -> {
+                statusBig.text = "● РАБОТАЕТ — запускай игру"
+                statusBig.setTextColor(0xFF2E7D32.toInt())
+            }
+            err != null -> {
+                statusBig.text = "✖ НЕ ЗАПУСТИЛОСЬ"
+                statusBig.setTextColor(0xFFC62828.toInt())
+            }
+            else -> {
+                statusBig.text = "○ ВЫКЛЮЧЕНО — жми СТАРТ"
+                statusBig.setTextColor(0xFF9E9E9E.toInt())
+            }
+        }
+        if (err != null && err != shownError) {
+            shownError = err
+            showInfo("Не запустилось", err + if (AppSettings.chainEnabled) "\n\n" + clientInstructions() else "")
+        }
+
         val sb = StringBuilder()
-        sb.append(if (CaptureVpnService.isRunning) "● Захват работает" else "○ Захват остановлен").append('\n')
-        CaptureVpnService.lastError?.let { sb.append("Ошибка: ").append(it).append('\n') }
         sb.append("Игра: ").append(if (isGameInstalled()) "установлена" else "НЕ установлена").append('\n')
         sb.append("Оверлей: ").append(if (Settings.canDrawOverlays(this)) "разрешён" else "нет разрешения").append('\n')
         sb.append("Режим: ").append(
