@@ -45,8 +45,9 @@
   #define NUM_SOCKETS_AFTER_PURGE 40
 #else
   // on linux, the maximum open files limit is 1024
-  #define MAX_NUM_SOCKETS 128
-  #define NUM_SOCKETS_AFTER_PURGE 96
+  // mlbb-overlay patch: in proxy-chain mode all apps go through zdtun, 128 is too tight
+  #define MAX_NUM_SOCKETS 512
+  #define NUM_SOCKETS_AFTER_PURGE 400
 #endif
 
 /* ******************************************************* */

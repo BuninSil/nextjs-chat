@@ -38,6 +38,12 @@
         </LinearLayout>
 
         <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Настройки: режим VPN, предупреждения" />
+
+        <Button
             android:id="@+id/btnLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -87,11 +93,6 @@
                 android:layout_weight="1"
                 android:text="Проверить обновления" />
 
-            <Button
-                android:id="@+id/btnUpdateSettings"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⚙" />
         </LinearLayout>
 
         <TextView

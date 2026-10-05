@@ -13,9 +13,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import android.util.Log
 import java.net.Inet4Address
+import java.net.InetSocketAddress
+import java.net.Socket
 
 class CaptureVpnService : VpnService() {
 
@@ -26,6 +30,8 @@ class CaptureVpnService : VpnService() {
         const val ACTION_STOP = "dev.mlbb.overlay.STOP"
         private const val CHANNEL_ID = "capture"
         private const val NOTIF_ID = 1
+        /** Не вибрировать на случайный UDP: боевой поток — это десятки пакетов в секунду. */
+        private const val MIN_BATTLE_PKTS = 100
 
         @Volatile
         var isRunning = false
@@ -53,6 +59,8 @@ class CaptureVpnService : VpnService() {
     private var pingThread: Thread? = null
     private var overlay: OverlayController? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var uidResolver: UidResolver? = null
+    private var lastAlertIp: String? = null
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -99,8 +107,10 @@ class CaptureVpnService : VpnService() {
         }
     }
 
-    /** DNS текущей сети (IPv4), иначе публичные. Запросы игры к DNS тоже идут через zdtun. */
-    private fun dnsServers(): List<String> {
+    /** DNS текущей сети (IPv4), иначе публичные. Запросы приложений к DNS тоже идут через нас. */
+    private fun dnsServers(chain: Boolean): List<String> {
+        // В режиме цепочки DNS уходит через прокси: локальный DNS оператора оттуда недоступен
+        if (chain) return listOf("1.1.1.1", "8.8.8.8")
         val cm = getSystemService(ConnectivityManager::class.java)
         val lp = cm.activeNetwork?.let { cm.getLinkProperties(it) }
         val sys = lp?.dnsServers?.filterIsInstance<Inet4Address>()?.mapNotNull { it.hostAddress }.orEmpty()
@@ -109,6 +119,33 @@ class CaptureVpnService : VpnService() {
 
     private fun startCapture() {
         lastError = null
+        AppSettings.load(this)
+        GeoDb.load(this)
+
+        val gameUid = try {
+            packageManager.getApplicationInfo(GAME_PACKAGE, 0).uid
+        } catch (e: Exception) {
+            fail("Mobile Legends ($GAME_PACKAGE) не установлена")
+            return
+        }
+
+        val chain = AppSettings.chainEnabled
+        if (chain) {
+            if (!AppSettings.socksHost.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))) {
+                fail("Адрес SOCKS5 должен быть IPv4, например 127.0.0.1")
+                return
+            }
+            if (AppSettings.clientPackage.isBlank()) {
+                fail("Выбери VPN-клиент в настройках (его трафик нужно исключить, иначе будет петля)")
+                return
+            }
+            if (!socksReachable()) {
+                fail("SOCKS5 ${AppSettings.socksHost}:${AppSettings.socksPort} не отвечает — " +
+                    "включи в VPN-клиенте режим «только прокси» и проверь порт")
+                return
+            }
+        }
+
         val builder = Builder()
             .setSession("MLBB Server Overlay")
             .setMtu(1500)
@@ -116,14 +153,20 @@ class CaptureVpnService : VpnService() {
             .addRoute("0.0.0.0", 0)
             .setBlocking(true)
         // IPv6 намеренно не маршрутизируем: без адреса/маршрута v6 Android блокирует
-        // его для игры, и она сразу откатывается на IPv4, который мы видим целиком.
-        dnsServers().forEach { builder.addDnsServer(it) }
+        // его для приложений в VPN, и они сразу откатываются на IPv4, который мы видим целиком.
+        dnsServers(chain).forEach { builder.addDnsServer(it) }
         if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
 
         try {
-            builder.addAllowedApplication(GAME_PACKAGE)
+            if (chain) {
+                // Все приложения, кроме нас и самого VPN-клиента (иначе его трафик уйдёт в петлю)
+                builder.addDisallowedApplication(packageName)
+                builder.addDisallowedApplication(AppSettings.clientPackage)
+            } else {
+                builder.addAllowedApplication(GAME_PACKAGE)
+            }
         } catch (e: Exception) {
-            fail("Mobile Legends ($GAME_PACKAGE) не установлена")
+            fail(if (chain) "VPN-клиент ${AppSettings.clientPackage} не найден" else "Не удалось настроить VPN: ${e.message}")
             return
         }
 
@@ -134,7 +177,7 @@ class CaptureVpnService : VpnService() {
             null
         }
         if (pfd == null) {
-            fail("Не удалось поднять VPN (нет разрешения?)")
+            fail("Не удалось поднять VPN (нет разрешения или включён другой VPN?)")
             return
         }
 
@@ -143,7 +186,11 @@ class CaptureVpnService : VpnService() {
         ConnTracker.newSession()
 
         captureThread = Thread({
-            val rv = Native.run(pfd.fd, this)
+            val rv = Native.run(
+                pfd.fd, this, gameUid, chain,
+                if (chain) AppSettings.socksHost else null, AppSettings.socksPort,
+                AppSettings.socksUser, AppSettings.socksPass
+            )
             Log.i(TAG, "native loop exited: $rv")
             if (rv != 0 && isRunning) handler.post {
                 fail("Цикл пересылки упал (код $rv)")
@@ -163,11 +210,27 @@ class CaptureVpnService : VpnService() {
             }
         }, "pinger").also { it.start() }
 
-        GeoDb.load(this)
+        uidResolver = UidResolver(this)
+        lastAlertIp = null
         if (Settings.canDrawOverlays(this)) {
             overlay = OverlayController(this).also { it.show() }
         }
         handler.post(ticker)
+    }
+
+    private fun socksReachable(): Boolean {
+        var ok = false
+        val t = Thread {
+            ok = try {
+                Socket().use { it.connect(InetSocketAddress(AppSettings.socksHost, AppSettings.socksPort), 1500) }
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+        t.start()
+        t.join(2500)
+        return ok
     }
 
     private fun fail(msg: String) {
@@ -197,13 +260,35 @@ class CaptureVpnService : VpnService() {
             geo == null -> "🏳 неизвестно"
             else -> "${GeoDb.flag(geo.countryCode)} ${geo.city.ifEmpty { geo.country }}"
         }
+        val allowed = geo != null && geo.countryCode.uppercase() in AppSettings.allowedCountries
         val color = when {
             geo == null -> OverlayController.COLOR_UNKNOWN
-            geo.countryCode.equals("RU", true) -> OverlayController.COLOR_RUSSIA
+            allowed -> OverlayController.COLOR_RUSSIA
             else -> OverlayController.COLOR_FOREIGN
         }
-        ov.update("$place · $pingText\n$ip:${battle.conn.dstPort} · ${battle.pktsLast10s} pkt/10s", color)
+        val warn = AppSettings.alertEnabled && geo != null && !allowed
+        val prefix = if (warn) "⚠ " else ""
+        ov.update("$prefix$place · $pingText\n$ip:${battle.conn.dstPort} · ${battle.pktsLast10s} pkt/10s", color)
+
+        // Вибрация один раз на каждый новый «чужой» боевой сервер
+        if (warn && ip != lastAlertIp && battle.pktsLast10s >= MIN_BATTLE_PKTS) {
+            lastAlertIp = ip
+            vibrateAlert()
+        }
     }
+
+    private fun vibrateAlert() {
+        try {
+            val v = getSystemService(Vibrator::class.java) ?: return
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 150, 400, 150, 400), -1))
+        } catch (_: Exception) {
+        }
+    }
+
+    /** JNI: владелец соединения (нужен в режиме цепочки, чтобы логировать только игру). */
+    @Suppress("unused")
+    fun getConnUid(ipver: Int, proto: Int, srcIp: String, srcPort: Int, dstIp: String, dstPort: Int): Int =
+        uidResolver?.uid(proto, srcIp, srcPort, dstIp, dstPort) ?: -1
 
     /** Вызывается из нативного потока раз в секунду для каждого изменившегося соединения. */
     @Suppress("unused")

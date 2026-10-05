@@ -1,71 +1,101 @@
-<a href="https://chat.vercel.ai/">
-  <img alt="Next.js 14 and App Router-ready AI chatbot." src="https://chat.vercel.ai/opengraph-image.png">
-  <h1 align="center">Next.js AI Chatbot</h1>
-</a>
+# MLBB Server Overlay
 
-<p align="center">
-  An open-source AI chatbot app template built with Next.js, the Vercel AI SDK, OpenAI, and Vercel KV.
-</p>
+Android-приложение (Kotlin, minSdk 26), которое показывает поверх Mobile Legends:
+Bang Bang (`com.mobile.legends`), к какому боевому серверу подключена игра: флаг,
+город, пинг и IP. Плашка зелёная, если сервер в разрешённой стране (по умолчанию —
+Россия), и красная, если нет.
 
-<p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#model-providers"><strong>Model Providers</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#running-locally"><strong>Running locally</strong></a> ·
-  <a href="#authors"><strong>Authors</strong></a>
-</p>
-<br/>
+Автор: **BuninSil**
 
-## Features
+## Возможности
 
-- [Next.js](https://nextjs.org) App Router
-- React Server Components (RSCs), Suspense, and Server Actions
-- [Vercel AI SDK](https://sdk.vercel.ai/docs) for streaming chat UI
-- Support for OpenAI (default), Anthropic, Cohere, Hugging Face, or custom AI chat models and/or LangChain
-- [shadcn/ui](https://ui.shadcn.com)
-  - Styling with [Tailwind CSS](https://tailwindcss.com)
-  - [Radix UI](https://radix-ui.com) for headless component primitives
-  - Icons from [Phosphor Icons](https://phosphoricons.com)
-- Chat History, rate limiting, and session storage with [Vercel KV](https://vercel.com/storage/kv)
-- [NextAuth.js](https://github.com/nextauthjs/next-auth) for authentication
+- **Оверлей поверх игры.** Перетаскиваемая плашка, позиция запоминается.
+- **Определение боевого сервера.** Это UDP-поток игры с максимумом пакетов за
+  последние 10 секунд (DNS/NTP/QUIC не считаются).
+- **Геолокация офлайн.** Страна и город по базе DB-IP City Lite (.mmdb). Базу
+  качаешь кнопкой в приложении или импортируешь файлом.
+- **Пинг.** ICMP, затем RTT TCP-хэндшейка игры, затем TCP-проба. В режиме
+  цепочки — оценка через SOCKS5 (помечена `~`).
+- **Вибро-предупреждение.** Если игру закинуло на сервер не из списка стран
+  (например, не RU), телефон вибрирует, а на плашке появляется ⚠. Список стран
+  настраивается: `RU`, `RU,BY,KZ` и т.д.
+- **Лог соединений игры.** IP, порт, протокол, байты и пакеты в обе стороны, время
+  первого и последнего пакета. Экспорт в CSV.
+- **Работа вместе со сторонним VPN** (см. ниже).
+- **Автообновление.** Приложение проверяет GitHub Releases этого репозитория и
+  ставит новую версию через системный установщик.
 
-## Model Providers
+## Режимы VPN
 
-This template ships with OpenAI `gpt-3.5-turbo` as the default. However, thanks to the [Vercel AI SDK](https://sdk.vercel.ai/docs), you can switch LLM providers to [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), [Hugging Face](https://huggingface.co), or using [LangChain](https://js.langchain.com) with just a few lines of code.
+Android позволяет держать только **один** VPN одновременно, поэтому есть два режима.
 
-## Deploy Your Own
+### 1. Только игра, напрямую (по умолчанию)
 
-You can deploy your own version of the Next.js AI Chatbot to Vercel with one click:
+Наш VPN захватывает только Mobile Legends. Остальные приложения работают как
+обычно, без VPN.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?demo-title=Next.js+Chat&demo-description=A+full-featured%2C+hackable+Next.js+AI+chatbot+built+by+Vercel+Labs&demo-url=https%3A%2F%2Fchat.vercel.ai%2F&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4aVPvWuTmBvzM5cEdRdqeW%2F4234f9baf160f68ffb385a43c3527645%2FCleanShot_2023-06-16_at_17.09.21.png&project-name=Next.js+Chat&repository-name=nextjs-chat&repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-chatbot&from=templates&skippable-integrations=1&env=OPENAI_API_KEY%2CAUTH_GITHUB_ID%2CAUTH_GITHUB_SECRET%2CAUTH_SECRET&envDescription=How+to+get+these+env+vars&envLink=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-chatbot%2Fblob%2Fmain%2F.env.example&teamCreateStatus=hidden&stores=[{"type":"kv"}])
+### 2. Через сторонний VPN (цепочка через SOCKS5)
 
-## Creating a KV Database Instance
+Для тех, у кого без VPN игра не заходит (например, мобильный интернет с
+блокировками).
 
-Follow the steps outlined in the [quick start guide](https://vercel.com/docs/storage/vercel-kv/quickstart#create-a-kv-database) provided by Vercel. This guide will assist you in creating and configuring your KV database instance on Vercel, enabling your application to interact with it.
+1. В своём VPN-клиенте (v2rayNG, Hiddify, NekoBox и т.п.) переключи режим на
+   **«только прокси»** (proxy only), чтобы клиент не поднимал свой VPN. Включи
+   **UDP** для локального SOCKS-входа и запомни его порт (у v2rayNG по умолчанию
+   `10808`).
+2. В MLBB Server → «Настройки» включи «Через сторонний VPN (SOCKS5)», укажи
+   `127.0.0.1` и порт и выбери свой VPN-клиент из списка.
+3. Запусти прокси в клиенте, потом нажми «Старт» в MLBB Server.
 
-Remember to update your environment variables (`KV_URL`, `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`) in the `.env` file with the appropriate credentials provided during the KV database setup.
+В этом режиме через наш VPN идут **все приложения** (кроме самого клиента и
+MLBB Server). TCP и UDP уходят в SOCKS5 клиента, DNS — на 1.1.1.1/8.8.8.8 через
+прокси. В лог попадают только соединения игры (владелец определяется по uid).
 
-## Running locally
+> Сервер матча игра выбирает по точке выхода VPN. Хочешь российские сервера —
+> выбирай в клиенте сервер в России или рядом.
 
-You will need to use the environment variables [defined in `.env.example`](.env.example) to run Next.js AI Chatbot. It's recommended you use [Vercel Environment Variables](https://vercel.com/docs/projects/environment-variables) for this, but a `.env` file is all that is necessary.
+## Установка
 
-> Note: You should not commit your `.env` file or it will expose secrets that will allow others to control access to your various OpenAI and authentication provider accounts.
+Готовый APK лежит в [Releases](../../releases/latest). Дальше приложение
+обновляется само.
 
-1. Install Vercel CLI: `npm i -g vercel`
-2. Link local instance with Vercel and GitHub accounts (creates `.vercel` directory): `vercel link`
-3. Download your environment variables: `vercel env pull`
+Через adb:
+
+1. На телефоне: Настройки → О телефоне → 7 раз тапни «Номер сборки».
+2. Настройки → Для разработчиков → включи «Отладка по USB».
+3. Подключи кабелем и подтверди отладку на телефоне.
+4. `adb devices` — телефон должен быть в статусе `device`.
+5. `adb install -r mlbb-overlay.apk`
+
+Первый запуск: «Скачать базу» → «Старт» → выдать разрешения (оверлей,
+уведомления, VPN).
+
+## Сборка
+
+CI (`.github/workflows/mlbb-overlay-apk.yml`) на каждый пуш собирает debug APK и
+публикует релиз `mlbb-v1.0.<номер сборки>`.
+
+Локально нужны JDK 17 и Android SDK (platform 34, NDK 26.3.11579264, CMake 3.22.1):
 
 ```bash
-pnpm install
-pnpm dev
+cd mlbb-overlay
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+./gradlew assembleDebug
+# -> app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Your app template should now be running on [localhost:3000](http://localhost:3000/).
+## Как устроено
 
-## Authors
+| Файл | Что делает |
+| --- | --- |
+| `CaptureVpnService.kt` | VpnService, режимы, оверлей, вибро-предупреждение |
+| `cpp/tunbridge.c` | цикл пересылки на [zdtun](https://github.com/emanuele-f/zdtun), SOCKS5 UDP ASSOCIATE, ICMP ping |
+| `ConnTracker.kt` | журнал соединений, поиск боевого сервера |
+| `MmdbReader.kt`, `GeoDb.kt` | офлайн-геолокация по DB-IP |
+| `Pinger.kt` | замер пинга |
+| `Updater.kt` | автообновление по GitHub Releases |
 
-This library is created by [Vercel](https://vercel.com) and [Next.js](https://nextjs.org) team members, with contributions from:
+## Лицензии сторонних компонентов
 
-- Jared Palmer ([@jaredpalmer](https://twitter.com/jaredpalmer)) - [Vercel](https://vercel.com)
-- Shu Ding ([@shuding\_](https://twitter.com/shuding_)) - [Vercel](https://vercel.com)
-- shadcn ([@shadcn](https://twitter.com/shadcn)) - [Vercel](https://vercel.com)
+- zdtun — LGPL-3.0 (`mlbb-overlay/app/src/main/cpp/zdtun/COPYING`)
+- IP Geolocation by [DB-IP](https://db-ip.com) — CC BY 4.0

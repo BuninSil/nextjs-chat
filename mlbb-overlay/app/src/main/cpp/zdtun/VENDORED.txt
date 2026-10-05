@@ -1,1 +1,2 @@
 Vendored from https://github.com/emanuele-f/zdtun at commit 80b7941d4e685d8354346820878eaec0e35b6b1e. License: LGPL-3.0 (see COPYING).
+Local patch: MAX_NUM_SOCKETS raised 128 -> 512 (NUM_SOCKETS_AFTER_PURGE 96 -> 400) in zdtun.c.

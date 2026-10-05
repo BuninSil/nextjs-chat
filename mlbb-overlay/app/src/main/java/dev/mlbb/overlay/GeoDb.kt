@@ -5,7 +5,6 @@ import android.util.Log
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
-import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
 import java.util.Calendar
@@ -95,9 +94,7 @@ object GeoDb {
             val url = URL("https://download.db-ip.com/free/$name")
             try {
                 progress("Качаю $name…")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 15_000
-                conn.readTimeout = 30_000
+                val conn = Net.open(url.toString())
                 if (conn.responseCode != 200) throw RuntimeException("HTTP ${conn.responseCode}")
                 val total = conn.contentLengthLong
                 conn.inputStream.use { install(ctx, it, gzipped = true, total = total, progress = progress) }

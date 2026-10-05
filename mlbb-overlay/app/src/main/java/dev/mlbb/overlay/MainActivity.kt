@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
             "Автор: ${BuildConfig.AUTHOR} · версия ${BuildConfig.VERSION_NAME}"
         updateStatus.text = "Версия ${BuildConfig.VERSION_NAME}"
         findViewById<Button>(R.id.btnCheckUpdate).setOnClickListener { checkUpdate(manual = true) }
-        findViewById<Button>(R.id.btnUpdateSettings).setOnClickListener { showUpdateSettings() }
+        findViewById<Button>(R.id.btnSettings).setOnClickListener { showSettings() }
 
         findViewById<Button>(R.id.btnStart).setOnClickListener { startFlow() }
         findViewById<Button>(R.id.btnStop).setOnClickListener { CaptureVpnService.stop(this) }
@@ -133,49 +133,130 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun showUpdateSettings() {
+    private fun showSettings() {
+        AppSettings.load(this)
         val pad = (16 * resources.displayMetrics.density).toInt()
-        val repo = EditText(this).apply {
-            hint = "owner/repo"
-            setText(AppSettings.updateRepo)
+        fun label(t: String) = TextView(this).apply {
+            text = t
+            setPadding(0, pad, 0, 0)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-        val token = EditText(this).apply {
-            hint = "GitHub токен (только для приватного репо)"
-            setText(AppSettings.updateToken)
+
+        val chain = CheckBox(this).apply {
+            text = "Через сторонний VPN (SOCKS5)"
+            isChecked = AppSettings.chainEnabled
+        }
+        val hint = TextView(this).apply {
+            alpha = 0.7f
+            textSize = 12f
+            text = "В клиенте (v2rayNG, Hiddify и т.п.) включи режим «только прокси» и UDP " +
+                "для SOCKS-входа. Весь трафик телефона пойдёт через него, игра — тоже."
+        }
+        val host = EditText(this).apply {
+            hint = "SOCKS5 IP (127.0.0.1)"
+            setText(AppSettings.socksHost)
+        }
+        val port = EditText(this).apply {
+            hint = "порт"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(AppSettings.socksPort.toString())
+        }
+        val user = EditText(this).apply {
+            hint = "логин (если есть)"
+            setText(AppSettings.socksUser)
+        }
+        val pass = EditText(this).apply {
+            hint = "пароль (если есть)"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(AppSettings.socksPass)
+        }
+        var clientPkg = AppSettings.clientPackage
+        val client = Button(this)
+        fun updateClient() {
+            client.text = "VPN-клиент: " + (if (clientPkg.isBlank()) "не выбран" else appLabel(clientPkg))
+        }
+        updateClient()
+        client.setOnClickListener {
+            val apps = vpnClients()
+            if (apps.isEmpty()) {
+                toast("Не нашёл установленных VPN-клиентов")
+                return@setOnClickListener
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Какой VPN-клиент используешь")
+                .setItems(apps.map { it.second }.toTypedArray()) { _, i ->
+                    clientPkg = apps[i].first
+                    updateClient()
+                }
+                .show()
+        }
+
+        val alert = CheckBox(this).apply {
+            text = "Вибрировать, если сервер не из списка стран"
+            isChecked = AppSettings.alertEnabled
+        }
+        val countries = EditText(this).apply {
+            hint = "страны через запятую, например RU,BY,KZ"
+            setText(AppSettings.allowedCountries.joinToString(","))
         }
         val auto = CheckBox(this).apply {
-            text = "Проверять при запуске"
+            text = "Проверять обновления при запуске"
             isChecked = AppSettings.autoCheckUpdates
         }
+
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            addView(repo)
-            addView(token)
+            addView(label("Режим VPN"))
+            addView(chain)
+            addView(hint)
+            addView(host)
+            addView(port)
+            addView(user)
+            addView(pass)
+            addView(client)
+            addView(label("Предупреждение"))
+            addView(alert)
+            addView(countries)
+            addView(label("Обновления"))
             addView(auto)
         }
         AlertDialog.Builder(this)
-            .setTitle("Обновления")
-            .setView(box)
+            .setTitle("Настройки")
+            .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setPositiveButton("Сохранить") { _, _ ->
-                AppSettings.updateRepo = repo.text.toString().trim().ifEmpty { BuildConfig.UPDATE_REPO }
-                AppSettings.updateToken = token.text.toString().trim()
+                AppSettings.chainEnabled = chain.isChecked
+                AppSettings.socksHost = host.text.toString().trim().ifEmpty { "127.0.0.1" }
+                AppSettings.socksPort = port.text.toString().toIntOrNull()?.takeIf { it in 1..65535 } ?: 10808
+                AppSettings.socksUser = user.text.toString()
+                AppSettings.socksPass = pass.text.toString()
+                AppSettings.clientPackage = clientPkg
+                AppSettings.alertEnabled = alert.isChecked
+                AppSettings.allowedCountries = AppSettings.parseCountries(countries.text.toString())
                 AppSettings.autoCheckUpdates = auto.isChecked
                 AppSettings.save(this)
+                if (CaptureVpnService.isRunning) toast("Режим VPN применится после перезапуска (Стоп → Старт)")
             }
             .setNegativeButton("Отмена", null)
             .show()
     }
 
-    override fun onResume() {
-        super.onResume()
-        handler.post(refresher)
+    /** Приложения с VpnService — кандидаты в VPN-клиенты. */
+    private fun vpnClients(): List<Pair<String, String>> {
+        val pm = packageManager
+        @Suppress("DEPRECATION")
+        val services = pm.queryIntentServices(Intent("android.net.VpnService"), 0)
+        return services.map { it.serviceInfo.packageName }
+            .filter { it != packageName }
+            .distinct()
+            .map { it to appLabel(it) }
+            .sortedBy { it.second.lowercase() }
     }
 
-    override fun onPause() {
-        super.onPause()
-        handler.removeCallbacks(refresher)
+    private fun appLabel(pkg: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (_: Exception) {
+        pkg
     }
 
     private fun startFlow() {
@@ -215,6 +296,10 @@ class MainActivity : AppCompatActivity() {
         CaptureVpnService.lastError?.let { sb.append("Ошибка: ").append(it).append('\n') }
         sb.append("Игра: ").append(if (isGameInstalled()) "установлена" else "НЕ установлена").append('\n')
         sb.append("Оверлей: ").append(if (Settings.canDrawOverlays(this)) "разрешён" else "нет разрешения").append('\n')
+        sb.append("Режим: ").append(
+            if (AppSettings.chainEnabled) "через ${appLabel(AppSettings.clientPackage)} (SOCKS5 ${AppSettings.socksHost}:${AppSettings.socksPort})"
+            else "только игра, напрямую"
+        ).append('\n')
 
         val battle = ConnTracker.battleServer()
         if (battle != null) {
