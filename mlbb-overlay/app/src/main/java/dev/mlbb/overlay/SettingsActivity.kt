@@ -50,25 +50,39 @@ class SettingsActivity : AppCompatActivity() {
         })
         top.addView(Ui.text(this, "Настройки", 22f, bold = true))
         root.addView(top)
+        val simple = AppSettings.simple
 
-        // ---------- Режим ----------
-        root.addView(section("Режим"))
-        root.addView(modeCard(AppSettings.MODE_BOX, "🛡  Встроенный VPN",
-            "Подключение по твоей подписке, автовыбор сервера. Рекомендую."))
+        // ---------- Для чего приложение ----------
+        root.addView(section("Приложение"))
+        root.addView(profileCard(AppSettings.PROFILE_GAME, "🎮  Для Mobile Legends",
+            "VPN + плашка с сервером матча, игровой режим, лог боёв, запуск игры"))
         root.addView(Ui.space(this, 8f))
-        root.addView(modeCard(AppSettings.MODE_DIRECT, "📶  Без VPN",
-            "Игра напрямую. Плашка с сервером работает, пинг не меняется."))
-        root.addView(Ui.space(this, 8f))
-        root.addView(modeCard(AppSettings.MODE_API, "🔌  Внешний VPN-клиент",
-            "Твой клиент (FlClash, Clash Meta) остаётся включённым, мы только читаем соединения."))
-        highlightMode()
+        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "🌐  Просто VPN (Fast VPN)",
+            "Только быстрый VPN по подписке, всё про игру скрыто"))
+
+        // ---------- Режим (только для игры) ----------
+        if (!simple) {
+            root.addView(section("Режим"))
+            root.addView(modeCard(AppSettings.MODE_BOX, "🛡  Встроенный VPN",
+                "Подключение по твоей подписке, автовыбор сервера. Рекомендую."))
+            root.addView(Ui.space(this, 8f))
+            root.addView(modeCard(AppSettings.MODE_DIRECT, "📶  Без VPN",
+                "Игра напрямую. Плашка с сервером работает, пинг не меняется."))
+            root.addView(Ui.space(this, 8f))
+            root.addView(modeCard(AppSettings.MODE_API, "🔌  Внешний VPN-клиент",
+                "Твой клиент (FlClash, Clash Meta) остаётся включённым, мы только читаем соединения."))
+            highlightMode()
+        }
 
         // ---------- Встроенный VPN ----------
-        root.addView(section("Встроенный VPN"))
+        root.addView(section(if (simple) "VPN" else "Встроенный VPN"))
         root.addView(Ui.card(this).apply {
-            addView(switchRow("Автовыбор сервера", "Самый быстрый и стабильный при нажатии ИГРАТЬ", AppSettings.autoSelect) {
+            addView(switchRow("Автовыбор сервера",
+                if (simple) "Самый быстрый сервер при подключении" else "Самый быстрый и стабильный при нажатии ИГРАТЬ",
+                AppSettings.autoSelect) {
                 AppSettings.autoSelect = it
             })
+            if (simple) return@apply
             addView(divider())
             addView(switchRow("Через VPN только игра", "Весь канал — игре, остальные приложения без VPN", AppSettings.onlyGame) {
                 AppSettings.onlyGame = it; vpnChanged = true
@@ -82,15 +96,16 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Wi-Fi ----------
         root.addView(section("Wi-Fi"))
         root.addView(Ui.card(this).apply {
-            addView(switchRow("Игровой режим Wi-Fi", "Wi-Fi не засыпает между пакетами — меньше скачков пинга. Работает и без VPN", AppSettings.wifiBoost) {
+            addView(switchRow(if (simple) "Ускорение Wi-Fi" else "Игровой режим Wi-Fi",
+                "Wi-Fi не засыпает между пакетами — меньше скачков пинга. Работает и без VPN", AppSettings.wifiBoost) {
                 AppSettings.wifiBoost = it
                 if (!it) WifiBoost.release()
             })
         })
 
-        // ---------- Предупреждение ----------
-        root.addView(section("Предупреждение"))
-        root.addView(Ui.card(this).apply {
+        // ---------- Предупреждение (только для игры) ----------
+        if (!simple) root.addView(section("Предупреждение"))
+        if (!simple) root.addView(Ui.card(this).apply {
             addView(switchRow("Вибрация на чужой сервер", "Если матч попал на сервер не из списка стран", AppSettings.alertEnabled) {
                 AppSettings.alertEnabled = it
             })
@@ -222,6 +237,25 @@ class SettingsActivity : AppCompatActivity() {
         background = Ui.rounded(0xFF23272D.toInt(), d(14f).toFloat())
         setPadding(d(14f), d(12f), d(14f), d(12f))
         setOnClickListener { onClick() }
+    }
+
+    /** Карточка «для чего приложение»; выбор сразу перестраивает приложение. */
+    private fun profileCard(value: String, title: String, sub: String): LinearLayout {
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, title, 15f, bold = true))
+        c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
+        val selected = AppSettings.profile == value
+        c.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, d(18f).toFloat()).apply {
+            if (selected) setStroke(d(2f), Ui.GREEN)
+        }
+        c.setOnClickListener {
+            if (AppSettings.profile == value) return@setOnClickListener
+            AppSettings.setProfile(this, value)
+            vpnChanged = true
+            Toast.makeText(this, if (AppSettings.simple) "Включён режим «Просто VPN»" else "Включён режим для MLBB", Toast.LENGTH_SHORT).show()
+            recreate()
+        }
+        return c
     }
 
     private fun modeCard(mode: Int, title: String, sub: String): LinearLayout {

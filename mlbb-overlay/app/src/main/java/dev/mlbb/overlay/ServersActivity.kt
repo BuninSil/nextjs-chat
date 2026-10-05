@@ -217,7 +217,7 @@ class ServersActivity : AppCompatActivity() {
             val selected = n.tag == AppSettings.selectedTag
             h.root.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             h.flag.text = Ui.flagFor(n)
-            h.name.text = (if (ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
+            h.name.text = (if (AppSettings.gameMode && ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
             val exit = ServerTester.exitCountry[n.tag]

@@ -87,7 +87,29 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             CrashReport.take(this)?.let { showCrash(it) }
             if (AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+            if (AppSettings.profile.isEmpty()) askProfile()
         }
+    }
+
+    /** Первый запуск: для игры или просто VPN. Потом меняется в Настройках. */
+    private fun askProfile() {
+        AlertDialog.Builder(this)
+            .setTitle("Для чего тебе приложение?")
+            .setMessage(
+                "🎮 Для Mobile Legends — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
+                    "в приоритете, запуск игры одной кнопкой.\n\n" +
+                    "🌐 Просто VPN (Fast VPN) — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
+                    "Поменять можно потом в Настройках."
+            )
+            .setCancelable(false)
+            .setPositiveButton("🎮 Для MLBB") { _, _ -> chooseProfile(AppSettings.PROFILE_GAME) }
+            .setNegativeButton("🌐 Просто VPN") { _, _ -> chooseProfile(AppSettings.PROFILE_SIMPLE) }
+            .show()
+    }
+
+    private fun chooseProfile(value: String) {
+        AppSettings.setProfile(this, value)
+        recreate()
     }
 
     /** Прошлый запуск упал — показываем причину, чтобы её можно было скинуть разработчику. */
@@ -104,8 +126,16 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Для какого режима построен экран — если в Настройках поменяли, перестраиваем. */
+    private var builtProfile = ""
+
     override fun onResume() {
         super.onResume()
+        AppSettings.load(this)
+        if (AppSettings.profile != builtProfile) {
+            recreate()
+            return
+        }
         handler.post(refresher)
         // Замер Wi-Fi (пинг до роутера) — в фоне раз в 5 секунд
         wifiThread = Thread {
@@ -126,6 +156,7 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------- UI -------------------------------
 
     private fun buildUi(): ScrollView {
+        builtProfile = AppSettings.profile
         val d = { v: Float -> Ui.dp(this, v) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -134,7 +165,7 @@ class MainActivity : AppCompatActivity() {
 
         // Заголовок
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(this, "MLBB Server", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(Ui.text(this, if (AppSettings.simple) "Fast VPN" else "MLBB Server", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(Ui.button(this, " ⚙ ") { showSettings() })
         root.addView(top)
         root.addView(Ui.space(this, 14f))
@@ -213,11 +244,14 @@ class MainActivity : AppCompatActivity() {
             AppSettings.save(this@MainActivity)
             if (anyRunning()) toast("Применится после переподключения")
         })
-        root.addView(gameRow, LinearLayout.LayoutParams(-1, -2))
-        root.addView(Ui.text(this, "плашка с сервером матча поверх игры, российские серверы в приоритете", 12f, Ui.MUTED).apply {
-            gravity = Gravity.CENTER
-            setPadding(d(24f), 0, d(24f), d(10f))
-        }, LinearLayout.LayoutParams(-1, -2))
+        // В простом режиме (просто VPN) про игру ничего не показываем
+        if (!AppSettings.simple) {
+            root.addView(gameRow, LinearLayout.LayoutParams(-1, -2))
+            root.addView(Ui.text(this, "плашка с сервером матча поверх игры, российские серверы в приоритете", 12f, Ui.MUTED).apply {
+                gravity = Gravity.CENTER
+                setPadding(d(24f), 0, d(24f), d(10f))
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
         val launchRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(4f)) }
         this.launchRow = launchRow
         launchRow.addView(Ui.text(this, "Запускать MLBB после подключения", 14f, Ui.MUTED).apply {
@@ -278,13 +312,20 @@ class MainActivity : AppCompatActivity() {
             Ui.tile(this, "🔗  Подписка", "ссылка твоего VPN") { showSubscription() },
         ))
         root.addView(Ui.space(this, 10f))
-        root.addView(row(
-            Ui.tile(this, "📋  Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
-            Ui.tile(this, "⚙  Настройки", "режимы, база стран, обновления") { showSettings() },
-        ))
-        root.addView(Ui.space(this, 10f))
-        root.addView(Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача — через VPN, если он включён") { speedTest() },
-            LinearLayout.LayoutParams(-1, -2))
+        if (AppSettings.simple) {
+            root.addView(row(
+                Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача") { speedTest() },
+                Ui.tile(this, "⚙  Настройки", "автовыбор, Wi-Fi, обновления") { showSettings() },
+            ))
+        } else {
+            root.addView(row(
+                Ui.tile(this, "📋  Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
+                Ui.tile(this, "⚙  Настройки", "режимы, база стран, обновления") { showSettings() },
+            ))
+            root.addView(Ui.space(this, 10f))
+            root.addView(Ui.tile(this, "⚡  Тест скорости", "пинг, загрузка и отдача — через VPN, если он включён") { speedTest() },
+                LinearLayout.LayoutParams(-1, -2))
+        }
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
@@ -409,9 +450,10 @@ class MainActivity : AppCompatActivity() {
     /** Мастер первого запуска: показывает первый невыполненный шаг с кнопкой «сделать». */
     private fun updateSetup() {
         val needSub = AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isEmpty()
-        val needDb = !GeoDb.isLoaded
-        val needOverlay = !Settings.canDrawOverlays(this)
-        val steps = listOf(needSub, needDb, needOverlay)
+        // Простой режим: нужна только подписка; база стран и плашка — для игры
+        val needDb = !AppSettings.simple && !GeoDb.isLoaded
+        val needOverlay = !AppSettings.simple && !Settings.canDrawOverlays(this)
+        val steps = if (AppSettings.simple) listOf(needSub) else listOf(needSub, needDb, needOverlay)
         val total = steps.size
         val done = steps.count { !it }
         if (done == total) {
@@ -422,7 +464,7 @@ class MainActivity : AppCompatActivity() {
         val n = done + 1
         when {
             needSub -> {
-                setupTitle.text = "Шаг $n из $total: добавь подписку"
+                setupTitle.text = if (total > 1) "Шаг $n из $total: добавь подписку" else "Добавь подписку"
                 setupText.text = "Скопируй ссылку подписки своего VPN (ту же, что в Karing / Hiddify / v2rayNG) и вставь сюда."
                 setupButton.text = "🔗  Вставить ссылку"
                 setupButton.setOnClickListener { showSubscription() }
@@ -500,7 +542,9 @@ class MainActivity : AppCompatActivity() {
             stopAll()
             return
         }
-        if (!isGameInstalled()) {
+        // Игра и плашка нужны только для игровых функций; просто VPN работает без них
+        val forGame = !AppSettings.simple && (AppSettings.gameMode || AppSettings.mode != AppSettings.MODE_BOX)
+        if (forGame && !isGameInstalled()) {
             showInfo("Игра не найдена", "Mobile Legends (${CaptureVpnService.GAME_PACKAGE}) не установлена.")
             return
         }
@@ -512,7 +556,7 @@ class MainActivity : AppCompatActivity() {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
-        if (!Settings.canDrawOverlays(this)) {
+        if (forGame && !Settings.canDrawOverlays(this)) {
             showInfo(
                 "Разреши плашку поверх игры",
                 "Найди в списке «MLBB Server» и включи «Поверх других окон». Потом вернись и нажми ИГРАТЬ.",

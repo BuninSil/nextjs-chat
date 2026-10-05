@@ -26,6 +26,15 @@ object AppSettings {
     /** Игровой режим: оверлей, лог, приоритет серверов для MLBB, игровой Wi-Fi */
     @Volatile var gameMode = true
 
+    /**
+     * Для чего приложение: "game" — для Mobile Legends (оверлей, игровой режим, лог боёв),
+     * "simple" — просто VPN (Fast VPN), всё про игру скрыто; "" — ещё не выбрано (спросим при запуске).
+     */
+    @Volatile var profile = ""
+    val simple get() = profile == PROFILE_SIMPLE
+    const val PROFILE_GAME = "game"
+    const val PROFILE_SIMPLE = "simple"
+
     @Volatile var mode = MODE_DIRECT
     val chainEnabled get() = mode == MODE_CHAIN
 
@@ -73,6 +82,24 @@ object AppSettings {
         alertEnabled = p.getBoolean("alert", false)
         allowedCountries = parseCountries(p.getString("allowed", "RU") ?: "RU")
         autoCheckUpdates = p.getBoolean("updAuto", true)
+        // Кто ставил приложение до появления выбора — уже пользуется им для игры
+        profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
+        if (simple) applySimple()
+    }
+
+    /** Простой режим: только VPN, никаких игровых функций. */
+    private fun applySimple() {
+        mode = MODE_BOX
+        gameMode = false
+        onlyGame = false
+        battleDirect = false
+        alertEnabled = false
+    }
+
+    fun setProfile(ctx: Context, value: String) {
+        profile = value
+        if (simple) applySimple() else gameMode = true
+        save(ctx)
     }
 
     fun save(ctx: Context) {
@@ -96,6 +123,7 @@ object AppSettings {
             .putBoolean("alert", alertEnabled)
             .putString("allowed", allowedCountries.joinToString(","))
             .putBoolean("updAuto", autoCheckUpdates)
+            .putString("profile", profile)
             .apply()
     }
 
