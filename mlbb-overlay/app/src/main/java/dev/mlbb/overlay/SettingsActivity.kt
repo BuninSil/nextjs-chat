@@ -162,7 +162,7 @@ class SettingsActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, d(28f), 0, d(2f))
         }, LinearLayout.LayoutParams(-1, -2))
-        root.addView(Ui.text(this, "Fast VPN · версия ${BuildConfig.VERSION_NAME}", 11f, Ui.MUTED).apply {
+        root.addView(Ui.text(this, "Fast VPN · ${BuildConfig.AUTHOR} · версия ${BuildConfig.VERSION_NAME}", 11f, Ui.MUTED).apply {
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, -2))
 

@@ -333,10 +333,6 @@ class MainActivity : AppCompatActivity() {
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
-        root.addView(Ui.text(this, "Автор: ${BuildConfig.AUTHOR} · версия ${BuildConfig.VERSION_NAME}", 11f, 0xFF5F6368.toInt()).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, d(16f), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
 
         return ScrollView(this).apply { addView(root) }
     }
