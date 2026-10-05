@@ -128,7 +128,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(section("Обновления"))
         root.addView(Ui.card(this).apply {
             addView(switchRow("Обновлять автоматически",
-                "Сам скачивает и ставит новую версию в фоне, когда VPN выключен. Первый раз Android один раз спросит подтверждение",
+                "Сам скачивает новую версию в фоне и присылает уведомление — останется нажать «Установить»",
                 AppSettings.autoCheckUpdates) {
                 AppSettings.autoCheckUpdates = it
                 AppSettings.save(this@SettingsActivity)
@@ -140,11 +140,6 @@ class SettingsActivity : AppCompatActivity() {
             })
             updStatus = Ui.text(this@SettingsActivity, "", 12f, Ui.MUTED).apply { setPadding(0, d(6f), 0, 0) }
             addView(updStatus)
-            // Почему не встало последнее обновление — чтобы было что сказать разработчику
-            AutoUpdate.lastError(this@SettingsActivity)?.let { err ->
-                addView(Ui.text(this@SettingsActivity, "Последняя установка не прошла тихо: $err. Обновление приходит уведомлением.", 12f, Ui.YELLOW)
-                    .apply { setPadding(0, d(6f), 0, 0) })
-            }
         })
 
         // ---------- Внешний VPN-клиент ----------

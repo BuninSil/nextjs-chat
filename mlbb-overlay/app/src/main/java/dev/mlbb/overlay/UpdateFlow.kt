@@ -139,30 +139,19 @@ object UpdateFlow {
         dlg.show()
     }
 
-    private fun download(a: Activity, rel: Updater.Release, status: (String) -> Unit) {
+    private fun download(a: Activity, rel: Updater.Release, onStatus: (String) -> Unit) {
         if (busy) return
         busy = true
+        val status: (String) -> Unit = { msg -> statusText = msg; onStatus(msg) }
         Thread {
             try {
                 val apk = Updater.download(a.applicationContext, rel) { msg -> a.runOnUiThread { status(msg) } }
                 AutoUpdate.rememberNotes(a.applicationContext, rel)
-                if (!a.packageManager.canRequestPackageInstalls()) {
-                    // Открывает экран разрешения установки
-                    a.runOnUiThread {
-                        status("")
-                        Updater.install(a, apk)
+                a.runOnUiThread {
+                    status("")
+                    if (!Updater.install(a, apk)) {
                         Toast.makeText(a, "Разреши установку из этого приложения и проверь обновления ещё раз", Toast.LENGTH_LONG).show()
                     }
-                } else {
-                    a.runOnUiThread { status("Устанавливаю…") }
-                    try {
-                        // Через PackageInstaller: после первого раза обновления ставятся без вопросов
-                        AutoUpdate.install(a.applicationContext, apk, interactive = true)
-                    } catch (e: Exception) {
-                        // Запасной путь — обычное окно установщика
-                        a.runOnUiThread { Updater.install(a, apk) }
-                    }
-                    a.runOnUiThread { status("") }
                 }
             } catch (e: Exception) {
                 a.runOnUiThread { status("Ошибка обновления: ${e.message}") }
