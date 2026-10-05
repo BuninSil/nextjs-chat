@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var battlePing: TextView
     private lateinit var playButton: TextView
     private lateinit var stopButton: TextView
+    private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var infoLine: TextView
     private lateinit var wifiCard: LinearLayout
     private lateinit var wifiLine: TextView
@@ -165,8 +166,29 @@ class MainActivity : AppCompatActivity() {
         playWrap.addView(playButton, LinearLayout.LayoutParams(d(200f), d(200f)))
         root.addView(playWrap)
 
-        stopButton = Ui.button(this, "■  Отключить VPN") { stopAll() }.apply { gravity = Gravity.CENTER }
-        root.addView(stopButton)
+        // Под кнопкой: тумблер автозапуска игры и ссылка «Запустить MLBB», пока подключено
+        val launchRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(4f)) }
+        launchRow.addView(Ui.text(this, "Запускать MLBB после подключения", 14f, Ui.MUTED).apply {
+            setPadding(0, 0, d(10f), 0)
+        })
+        launchSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
+            isChecked = AppSettings.autoLaunch
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
+            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, 0xFF3A3F46.toInt()))
+            setOnCheckedChangeListener { _, v ->
+                AppSettings.autoLaunch = v
+                AppSettings.save(this@MainActivity)
+            }
+        }
+        launchRow.addView(launchSwitch)
+        root.addView(launchRow, LinearLayout.LayoutParams(-1, -2))
+        stopButton = Ui.text(this, "▶  Запустить MLBB", 15f, Ui.GREEN, bold = true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, d(8f), 0, d(4f))
+            setOnClickListener { launchGame() }
+        }
+        root.addView(stopButton, LinearLayout.LayoutParams(-1, -2))
         root.addView(Ui.space(this, 12f))
 
         // Wi-Fi: диапазон, сигнал, роутер, подсказки
@@ -266,12 +288,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        playButton.text = when {
-            running -> "ЗАПУСТИТЬ\nMLBB"
-            AppSettings.autoLaunch || AppSettings.mode != AppSettings.MODE_BOX -> "ИГРАТЬ"
+        val label = when {
+            running -> "ОТКЛЮЧИТЬ"
+            AppSettings.autoLaunch -> "ИГРАТЬ"
             else -> "ПОДКЛЮЧИТЬ"
         }
-        playButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (running) 22f else 26f)
+        if (playButton.text != label) {
+            playButton.text = label
+            playButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (running) 24f else 26f)
+            // Подключено — кнопка красная (отключить), иначе зелёная
+            val colors = if (running) intArrayOf(0xFFE5534B.toInt(), 0xFFA8322C.toInt())
+            else intArrayOf(0xFF43D17A.toInt(), Ui.GREEN_DARK)
+            playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
+                .apply { shape = GradientDrawable.OVAL }
+        }
         stopButton.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
 
         val wi = wifiInfo
@@ -347,6 +377,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun play() {
         if (busy) return
+        if (anyRunning()) {
+            stopAll()
+            return
+        }
         if (!isGameInstalled()) {
             showInfo("Игра не найдена", "Mobile Legends (${CaptureVpnService.GAME_PACKAGE}) не установлена.")
             return
@@ -369,10 +403,7 @@ class MainActivity : AppCompatActivity() {
             )
             return
         }
-        if (anyRunning()) {
-            launchGame()
-            return
-        }
+
         clearErrors()
         when (AppSettings.mode) {
             AppSettings.MODE_BOX -> {
