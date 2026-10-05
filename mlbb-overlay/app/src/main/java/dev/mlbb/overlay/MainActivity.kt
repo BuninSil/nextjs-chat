@@ -223,6 +223,15 @@ class MainActivity : AppCompatActivity() {
             hint = "страны через запятую, например RU,BY,KZ"
             setText(AppSettings.allowedCountries.joinToString(","))
         }
+        val apiPort = EditText(this).apply {
+            hint = "порт Clash API (пусто — искать самому)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(if (AppSettings.apiPort > 0) AppSettings.apiPort.toString() else "")
+        }
+        val apiSecret = EditText(this).apply {
+            hint = "секрет Clash API (если есть)"
+            setText(AppSettings.apiSecret)
+        }
         val auto = CheckBox(this).apply {
             text = "Проверять обновления при запуске"
             isChecked = AppSettings.autoCheckUpdates
@@ -231,7 +240,10 @@ class MainActivity : AppCompatActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            addView(label("Прокси VPN-клиента"))
+            addView(label("Clash API VPN-клиента (режим «С моим VPN»)"))
+            addView(apiPort)
+            addView(apiSecret)
+            addView(label("Прокси VPN-клиента (старый режим)"))
             addView(chainHint)
             addView(host)
             addView(port)
@@ -256,6 +268,8 @@ class MainActivity : AppCompatActivity() {
                 AppSettings.alertEnabled = alert.isChecked
                 AppSettings.allowedCountries = AppSettings.parseCountries(countries.text.toString())
                 AppSettings.autoCheckUpdates = auto.isChecked
+                AppSettings.apiPort = apiPort.text.toString().toIntOrNull()?.takeIf { it in 1..65535 } ?: 0
+                AppSettings.apiSecret = apiSecret.text.toString().trim()
                 AppSettings.save(this)
                 if (CaptureVpnService.isRunning) toast("Применится после СТОП → СТАРТ")
             }
@@ -353,8 +367,10 @@ class MainActivity : AppCompatActivity() {
                         "Не нашёл у твоего VPN-клиента Clash API — через него приложение узнаёт сервер игры, не включая свой VPN.\n\n" +
                             "• Проверь, что VPN подключён.\n" +
                             "• Работает с клиентами на sing-box и mihomo: Karing, Hiddify, NekoBox, FlClash, Clash Meta. " +
-                            "Если в настройках клиента есть «Clash API», «External controller», «Контроллер» или «Dashboard» — включи.\n" +
-                            "• С v2rayNG, Happ, v2RayTun так не получится: они список соединений никому не отдают."
+                            "Если в настройках клиента есть «Clash API», «External controller», «Контроллер» или «Dashboard» — включи, " +
+                            "а порт впиши в «Дополнительные настройки».\n" +
+                            "• С v2rayNG, Happ, v2RayTun так не получится: они список соединений никому не отдают.\n\n" +
+                            "Диагностика (скинь скрин разработчику):\n" + ClashApi.lastReport
                     )
                 }
             }

@@ -47,18 +47,43 @@ object ClashApi {
         return c
     }
 
-    fun probe(port: Int, secret: String): Probe = try {
-        val c = open(port, "/version", secret, 600)
-        when (c.responseCode) {
-            200 -> {
-                val body = c.inputStream.bufferedReader().use { it.readText() }
-                if (body.contains("version")) Probe.OK else Probe.NO
-            }
-            401, 403 -> Probe.NEED_SECRET
+    /** Отчёт по портам для диагностики, если ничего не нашлось. */
+    @Volatile
+    var lastReport: String = ""
+        private set
+
+    private fun get(port: Int, path: String, secret: String): Pair<Int, String>? = try {
+        val c = open(port, path, secret, 600)
+        val code = c.responseCode
+        val body = try {
+            (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText().take(300) } ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+        code to body
+    } catch (_: Exception) {
+        null
+    }
+
+    fun probe(port: Int, secret: String): Probe {
+        // Список соединений — то, что нам реально нужно
+        val conn = get(port, "/connections", secret)
+        if (conn != null) {
+            if (conn.first == 200 && conn.second.contains("connections")) return Probe.OK
+            if (conn.first == 401 || conn.first == 403) return Probe.NEED_SECRET
+        }
+        val ver = get(port, "/version", secret) ?: return Probe.NO
+        return when {
+            ver.first == 401 || ver.first == 403 -> Probe.NEED_SECRET
             else -> Probe.NO
         }
-    } catch (_: Exception) {
-        Probe.NO
+    }
+
+    private fun describe(port: Int, secret: String): String {
+        val root = get(port, "/", secret) ?: return "$port: не HTTP"
+        val conns = get(port, "/connections", secret)
+        val body = root.second.replace(Regex("\\s+"), " ").take(60)
+        return "$port: HTTP ${root.first} «$body»" + (conns?.let { ", /connections → ${it.first}" } ?: "")
     }
 
     /** Возвращает (порт, результат проверки) или null. */
@@ -93,6 +118,10 @@ object ClashApi {
                 Probe.NEED_SECRET -> if (needSecret == null) needSecret = p
                 Probe.NO -> {}
             }
+        }
+        if (needSecret == null) {
+            lastReport = if (open.isEmpty()) "Открытых локальных портов нет."
+            else "Открытые локальные порты:\n" + open.sorted().take(15).joinToString("\n") { describe(it, secret) }
         }
         return needSecret?.let { it to Probe.NEED_SECRET }
     }
