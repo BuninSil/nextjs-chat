@@ -1,4 +1,4 @@
-name: MLBB overlay APK
+name: Fast VPN APK
 
 on:
   push:
@@ -36,23 +36,24 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleDebug -PversionCode=${{ github.run_number }}
-          cp app/build/outputs/apk/debug/app-debug.apk /tmp/mlbb-overlay.apk
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/fast-vpn.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mlbb-overlay-debug
-          path: /tmp/mlbb-overlay.apk
+          name: fast-vpn-debug
+          path: /tmp/fast-vpn.apk
 
-      # Релиз — источник автообновления в приложении (versionCode = номер запуска)
+      # Релиз — источник автообновления в приложении (versionCode = номер запуска).
+      # Префикс тега mlbb-v не меняем: по нему уже установленные версии находят обновления.
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="mlbb-v1.0.${{ github.run_number }}"
-          gh release create "$TAG" /tmp/mlbb-overlay.apk \
+          gh release create "$TAG" /tmp/fast-vpn.apk \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "MLBB Server Overlay 1.0.${{ github.run_number }}" \
+            --title "Fast VPN 1.0.${{ github.run_number }}" \
             --notes "$(git log -1 --pretty=%B "$GITHUB_SHA")"
 
       # Копия APK в ветке apk-builds (перезаписывается), чтобы забрать её обычным git fetch
@@ -60,7 +61,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p /tmp/pub && cp /tmp/mlbb-overlay.apk /tmp/pub/mlbb-overlay-debug.apk
+          mkdir -p /tmp/pub && cp /tmp/fast-vpn.apk /tmp/pub/fast-vpn-debug.apk
           cd /tmp/pub
           echo "${GITHUB_SHA}" > SOURCE_COMMIT
           git init -q && git checkout -q -b apk-builds

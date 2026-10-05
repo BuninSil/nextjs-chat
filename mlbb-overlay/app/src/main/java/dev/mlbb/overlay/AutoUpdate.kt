@@ -118,7 +118,9 @@ object AutoUpdate {
                 apk.inputStream().use { it.copyTo(out) }
                 s.fsync(out)
             }
-            val intent = Intent(ctx, StatusReceiver::class.java).putExtra("interactive", interactive)
+            val intent = Intent(ctx, StatusReceiver::class.java)
+                .putExtra("interactive", interactive)
+                .putExtra("apk", apk.path)
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
             s.commit(PendingIntent.getBroadcast(ctx, id, intent, flags).intentSender)
@@ -129,33 +131,69 @@ object AutoUpdate {
     class StatusReceiver : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             val interactive = intent.getBooleanExtra("interactive", false)
+            val apk = intent.getStringExtra("apk")?.let { File(it) }?.takeIf { it.exists() }
             when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+                PackageInstaller.STATUS_SUCCESS -> setLastResult(ctx, null)
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                     @Suppress("DEPRECATION")
-                    val confirm = (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                    else intent.getParcelableExtra(Intent.EXTRA_INTENT)) ?: return
-                    confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if (interactive) {
+                    val confirm = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                    else intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                    if (interactive && confirm != null) {
                         try {
-                            ctx.startActivity(confirm)
+                            ctx.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             return
                         } catch (_: Exception) {
                         }
                     }
-                    // Система просит подтвердить (обычно один раз) — даём кнопку в уведомлении
-                    notify(ctx, NOTIF_READY, "Обновление Fast VPN готово",
-                        "Нажми, чтобы установить. Дальше обновления будут ставиться сами",
-                        PendingIntent.getActivity(ctx, 1, confirm, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                    // Из фона подтверждение часто не показывается (особенно на Xiaomi) — сессию бросаем
+                    // и даём уведомление с обычным установщиком на уже скачанный файл
+                    abandon(ctx, intent)
+                    setLastResult(ctx, "система попросила подтверждение")
+                    fallback(ctx, apk, interactive)
                 }
-                PackageInstaller.STATUS_SUCCESS -> {}
                 else -> {
                     val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "код $status"
                     Log.w(TAG, "install failed: $msg")
-                    if (interactive) Toast.makeText(ctx, "Обновление не установилось: $msg", Toast.LENGTH_LONG).show()
+                    setLastResult(ctx, msg)
+                    fallback(ctx, apk, interactive)
                 }
             }
         }
+
+        private fun abandon(ctx: Context, intent: Intent) {
+            val id = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+            if (id >= 0) try { ctx.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) {}
+        }
+
+        /** Запасной путь — обычный установщик Android: сразу (если пользователь сам нажал) или из уведомления. */
+        private fun fallback(ctx: Context, apk: File?, interactive: Boolean) {
+            if (apk == null) {
+                if (interactive) Toast.makeText(ctx, "Обновление не установилось, попробуй ещё раз", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (interactive) {
+                try {
+                    if (Updater.install(ctx, apk)) return
+                } catch (_: Exception) {
+                }
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", apk)
+            val view = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            notify(ctx, NOTIF_READY, "Обновление Fast VPN скачано", "Нажми, чтобы установить",
+                PendingIntent.getActivity(ctx, 2, view, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        }
     }
+
+    /** Чем закончилась последняя установка обновления (null — успешно). Показывается в Настройках. */
+    fun setLastResult(ctx: Context, error: String?) {
+        val e = prefs(ctx).edit()
+        if (error == null) e.remove("updLastError") else e.putString("updLastError", error)
+        e.apply()
+    }
+
+    fun lastError(ctx: Context): String? = prefs(ctx).getString("updLastError", null)
 
     /** Приложение обновилось — уведомление «обновлено» (окно с описанием покажет главный экран). */
     class ReplacedReceiver : BroadcastReceiver() {
@@ -187,6 +225,7 @@ object AutoUpdate {
         if (seen == 0 || seen >= BuildConfig.VERSION_CODE) return null
         // Обновились — скачанные APK больше не нужны
         Updater.cleanup(ctx)
+        setLastResult(ctx, null)
         ctx.getSystemService(NotificationManager::class.java).cancel(NOTIF_DONE)
         return updatedNotes(ctx) ?: ""
     }

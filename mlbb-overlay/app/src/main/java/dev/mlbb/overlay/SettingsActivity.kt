@@ -140,6 +140,11 @@ class SettingsActivity : AppCompatActivity() {
             })
             updStatus = Ui.text(this@SettingsActivity, "", 12f, Ui.MUTED).apply { setPadding(0, d(6f), 0, 0) }
             addView(updStatus)
+            // Почему не встало последнее обновление — чтобы было что сказать разработчику
+            AutoUpdate.lastError(this@SettingsActivity)?.let { err ->
+                addView(Ui.text(this@SettingsActivity, "Последняя установка не прошла тихо: $err. Обновление приходит уведомлением.", 12f, Ui.YELLOW)
+                    .apply { setPadding(0, d(6f), 0, 0) })
+            }
         })
 
         // ---------- Внешний VPN-клиент ----------
