@@ -43,23 +43,61 @@ object Subscription {
         infoFile(ctx).takeIf { it.exists() }?.readText()?.let { info = parseUserInfo(it) }
     }
 
+    /**
+     * Панели (Remnawave, Marzban, 3x-ui) отдают подписку только знакомым клиентам
+     * и часто требуют идентификатор устройства (HWID). Пробуем представиться
+     * популярными клиентами по очереди, пока панель не отдаст серверы.
+     */
+    private val userAgents = listOf(
+        "v2rayNG/1.9.16", "Happ/3.6.0", "Hiddify/2.5.7", "Karing/1.1.2.606", "sing-box/1.11.4", "v2RayTun/5.1",
+    )
+
+    private fun hwid(ctx: Context): String {
+        val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        p.getString("hwid", null)?.let { return it }
+        val id = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        p.edit().putString("hwid", id).apply()
+        return id
+    }
+
     /** Скачивает подписку. Бросает исключение с понятным текстом. */
     fun update(ctx: Context, url: String): Int {
-        val c = Net.open(url.trim())
-        // Панели отдают формат по User-Agent; v2rayNG-совместимый — список ссылок в base64
-        c.setRequestProperty("User-Agent", "v2rayNG/1.9.0")
-        val code = c.responseCode
-        if (code != 200) throw RuntimeException("сервер подписки ответил HTTP $code")
-        val body = c.inputStream.bufferedReader().use { it.readText() }
-        val parsed = parseAll(body)
-        if (parsed.isEmpty()) throw RuntimeException("в подписке не нашлось серверов, которые я умею читать")
-        file(ctx).writeText(body)
-        c.getHeaderField("subscription-userinfo")?.let {
-            infoFile(ctx).writeText(it)
-            info = parseUserInfo(it)
+        var lastProblem = "сервер подписки не ответил"
+        for (ua in userAgents) {
+            try {
+                val c = Net.open(url.trim())
+                c.setRequestProperty("User-Agent", ua)
+                c.setRequestProperty("Accept", "*/*")
+                c.setRequestProperty("x-hwid", hwid(ctx))
+                c.setRequestProperty("x-device-os", "Android")
+                c.setRequestProperty("x-ver-os", android.os.Build.VERSION.RELEASE)
+                c.setRequestProperty("x-device-model", android.os.Build.MODEL)
+                val code = c.responseCode
+                if (code != 200) {
+                    lastProblem = "сервер подписки ответил HTTP $code"
+                    continue
+                }
+                val body = c.inputStream.bufferedReader().use { it.readText() }
+                val parsed = parseAll(body)
+                if (parsed.isEmpty()) {
+                    lastProblem = "панель отдала подписку в формате, который я не понял"
+                    continue
+                }
+                file(ctx).writeText(body)
+                c.getHeaderField("subscription-userinfo")?.let {
+                    infoFile(ctx).writeText(it)
+                    info = parseUserInfo(it)
+                }
+                nodes = parsed
+                return parsed.size
+            } catch (e: Exception) {
+                lastProblem = e.message ?: lastProblem
+            }
         }
-        nodes = parsed
-        return parsed.size
+        throw RuntimeException(
+            "$lastProblem. Возможно, в подписке закончился лимит устройств — " +
+                "проверь в боте/личном кабинете VPN, можно ли добавить ещё одно устройство."
+        )
     }
 
     private fun parseUserInfo(s: String): Info {
@@ -81,7 +119,30 @@ object Subscription {
         throw IllegalArgumentException("not base64")
     }
 
+    /** Формат sing-box (JSON): берём outbound'ы поддерживаемых типов как есть. */
+    private fun parseSingBox(body: String): List<Node> {
+        val arr = try { JSONObject(body).optJSONArray("outbounds") } catch (_: Exception) { null } ?: return emptyList()
+        val out = ArrayList<Node>()
+        val types = mapOf(
+            "vless" to false, "trojan" to false, "vmess" to false,
+            "shadowsocks" to true, "hysteria2" to true, "tuic" to true,
+        )
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val type = o.optString("type")
+            val udp = types[type] ?: continue
+            val tag = "n${out.size}"
+            val name = o.optString("tag").ifEmpty { tag }
+            o.remove("multiplex") // mux для игры вреден
+            o.remove("detour")
+            o.put("tag", tag)
+            out.add(Node(tag, name, if (type == "shadowsocks") "ss" else type, o.optString("server"), o.optInt("server_port"), udp, o))
+        }
+        return out
+    }
+
     fun parseAll(body: String): List<Node> {
+        if (body.trimStart().startsWith("{")) return parseSingBox(body)
         val text = if (body.contains("://")) body else try {
             b64(body)
         } catch (_: Exception) {
