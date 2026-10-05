@@ -130,8 +130,12 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Обновления ----------
         root.addView(section("Обновления"))
         root.addView(Ui.card(this).apply {
-            addView(switchRow("Проверять при запуске", "Версия ${BuildConfig.VERSION_NAME}", AppSettings.autoCheckUpdates) {
+            addView(switchRow("Обновлять автоматически",
+                "Сам скачивает и ставит новую версию в фоне, когда VPN выключен. Первый раз Android один раз спросит подтверждение",
+                AppSettings.autoCheckUpdates) {
                 AppSettings.autoCheckUpdates = it
+                AppSettings.save(this@SettingsActivity)
+                AutoUpdate.schedule(applicationContext)
             })
             addView(Ui.space(this@SettingsActivity, 10f))
             addView(secondary("↻  Проверить обновления") {

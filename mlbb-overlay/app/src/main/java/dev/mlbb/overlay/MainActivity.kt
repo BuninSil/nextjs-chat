@@ -86,7 +86,11 @@ class MainActivity : AppCompatActivity() {
         Thread { GeoDb.load(applicationContext) }.start()
         if (savedInstanceState == null) {
             CrashReport.take(this)?.let { showCrash(it) }
-            if (AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+            // Только что обновились — показываем, что нового
+            val updated = AutoUpdate.takeJustUpdated(this)
+            if (updated != null) UpdateFlow.showUpdated(this, updated)
+            else if (AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+            AutoUpdate.schedule(applicationContext)
             if (AppSettings.profile.isEmpty()) askProfile()
         }
     }
@@ -133,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         AppSettings.load(this)
+        AutoUpdate.uiVisible = true
         if (AppSettings.profile != builtProfile) {
             recreate()
             return
@@ -149,6 +154,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        AutoUpdate.uiVisible = false
         handler.removeCallbacks(refresher)
         wifiThread?.interrupt()
         wifiThread = null
