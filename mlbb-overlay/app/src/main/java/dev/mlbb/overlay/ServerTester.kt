@@ -89,6 +89,7 @@ object ServerTester {
     private val ruWords = listOf("🇷🇺", "москва", "moscow", "россия", "russia", "санкт", "петербург", "spb", "msk")
 
     fun isRussian(n: Subscription.Node): Boolean {
+        exitCountry[n.tag]?.let { return it == "RU" }
         val name = n.name.lowercase()
         if (ruWords.any { name.contains(it) }) return true
         // По базе — только для IP: домен пришлось бы резолвить (нельзя на главном потоке)
@@ -126,6 +127,7 @@ object ServerTester {
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
         val net = underlying(ctx)
         val game = AppSettings.gameMode
+        loadExits(ctx)
         testing = true
         results.clear()
         val done = AtomicInteger()
@@ -169,28 +171,66 @@ object ServerTester {
      */
     fun pickWorking(ctx: Context, ranked: List<String>, maxTries: Int = 8): String? {
         val p = BoxVpnService.ports ?: return null
-        // В игровом режиме перебираем все российские, потом ещё несколько запасных
-        val ruCount = if (AppSettings.gameMode) {
-            val byTag = Subscription.nodes.associateBy { it.tag }
-            ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
-        } else 0
-        // Игровой режим и уже известны серверы игры — выбираем по пингу ДО ИГРЫ среди нескольких рабочих
-        val wanted = 1
-        val working = ArrayList<String>()
-        for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
-            if (working.size >= wanted) break
+        val game = AppSettings.gameMode
+        loadExits(ctx)
+        var fallback: String? = null
+        var chosen: String? = null
+        // Игровой режим: нужен выход в России — иначе игра считает, что ты за границей,
+        // и кидает на зарубежный сервер. Проверяем до 20 кандидатов, обычный режим — до первого рабочего.
+        val limit = if (game) 20 else maxTries
+        for (tag in ranked.take(limit)) {
             if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
                 results.put(tag, null)
                 continue
             }
-            working.add(tag)
+            if (!game) { chosen = tag; break }
+            if (fallback == null) fallback = tag
+            val loc = traceExit(p.mixed)
+            if (loc != null) exitCountry[tag] = loc
+            if (loc == "RU") { chosen = tag; break }
         }
-        val best = working.firstOrNull() ?: return null
+        saveExits(ctx)
+        val best = chosen ?: fallback ?: return null
         ClashApi.select(p.api, p.secret, "proxy", best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)
         return best
+    }
+
+    /** Реальная страна выхода в интернет (tag -> код страны), по ответу Cloudflare через сервер. */
+    val exitCountry = ConcurrentHashMap<String, String>()
+    private var exitsLoaded = false
+
+    fun loadExits(ctx: Context) {
+        if (exitsLoaded) return
+        exitsLoaded = true
+        val raw = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("exits", null) ?: return
+        try {
+            val o = org.json.JSONObject(raw)
+            for (k in o.keys()) exitCountry[k] = o.getString(k)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun saveExits(ctx: Context) {
+        val o = org.json.JSONObject()
+        for ((k, v) in exitCountry) o.put(k, v)
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("exits", o.toString()).apply()
+    }
+
+    /** Через текущий сервер (SOCKS-вход ядра) спрашивает у Cloudflare, из какой страны пришёл запрос. */
+    private fun traceExit(mixedPort: Int): String? = try {
+        val c = java.net.URL("http://www.cloudflare.com/cdn-cgi/trace").openConnection(
+            java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
+        ) as java.net.HttpURLConnection
+        c.connectTimeout = 4000
+        c.readTimeout = 4000
+        c.inputStream.bufferedReader().use { r ->
+            r.lineSequence().firstOrNull { it.startsWith("loc=") }?.substringAfter("loc=")?.trim()?.uppercase()
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /** Переключает ядро на сервер и запоминает выбор. */

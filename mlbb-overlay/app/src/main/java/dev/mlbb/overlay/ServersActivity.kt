@@ -33,6 +33,7 @@ class ServersActivity : AppCompatActivity() {
         val d = { v: Float -> Ui.dp(this, v) }
         AppSettings.load(this)
         Subscription.load(this)
+        ServerTester.loadExits(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -191,9 +192,11 @@ class ServersActivity : AppCompatActivity() {
             h.name.text = (if (ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
+            val exit = ServerTester.exitCountry[n.tag]
             val sp = ServerTester.speed[n.tag]
             h.sub.text = n.type + udp + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
-                (sp?.let { " · ↓ " + String.format(java.util.Locale.US, "%.0f", it) + " Мбит/с" } ?: "")
+                (sp?.let { " · ↓ " + String.format(java.util.Locale.US, "%.0f", it) + " Мбит/с" } ?: "") +
+                (exit?.let { " · выход ${GeoDb.flag(it)}" } ?: "")
             h.ping.text = when {
                 !ServerTester.results.containsKey(n.tag) -> if (ServerTester.testing) "…" else ""
                 r == null -> "✖"

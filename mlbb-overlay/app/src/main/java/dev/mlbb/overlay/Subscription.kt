@@ -61,6 +61,11 @@ object Subscription {
         "ClashMetaForAndroid/2.11.1.Meta", "clash-verge/v2.0.3", "Streisand", "FoXray",
     )
 
+    private fun resetExits(ctx: Context) {
+        ServerTester.exitCountry.clear()
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("exits").apply()
+    }
+
     /** Подписка, вставленная текстом (ссылки серверов или base64), а не URL. */
     fun importText(ctx: Context, text: String): Int {
         val parsed = parseAll(text)
@@ -69,6 +74,7 @@ object Subscription {
         infoFile(ctx).delete()
         info = null
         nodes = parsed
+        resetExits(ctx)
         return parsed.size
     }
 
