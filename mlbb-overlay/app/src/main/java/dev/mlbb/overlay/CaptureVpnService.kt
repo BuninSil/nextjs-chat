@@ -61,6 +61,7 @@ class CaptureVpnService : VpnService() {
     private val handler = Handler(Looper.getMainLooper())
     private var uidResolver: UidResolver? = null
     private var lastAlertIp: String? = null
+    private var lastRecordedIp: String? = null
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -272,6 +273,11 @@ class CaptureVpnService : VpnService() {
         val warn = AppSettings.alertEnabled && geo != null && !allowed
         val prefix = if (warn) "⚠ " else ""
         ov.update("$prefix$place · $pingText\n$ip:${battle.conn.dstPort} · ${battle.pktsLast10s} pkt/10s", color)
+
+        if (battle.pktsLast10s >= MIN_BATTLE_PKTS && ip != lastRecordedIp) {
+            lastRecordedIp = ip
+            GameServers.record(this, ip, battle.conn.dstPort)
+        }
 
         // Вибрация один раз на каждый новый «чужой» боевой сервер
         if (warn && ip != lastAlertIp && battle.pktsLast10s >= MIN_BATTLE_PKTS) {

@@ -49,6 +49,9 @@ object ServerTester {
 
     val results = Results()
 
+    /** Пинг до серверов игры через конкретный VPN-сервер (tag -> ms), если серверы игры известны. */
+    val gamePing = ConcurrentHashMap<String, Int>()
+
     @Volatile
     var testing = false
         private set
@@ -141,16 +144,29 @@ object ServerTester {
             val byTag = Subscription.nodes.associateBy { it.tag }
             ranked.takeWhile { t -> byTag[t]?.let { isRussian(it) } == true }.size
         } else 0
+        // Игровой режим и уже известны серверы игры — выбираем по пингу ДО ИГРЫ среди нескольких рабочих
+        val games = if (AppSettings.gameMode) GameServers.list(ctx).take(2) else emptyList()
+        val wanted = if (games.isEmpty()) 1 else 4
+        val working = ArrayList<String>()
+        gamePing.clear()
         for (tag in ranked.take(maxOf(maxTries, ruCount + 4))) {
+            if (working.size >= wanted) break
             if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
-            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) != null) {
-                AppSettings.selectedTag = tag
-                AppSettings.save(ctx)
-                return tag
+            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
+                results.put(tag, null)
+                continue
             }
-            results.put(tag, null)
+            working.add(tag)
+            if (games.isNotEmpty()) {
+                val pings = games.mapNotNull { GameServers.ping(it.ip) }
+                if (pings.isNotEmpty()) gamePing[tag] = pings.sorted()[pings.size / 2]
+            }
         }
-        return null
+        val best = working.minByOrNull { gamePing[it] ?: Int.MAX_VALUE } ?: return null
+        ClashApi.select(p.api, p.secret, "proxy", best)
+        AppSettings.selectedTag = best
+        AppSettings.save(ctx)
+        return best
     }
 
     /** Переключает ядро на сервер и запоминает выбор. */

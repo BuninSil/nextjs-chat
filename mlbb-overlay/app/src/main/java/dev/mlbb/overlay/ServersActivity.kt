@@ -171,7 +171,9 @@ class ServersActivity : AppCompatActivity() {
             h.name.text = (if (ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
-            h.sub.text = n.type + udp + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "")
+            val g = ServerTester.gamePing[n.tag]
+            h.sub.text = n.type + udp + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
+                (g?.let { " · 🎮 до игры $it ms" } ?: "")
             h.ping.text = when {
                 !ServerTester.results.containsKey(n.tag) -> if (ServerTester.testing) "…" else ""
                 r == null -> "✖"

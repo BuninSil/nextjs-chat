@@ -75,6 +75,7 @@ class MonitorService : Service() {
     private var fixedSecret = ""
     private var socksPort = 0
     private var lastAlertIp: String? = null
+    private var lastRecordedIp: String? = null
 
     /** id соединения в Clash API -> наш числовой id для ConnTracker */
     private val ids = HashMap<String, Int>()
@@ -292,6 +293,11 @@ class MonitorService : Service() {
         ov.update("$prefix$place · $pingText\n$ip:${battle.conn.dstPort}$activity", color)
 
         val enough = !ConnTracker.metricBytes || battle.pktsLast10s >= MIN_BATTLE_BYTES
+        // Запоминаем боевой сервер — по нему потом меряем пинг «до игры»
+        if (enough && ip != lastRecordedIp) {
+            lastRecordedIp = ip
+            GameServers.record(this, ip, battle.conn.dstPort)
+        }
         if (warn && ip != lastAlertIp && enough) {
             lastAlertIp = ip
             try {
