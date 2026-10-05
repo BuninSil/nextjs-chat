@@ -20,6 +20,8 @@ android {
         // Откуда тянуть обновления (GitHub owner/repo), можно поменять в приложении
         buildConfigField("String", "UPDATE_REPO", "\"BuninSil/nextjs-chat\"")
         buildConfigField("String", "AUTHOR", "\"BuninSil\"")
+        // Коммит сборки: апдейтер не предлагает «обновление» на тот же самый код
+        buildConfigField("String", "GIT_SHA", "\"${System.getenv("GITHUB_SHA") ?: ""}\"")
 
         ndk {
             // Только телефонные архитектуры: VPN-ядро большое, x86 на телефонах не нужен

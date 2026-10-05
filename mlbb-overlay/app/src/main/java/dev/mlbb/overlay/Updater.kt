@@ -30,6 +30,9 @@ object Updater {
         val tag = json.getString("tag_name")
         val code = tag.substringAfterLast('.').toIntOrNull() ?: return null
         if (code <= BuildConfig.VERSION_CODE) return null
+        // Тот же коммит, собранный повторно (ветка и main) — это не обновление
+        val sha = json.optString("target_commitish")
+        if (BuildConfig.GIT_SHA.isNotEmpty() && sha == BuildConfig.GIT_SHA) return null
         val assets = json.getJSONArray("assets")
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
