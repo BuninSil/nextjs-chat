@@ -45,6 +45,10 @@
             android:name=".ServersActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
         <service
             android:name=".BoxVpnService"
             android:exported="true"

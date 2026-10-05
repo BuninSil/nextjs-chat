@@ -1,3 +1,28 @@
 <resources>
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar" />
+    <!-- Тёмная тема с зелёным акцентом — как на главном экране -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#121417</item>
+        <item name="colorPrimaryDark">#121417</item>
+        <item name="colorAccent">#34C759</item>
+        <item name="android:windowBackground">#121417</item>
+        <item name="android:statusBarColor">#121417</item>
+        <item name="android:navigationBarColor">#121417</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+        <item name="alertDialogTheme">@style/AppDialog</item>
+        <item name="android:alertDialogTheme">@style/AppDialogFramework</item>
+    </style>
+
+    <style name="AppDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+    </style>
+
+    <!-- Для android.app.AlertDialog: тот же вид на базе системной темы -->
+    <style name="AppDialogFramework" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+    </style>
 </resources>

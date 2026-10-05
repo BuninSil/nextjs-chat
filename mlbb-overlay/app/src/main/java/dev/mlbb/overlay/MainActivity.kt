@@ -51,8 +51,6 @@ class MainActivity : AppCompatActivity() {
     private var shownError: String? = null
     private var afterVpnPermission: (() -> Unit)? = null
     @Volatile private var busy = false
-    @Volatile private var dbBusy = false
-    @Volatile private var updateBusy = false
 
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val next = afterVpnPermission
@@ -62,10 +60,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { play() }
-
-    private val importDb = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) importDatabase(uri)
-    }
 
     private val refresher = object : Runnable {
         override fun run() {
@@ -283,7 +277,7 @@ class MainActivity : AppCompatActivity() {
             battlePing.setTextColor(Ui.pingColor(ping?.ms))
         }
 
-        if (!dbBusy && !updateBusy) {
+        if (!UpdateFlow.busy) {
             infoLine.text = if (GeoDb.isLoaded) "" else "Нет базы стран DB-IP — Настройки → «Скачать базу»"
         }
 
@@ -545,180 +539,10 @@ class MainActivity : AppCompatActivity() {
     // ----------------------------- Настройки -----------------------------
 
     private fun showSettings() {
-        AppSettings.load(this)
-        val d = { v: Float -> Ui.dp(this, v) }
-        fun label(t: String) = TextView(this).apply {
-            text = t
-            setPadding(0, d(14f), 0, d(2f))
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        fun check(t: String, v: Boolean) = CheckBox(this).apply { text = t; isChecked = v }
-
-        val modes = RadioGroup(this)
-        val mBox = RadioButton(this).apply { id = 1; text = "Встроенный VPN (по подписке) — рекомендую" }
-        val mDirect = RadioButton(this).apply { id = 2; text = "Без VPN — игра напрямую" }
-        val mApi = RadioButton(this).apply { id = 3; text = "Внешний VPN-клиент (Clash API / Shizuku)" }
-        modes.addView(mBox); modes.addView(mDirect); modes.addView(mApi)
-        modes.check(when (AppSettings.mode) {
-            AppSettings.MODE_DIRECT -> 2
-            AppSettings.MODE_API -> 3
-            else -> 1
-        })
-
-        val auto = check("Автовыбор самого быстрого сервера при ИГРАТЬ", AppSettings.autoSelect)
-        val onlyGame = check("Через VPN только игра (весь канал — ей)", AppSettings.onlyGame)
-        val battleDirect = check("Матч напрямую, мимо VPN (минимальный пинг, если оператор пускает)", AppSettings.battleDirect)
-        val wifiBoost = check("Игровой режим Wi-Fi (меньше скачков пинга, работает и без VPN)", AppSettings.wifiBoost)
-        val alert = check("Вибрировать, если сервер матча не из списка стран", AppSettings.alertEnabled)
-        val countries = EditText(this).apply {
-            hint = "страны через запятую, например RU,BY,KZ"
-            setText(AppSettings.allowedCountries.joinToString(","))
-        }
-        val autoUpd = check("Проверять обновления при запуске", AppSettings.autoCheckUpdates)
-        val dbInfo = TextView(this).apply { text = "База стран DB-IP: ${GeoDb.description()}" }
-        val apiPort = EditText(this).apply {
-            hint = "порт Clash API внешнего клиента (пусто — искать)"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setText(if (AppSettings.apiPort > 0) AppSettings.apiPort.toString() else "")
-        }
-        val apiSecret = EditText(this).apply { hint = "секрет Clash API"; setText(AppSettings.apiSecret) }
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(d(20f), 0, d(20f), 0)
-            addView(label("Режим"))
-            addView(modes)
-            addView(label("Встроенный VPN"))
-            addView(auto); addView(onlyGame); addView(battleDirect)
-            addView(label("Wi-Fi"))
-            addView(wifiBoost)
-            addView(label("Предупреждение"))
-            addView(alert); addView(countries)
-            addView(label("База стран"))
-            addView(dbInfo)
-            addView(TextView(this@MainActivity).apply {
-                text = "⬇  Скачать базу"; setTextColor(Ui.GREEN); setPadding(0, d(8f), 0, d(4f))
-                setOnClickListener { downloadDatabase(dbInfo) }
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "📂  Импорт файла .mmdb"; setTextColor(Ui.GREEN); setPadding(0, d(4f), 0, d(4f))
-                setOnClickListener { importDb.launch(arrayOf("*/*")) }
-            })
-            addView(label("Обновления"))
-            addView(autoUpd)
-            addView(TextView(this@MainActivity).apply {
-                text = "↻  Проверить обновления"; setTextColor(Ui.GREEN); setPadding(0, d(8f), 0, d(4f))
-                setOnClickListener { checkUpdate(manual = true) }
-            })
-            addView(label("Внешний VPN-клиент"))
-            addView(apiPort); addView(apiSecret)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Настройки")
-            .setView(ScrollView(this).apply { addView(box) })
-            .setPositiveButton("Сохранить") { _, _ ->
-                val oldVpn = Triple(AppSettings.mode, AppSettings.onlyGame, AppSettings.battleDirect)
-                AppSettings.mode = when (modes.checkedRadioButtonId) {
-                    2 -> AppSettings.MODE_DIRECT
-                    3 -> AppSettings.MODE_API
-                    else -> AppSettings.MODE_BOX
-                }
-                AppSettings.autoSelect = auto.isChecked
-                AppSettings.onlyGame = onlyGame.isChecked
-                AppSettings.battleDirect = battleDirect.isChecked
-                AppSettings.wifiBoost = wifiBoost.isChecked
-                if (!wifiBoost.isChecked) WifiBoost.release()
-                AppSettings.alertEnabled = alert.isChecked
-                AppSettings.allowedCountries = AppSettings.parseCountries(countries.text.toString())
-                AppSettings.autoCheckUpdates = autoUpd.isChecked
-                AppSettings.apiPort = apiPort.text.toString().toIntOrNull()?.takeIf { it in 1..65535 } ?: 0
-                AppSettings.apiSecret = apiSecret.text.toString().trim()
-                AppSettings.save(this)
-                if (anyRunning() && oldVpn != Triple(AppSettings.mode, AppSettings.onlyGame, AppSettings.battleDirect)) {
-                    toast("Применится после переподключения: Отключить → ИГРАТЬ")
-                }
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    // ------------------------- База и обновления -------------------------
-
-    private fun downloadDatabase(status: TextView) {
-        if (dbBusy) return
-        dbBusy = true
-        Thread {
-            try {
-                GeoDb.download(applicationContext) { msg -> runOnUiThread { status.text = msg; infoLine.text = msg } }
-            } catch (e: Exception) {
-                runOnUiThread { status.text = "Не скачалось: ${e.message}" }
-            } finally {
-                dbBusy = false
-            }
-        }.start()
-    }
-
-    private fun importDatabase(uri: Uri) {
-        if (dbBusy) return
-        dbBusy = true
-        Thread {
-            try {
-                contentResolver.openInputStream(uri)!!.use { input ->
-                    GeoDb.install(applicationContext, input) { msg -> runOnUiThread { infoLine.text = msg } }
-                }
-            } catch (e: Exception) {
-                runOnUiThread { infoLine.text = "Импорт не удался: ${e.message}" }
-            } finally {
-                dbBusy = false
-            }
-        }.start()
+        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     private fun checkUpdate(manual: Boolean) {
-        if (updateBusy) return
-        updateBusy = true
-        if (manual) infoLine.text = "Проверяю обновления…"
-        Thread {
-            try {
-                val rel = Updater.check()
-                runOnUiThread {
-                    if (rel == null) {
-                        if (manual) toast("Версия ${BuildConfig.VERSION_NAME} — последняя")
-                    } else if (!isFinishing) {
-                        AlertDialog.Builder(this)
-                            .setTitle("Обновление ${rel.tag}")
-                            .setMessage(rel.notes.ifBlank { "Новая версия доступна." }.take(1500))
-                            .setPositiveButton("Скачать и установить") { _, _ -> downloadUpdate(rel) }
-                            .setNegativeButton("Позже", null)
-                            .show()
-                    }
-                }
-            } catch (e: Exception) {
-                if (manual) runOnUiThread { toast("Не удалось проверить: ${e.message}") }
-            } finally {
-                updateBusy = false
-            }
-        }.start()
-    }
-
-    private fun downloadUpdate(rel: Updater.Release) {
-        if (updateBusy) return
-        updateBusy = true
-        Thread {
-            try {
-                val apk = Updater.download(applicationContext, rel) { msg -> runOnUiThread { infoLine.text = msg } }
-                runOnUiThread {
-                    infoLine.text = ""
-                    if (!Updater.install(this, apk)) {
-                        toast("Разреши установку из этого приложения и проверь обновления ещё раз")
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread { infoLine.text = "Ошибка обновления: ${e.message}" }
-            } finally {
-                updateBusy = false
-            }
-        }.start()
+        UpdateFlow.check(this, manual) { msg -> infoLine.text = msg }
     }
 }
