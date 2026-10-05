@@ -44,6 +44,15 @@ class MonitorService : Service() {
         var noProcessInfo = false
             private set
 
+        /** Источник данных текущего запуска: "Clash API" или "Shizuku". */
+        @Volatile
+        var sourceName = ""
+            private set
+
+        @Volatile
+        var lastPing: Pinger.Result? = null
+            private set
+
         fun start(ctx: Context) {
             ctx.startForegroundService(Intent(ctx, MonitorService::class.java))
         }
@@ -125,18 +134,48 @@ class MonitorService : Service() {
 
         val port = AppSettings.apiPort
         val secret = AppSettings.apiSecret
+        val useShizuku = ShizukuSource.granted()
+        sourceName = if (useShizuku) "Shizuku" else "Clash API"
+        ConnTracker.metricBytes = !useShizuku
+        // У Shizuku нет счётчиков трафика: боевой — самый свежий UDP-сокет игры
+        ConnTracker.battleOverride = if (useShizuku) ({ newestGameUdp() }) else null
+        val gameUid = try {
+            packageManager.getApplicationInfo(CaptureVpnService.GAME_PACKAGE, 0).uid
+        } catch (_: Exception) {
+            -1
+        }
+
         pollThread = Thread({
             var failures = 0
+            var reader: IProcReader? = null
             while (isRunning) {
                 try {
-                    poll(ClashApi.connections(port, secret, CaptureVpnService.GAME_PACKAGE))
+                    if (useShizuku) {
+                        val r = reader ?: ShizukuSource.bind() ?: throw RuntimeException("Shizuku не отвечает")
+                        reader = r
+                        val now = System.currentTimeMillis()
+                        poll(ShizukuSource.sockets(r, gameUid).map {
+                            ClashApi.Conn(
+                                id = (if (it.udp) "u" else "t") + it.inode + ":" + it.remoteIp + ":" + it.remotePort,
+                                udp = it.udp, dstIp = it.remoteIp, dstPort = it.remotePort, srcPort = it.localPort,
+                                upload = 0, download = 0, startMs = now, isGame = true,
+                            )
+                        })
+                    } else {
+                        poll(ClashApi.connections(port, secret, CaptureVpnService.GAME_PACKAGE))
+                    }
                     failures = 0
                 } catch (e: Exception) {
                     Log.w(TAG, "poll failed", e)
+                    reader = null
                     if (++failures >= 5) {
                         handler.post {
-                            lastError = "VPN-клиент перестал отвечать (Clash API на порту $port). " +
-                                "Проверь, что он подключён, и нажми СТАРТ ещё раз."
+                            lastError = if (useShizuku) {
+                                "Shizuku перестал отвечать (${e.message}). Скорее всего, телефон перезагружался — запусти Shizuku заново."
+                            } else {
+                                "VPN-клиент перестал отдавать список соединений (порт $port). " +
+                                    "Проверь, что VPN подключён, и нажми СТАРТ ещё раз."
+                            }
                             stopMonitor()
                             stopSelf()
                         }
@@ -153,7 +192,10 @@ class MonitorService : Service() {
 
         pingThread = Thread({
             while (isRunning) {
-                ConnTracker.battleServer()?.let { pinger.probe(it.conn.dstIp) }
+                ConnTracker.battleServer()?.let {
+                    pinger.probe(it.conn.dstIp)
+                    lastPing = pinger.last
+                }
                 try {
                     Thread.sleep(2000)
                 } catch (_: InterruptedException) {
@@ -166,6 +208,13 @@ class MonitorService : Service() {
             overlay = OverlayController(this).also { it.show() }
         }
         handler.post(ticker)
+    }
+
+    private fun newestGameUdp(): ConnTracker.Battle? {
+        val c = ConnTracker.snapshot()
+            .filter { !it.closed && it.proto == ConnTracker.PROTO_UDP && it.dstPort !in setOf(53, 123, 443) }
+            .maxByOrNull { it.key } ?: return null
+        return ConnTracker.Battle(c, 0)
     }
 
     private fun poll(conns: List<ClashApi.Conn>) {
@@ -226,10 +275,11 @@ class MonitorService : Service() {
         }
         val warn = AppSettings.alertEnabled && geo != null && !allowed
         val prefix = if (warn) "⚠ " else ""
-        val kb = battle.pktsLast10s / 1024
-        ov.update("$prefix$place · $pingText\n$ip:${battle.conn.dstPort} · $kb КБ/10с", color)
+        val activity = if (ConnTracker.metricBytes) " · ${battle.pktsLast10s / 1024} КБ/10с" else " · UDP"
+        ov.update("$prefix$place · $pingText\n$ip:${battle.conn.dstPort}$activity", color)
 
-        if (warn && ip != lastAlertIp && battle.pktsLast10s >= MIN_BATTLE_BYTES) {
+        val enough = !ConnTracker.metricBytes || battle.pktsLast10s >= MIN_BATTLE_BYTES
+        if (warn && ip != lastAlertIp && enough) {
             lastAlertIp = ip
             try {
                 getSystemService(Vibrator::class.java)
@@ -242,6 +292,8 @@ class MonitorService : Service() {
     private fun stopMonitor() {
         handler.removeCallbacks(ticker)
         isRunning = false
+        ConnTracker.battleOverride = null
+        ShizukuSource.unbind()
         pollThread?.interrupt()
         pollThread = null
         pingThread?.interrupt()

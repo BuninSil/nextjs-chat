@@ -184,6 +184,7 @@ class CaptureVpnService : VpnService() {
         tunPfd = pfd
         isRunning = true
         ConnTracker.metricBytes = false
+        ConnTracker.battleOverride = null
         ConnTracker.newSession()
 
         captureThread = Thread({

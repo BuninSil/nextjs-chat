@@ -68,7 +68,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSettings).setOnClickListener { showSettings() }
 
         findViewById<Button>(R.id.btnStart).setOnClickListener { startFlow() }
-        findViewById<Button>(R.id.btnStop).setOnClickListener { CaptureVpnService.stop(this) }
+        findViewById<Button>(R.id.btnStop).setOnClickListener {
+            CaptureVpnService.stop(this)
+            MonitorService.stop(this)
+        }
         findViewById<Button>(R.id.btnLog).setOnClickListener {
             startActivity(Intent(this, LogActivity::class.java))
         }
@@ -81,11 +84,11 @@ class MainActivity : AppCompatActivity() {
 
         AppSettings.load(this)
         val modeGroup = findViewById<RadioGroup>(R.id.modeGroup)
-        modeGroup.check(if (AppSettings.chainEnabled) R.id.modeChain else R.id.modeDirect)
+        modeGroup.check(if (AppSettings.mode == AppSettings.MODE_DIRECT) R.id.modeDirect else R.id.modeChain)
         modeGroup.setOnCheckedChangeListener { _, id ->
-            AppSettings.mode = if (id == R.id.modeChain) AppSettings.MODE_CHAIN else AppSettings.MODE_DIRECT
+            AppSettings.mode = if (id == R.id.modeChain) AppSettings.MODE_API else AppSettings.MODE_DIRECT
             AppSettings.save(this)
-            if (CaptureVpnService.isRunning) toast("Режим поменяется после СТОП → СТАРТ")
+            if (anyRunning()) toast("Режим поменяется после СТОП → СТАРТ")
         }
 
         if (savedInstanceState == null && AppSettings.autoCheckUpdates) checkUpdate(manual = false)
@@ -281,6 +284,7 @@ class MainActivity : AppCompatActivity() {
     /** СТАРТ: проверяем всё по шагам и на каждой проблеме объясняем, что нажать. */
     private fun startFlow() {
         CaptureVpnService.lastError = null
+        MonitorService.lastError = null
         shownError = null
         AppSettings.load(this)
 
@@ -306,7 +310,71 @@ class MainActivity : AppCompatActivity() {
             )
             return
         }
-        if (AppSettings.chainEnabled) prepareChain { launchVpn() } else launchVpn()
+        when (AppSettings.mode) {
+            AppSettings.MODE_API -> startMonitorFlow()
+            AppSettings.MODE_CHAIN -> prepareChain { launchVpn() }
+            else -> launchVpn()
+        }
+    }
+
+    private fun anyRunning() = CaptureVpnService.isRunning || MonitorService.isRunning
+
+    /**
+     * Режим «С моим VPN»: свой VPN не поднимаем. Список соединений берём у
+     * VPN-клиента (Clash API), а если запущен Shizuku — из таблицы сокетов.
+     */
+    private fun startMonitorFlow() {
+        CaptureVpnService.stop(this)
+        if (ShizukuSource.granted()) {
+            MonitorService.start(this)
+            return
+        }
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Подключаюсь к VPN-клиенту")
+            .setMessage("Секунду…")
+            .setCancelable(false)
+            .show()
+        Thread {
+            val found = ClashApi.find(AppSettings.apiPort, AppSettings.apiSecret) { msg ->
+                runOnUiThread { progress.setMessage(msg) }
+            }
+            runOnUiThread {
+                progress.dismiss()
+                when (found?.second) {
+                    ClashApi.Probe.OK -> {
+                        AppSettings.apiPort = found.first
+                        AppSettings.save(this)
+                        MonitorService.start(this)
+                        toast("Подключился к VPN-клиенту, порт ${found.first}")
+                    }
+                    ClashApi.Probe.NEED_SECRET -> askSecret(found.first)
+                    else -> showInfo(
+                        "VPN-клиент не отдаёт соединения",
+                        "Не нашёл у твоего VPN-клиента Clash API — через него приложение узнаёт сервер игры, не включая свой VPN.\n\n" +
+                            "• Проверь, что VPN подключён.\n" +
+                            "• Работает с клиентами на sing-box и mihomo: Karing, Hiddify, NekoBox, FlClash, Clash Meta. " +
+                            "Если в настройках клиента есть «Clash API», «External controller», «Контроллер» или «Dashboard» — включи.\n" +
+                            "• С v2rayNG, Happ, v2RayTun так не получится: они список соединений никому не отдают."
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun askSecret(port: Int) {
+        val input = EditText(this).apply { hint = "секрет (secret)" }
+        AlertDialog.Builder(this)
+            .setTitle("Нужен пароль от Clash API")
+            .setMessage("VPN-клиент на порту $port просит секрет. Он есть в настройках клиента рядом с «Clash API» / «External controller» (поле secret).")
+            .setView(input)
+            .setPositiveButton("Готово") { _, _ ->
+                AppSettings.apiPort = port
+                AppSettings.apiSecret = input.text.toString().trim()
+                AppSettings.save(this)
+                startMonitorFlow()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private fun launchVpn() {
@@ -443,9 +511,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        val err = CaptureVpnService.lastError
+        val err = CaptureVpnService.lastError ?: MonitorService.lastError
         when {
-            CaptureVpnService.isRunning -> {
+            anyRunning() -> {
                 statusBig.text = "● РАБОТАЕТ — запускай игру"
                 statusBig.setTextColor(0xFF2E7D32.toInt())
             }
@@ -460,24 +528,29 @@ class MainActivity : AppCompatActivity() {
         }
         if (err != null && err != shownError) {
             shownError = err
-            showInfo("Не запустилось", err + if (AppSettings.chainEnabled) "\n\n" + clientInstructions() else "")
+            showInfo("Не запустилось", err + if (AppSettings.mode == AppSettings.MODE_CHAIN) "\n\n" + clientInstructions() else "")
         }
 
         val sb = StringBuilder()
         sb.append("Игра: ").append(if (isGameInstalled()) "установлена" else "НЕ установлена").append('\n')
         sb.append("Оверлей: ").append(if (Settings.canDrawOverlays(this)) "разрешён" else "нет разрешения").append('\n')
         sb.append("Режим: ").append(
-            if (AppSettings.chainEnabled) "через ${appLabel(AppSettings.clientPackage)} (SOCKS5 ${AppSettings.socksHost}:${AppSettings.socksPort})"
-            else "только игра, напрямую"
+            when (AppSettings.mode) {
+                AppSettings.MODE_API -> "с твоим VPN, свой VPN не включаю" +
+                    (if (MonitorService.isRunning) " (источник: ${MonitorService.sourceName})" else "")
+                AppSettings.MODE_CHAIN -> "цепочка через SOCKS5 ${AppSettings.socksHost}:${AppSettings.socksPort}"
+                else -> "без стороннего VPN, игра напрямую"
+            }
         ).append('\n')
 
         val battle = ConnTracker.battleServer()
         if (battle != null) {
             val geo = GeoDb.lookup(battle.conn.dstIp)
-            val ping = CaptureVpnService.pinger?.last?.takeIf { it.ip == battle.conn.dstIp }
+            val ping = (CaptureVpnService.pinger?.last ?: MonitorService.lastPing)?.takeIf { it.ip == battle.conn.dstIp }
             sb.append("\nБоевой сервер: ${battle.conn.dstIp}:${battle.conn.dstPort}\n")
             if (geo != null) sb.append("${GeoDb.flag(geo.countryCode)} ${geo.country}, ${geo.city}\n")
-            sb.append("Пакетов за 10 с: ${battle.pktsLast10s}\n")
+            if (MonitorService.isRunning && ConnTracker.metricBytes) sb.append("Трафик за 10 с: ${battle.pktsLast10s / 1024} КБ\n")
+            else if (!MonitorService.isRunning) sb.append("Пакетов за 10 с: ${battle.pktsLast10s}\n")
             if (ping != null && ping.ms >= 0) sb.append("Пинг: ${ping.ms} ms (${ping.method})\n")
         } else {
             sb.append("\nБоевой сервер: пока нет UDP-трафика\n")

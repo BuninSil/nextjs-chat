@@ -27,13 +27,13 @@
                 android:id="@+id/modeDirect"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Без VPN — игра напрямую" />
+                android:text="Без VPN — играю напрямую" />
 
             <RadioButton
                 android:id="@+id/modeChain"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="С моим VPN (Karing, v2rayNG, Hiddify…)" />
+                android:text="С моим VPN — оставляю его включённым" />
         </RadioGroup>
 
         <TextView
