@@ -57,7 +57,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(profileCard(AppSettings.PROFILE_GAME, "🎮  Для Mobile Legends",
             "VPN + плашка с сервером матча, игровой режим, лог боёв, запуск игры"))
         root.addView(Ui.space(this, 8f))
-        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "🌐  Просто VPN (Fast VPN)",
+        root.addView(profileCard(AppSettings.PROFILE_SIMPLE, "🌐  Просто VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
 
         // ---------- Режим (только для игры) ----------
@@ -162,7 +162,7 @@ class SettingsActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, d(28f), 0, d(2f))
         }, LinearLayout.LayoutParams(-1, -2))
-        root.addView(Ui.text(this, "${if (AppSettings.simple) "Fast VPN" else "MLBB Server"} · версия ${BuildConfig.VERSION_NAME}", 11f, Ui.MUTED).apply {
+        root.addView(Ui.text(this, "Fast VPN · версия ${BuildConfig.VERSION_NAME}", 11f, Ui.MUTED).apply {
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, -2))
 

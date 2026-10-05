@@ -74,12 +74,17 @@ object WifiBoost {
         else -> "очень слабый"
     }
 
-    /** Подсказки, что поправить в Wi-Fi для игры. */
+    /** Подсказки, что поправить в Wi-Fi. */
     fun advice(i: Info): List<String> {
         val out = ArrayList<String>()
         if (i.band == "2.4 ГГц") out.add("Ты на 2.4 ГГц — если роутер умеет 5 ГГц, переключись: меньше помех и скачков пинга")
         if (i.rssi < -70) out.add("Слабый сигнал — подойди ближе к роутеру или убери преграды")
-        i.routerPingMs?.let { if (it > 15) out.add("До роутера $it ms — лагает сам Wi-Fi, а не игра (кто-то качает или много помех)") }
+        i.routerPingMs?.let {
+            if (it > 15) out.add(
+                "До роутера $it ms — тормозит сам Wi-Fi" + (if (AppSettings.simple) "" else ", а не игра") +
+                    " (кто-то качает или много помех)"
+            )
+        }
         return out
     }
 }

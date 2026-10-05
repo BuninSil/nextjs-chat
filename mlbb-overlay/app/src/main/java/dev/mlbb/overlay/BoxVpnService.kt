@@ -92,7 +92,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
         )
         val n = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
-            .setContentTitle(if (AppSettings.simple) "Fast VPN" else "MLBB Server — VPN")
+            .setContentTitle("Fast VPN")
             .setContentText(
                 if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры"
                 else "Подключено · быстрее нас — только свет ⚡"
@@ -207,7 +207,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
     override fun openTun(options: TunOptions): Int {
         if (prepare(this) != null) throw Exception("нет разрешения на VPN")
-        val b = Builder().setSession("MLBB Server").setMtu(options.mtu)
+        val b = Builder().setSession("Fast VPN").setMtu(options.mtu)
         if (Build.VERSION.SDK_INT >= 29) b.setMetered(false)
 
         val v4 = options.inet4Address

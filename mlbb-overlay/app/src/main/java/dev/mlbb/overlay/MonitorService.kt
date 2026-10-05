@@ -119,7 +119,7 @@ class MonitorService : Service() {
         )
         val n = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
-            .setContentTitle("MLBB Server")
+            .setContentTitle("Fast VPN")
             .setContentText("Слежу за сервером игры через VPN-клиент")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())

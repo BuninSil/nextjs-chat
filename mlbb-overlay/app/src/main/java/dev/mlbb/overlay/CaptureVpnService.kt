@@ -95,7 +95,7 @@ class CaptureVpnService : VpnService() {
         )
         val n = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
-            .setContentTitle("MLBB Server Overlay")
+            .setContentTitle("Fast VPN")
             .setContentText("Слежу за соединениями Mobile Legends")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())
@@ -148,7 +148,7 @@ class CaptureVpnService : VpnService() {
         }
 
         val builder = Builder()
-            .setSession("MLBB Server Overlay")
+            .setSession("Fast VPN")
             .setMtu(1500)
             .addAddress("10.215.173.1", 30)
             .addRoute("0.0.0.0", 0)

@@ -99,7 +99,7 @@ class MainActivity : AppCompatActivity() {
                 "${Ui.SLOGAN}\n\n" +
                 "🎮 Для Mobile Legends — VPN плюс плашка с сервером матча поверх игры, российские серверы " +
                     "в приоритете, запуск игры одной кнопкой.\n\n" +
-                    "🌐 Просто VPN (Fast VPN) — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
+                    "🌐 Просто VPN — только быстрый VPN по твоей подписке, ничего про игру.\n\n" +
                     "Поменять можно потом в Настройках."
             )
             .setCancelable(false)
@@ -167,7 +167,7 @@ class MainActivity : AppCompatActivity() {
         // Заголовок
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        titleCol.addView(Ui.text(this, if (AppSettings.simple) "Fast VPN" else "MLBB Server", 22f, bold = true))
+        titleCol.addView(Ui.text(this, "Fast VPN", 22f, bold = true))
         titleCol.addView(Ui.text(this, Ui.SLOGAN, 12f, Ui.GREEN))
         top.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(Ui.button(this, " ⚙ ") { showSettings() })
@@ -421,7 +421,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             wifiCard.visibility = android.view.View.VISIBLE
             val router = wi.routerPingMs?.let { " · роутер $it ms" } ?: ""
-            val boost = if (WifiBoost.active) "  ⚡ игровой режим" else ""
+            val boost = if (WifiBoost.active) (if (AppSettings.simple) "  ⚡ ускорен" else "  ⚡ игровой режим") else ""
             wifiLine.text = "📶 Wi-Fi ${wi.band} · сигнал ${WifiBoost.signalText(wi.rssi)} (${wi.rssi} dBm)$router$boost"
             val adv = WifiBoost.advice(wi)
             wifiAdvice.text = adv.joinToString("\n") { "• $it" }
@@ -482,7 +482,7 @@ class MainActivity : AppCompatActivity() {
             }
             else -> {
                 setupTitle.text = "Шаг $n из $total: разреши плашку поверх игры"
-                setupText.text = "В открывшемся списке найди «MLBB Server» и включи «Поверх других окон», потом вернись сюда."
+                setupText.text = "В открывшемся списке найди «Fast VPN» и включи «Поверх других окон», потом вернись сюда."
                 setupButton.text = "Открыть разрешение"
                 setupButton.setOnClickListener {
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -564,7 +564,7 @@ class MainActivity : AppCompatActivity() {
         if (forGame && !Settings.canDrawOverlays(this)) {
             showInfo(
                 "Разреши плашку поверх игры",
-                "Найди в списке «MLBB Server» и включи «Поверх других окон». Потом вернись и нажми ИГРАТЬ.",
+                "Найди в списке «Fast VPN» и включи «Поверх других окон». Потом вернись и нажми ИГРАТЬ.",
                 "Открыть настройки" to {
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 }
