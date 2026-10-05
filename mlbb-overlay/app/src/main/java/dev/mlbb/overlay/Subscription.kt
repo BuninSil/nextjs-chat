@@ -50,7 +50,19 @@ object Subscription {
      */
     private val userAgents = listOf(
         "v2rayNG/1.9.16", "Happ/3.6.0", "Hiddify/2.5.7", "Karing/1.1.2.606", "sing-box/1.11.4", "v2RayTun/5.1",
+        "ClashMetaForAndroid/2.11.1.Meta", "clash-verge/v2.0.3", "Streisand", "FoXray",
     )
+
+    /** Подписка, вставленная текстом (ссылки серверов или base64), а не URL. */
+    fun importText(ctx: Context, text: String): Int {
+        val parsed = parseAll(text)
+        if (parsed.isEmpty()) throw RuntimeException("в тексте не нашлось ссылок серверов (vless://, trojan://, ss://…)")
+        file(ctx).writeText(text)
+        infoFile(ctx).delete()
+        info = null
+        nodes = parsed
+        return parsed.size
+    }
 
     private fun hwid(ctx: Context): String {
         val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -74,7 +86,12 @@ object Subscription {
                 c.setRequestProperty("x-device-model", android.os.Build.MODEL)
                 val code = c.responseCode
                 if (code != 200) {
-                    lastProblem = "сервер подписки ответил HTTP $code"
+                    // Панели обычно объясняют отказ текстом — показываем его
+                    val why = try {
+                        c.errorStream?.bufferedReader()?.use { it.readText() }
+                            ?.replace(Regex("<[^>]+>"), " ")?.replace(Regex("\\s+"), " ")?.trim()?.take(160)
+                    } catch (_: Exception) { null }
+                    lastProblem = "сервер подписки ответил HTTP $code" + (why?.takeIf { it.isNotEmpty() }?.let { " («$it»)" } ?: "")
                     continue
                 }
                 val body = c.inputStream.bufferedReader().use { it.readText() }
@@ -95,8 +112,9 @@ object Subscription {
             }
         }
         throw RuntimeException(
-            "$lastProblem. Возможно, в подписке закончился лимит устройств — " +
-                "проверь в боте/личном кабинете VPN, можно ли добавить ещё одно устройство."
+            "$lastProblem.\n\nЕсли там про устройства (device / HWID / limit) — в боте или кабинете VPN " +
+                "удали старое устройство или увеличь лимит. Обходной путь: открой «Подписка» и вставь " +
+                "вместо ссылки сами серверы (строки vless://, trojan://… или base64-блок)."
         )
     }
 

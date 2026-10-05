@@ -478,12 +478,15 @@ class MainActivity : AppCompatActivity() {
             setPadding(d(20f), d(8f), d(20f), 0)
         }
         box.addView(TextView(this).apply {
-            text = "Ссылка подписки — та же, что в Karing, Hiddify или v2rayNG."
+            text = "Ссылка подписки — та же, что в Karing, Hiddify или v2rayNG.\n" +
+                "Можно вставить и сами серверы: строки vless://, trojan://… или base64-блок."
         })
         val input = EditText(this).apply {
             hint = "https://…"
             setText(AppSettings.subUrl)
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            // Многострочное: можно вставить и список серверов
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            maxLines = 4
         }
         box.addView(input)
         box.addView(TextView(this).apply {
@@ -515,7 +518,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSubscription(url: String) {
         if (!url.startsWith("http")) {
-            toast("Это не похоже на ссылку подписки")
+            // Вставили сами серверы, а не ссылку
+            try {
+                val n = Subscription.importText(applicationContext, url)
+                toast("Готово: серверов $n")
+            } catch (e: Exception) {
+                showInfo("Не получилось", e.message ?: "")
+            }
             return
         }
         AppSettings.subUrl = url
@@ -523,15 +532,17 @@ class MainActivity : AppCompatActivity() {
         val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку").setMessage("Секунду…")
             .setCancelable(false).show()
         Thread {
+            var error: String? = null
             val msg = try {
                 val n = Subscription.update(applicationContext, url)
                 "Готово: серверов $n" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
             } catch (e: Exception) {
-                "Не получилось: ${e.message}"
+                error = e.message
+                ""
             }
             runOnUiThread {
                 progress.dismiss()
-                toast(msg)
+                if (error != null) showInfo("Подписка не загрузилась", error!!) else toast(msg)
             }
         }.start()
     }
