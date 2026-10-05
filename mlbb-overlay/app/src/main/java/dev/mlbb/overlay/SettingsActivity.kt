@@ -66,6 +66,10 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Встроенный VPN ----------
         root.addView(section("Встроенный VPN"))
         root.addView(Ui.card(this).apply {
+            addView(switchRow("ИГРАТЬ сразу запускает MLBB", "Выключи, чтобы кнопка просто подключала VPN — как в Karing", AppSettings.autoLaunch) {
+                AppSettings.autoLaunch = it
+            })
+            addView(divider())
             addView(switchRow("Автовыбор сервера", "Самый быстрый и стабильный при нажатии ИГРАТЬ", AppSettings.autoSelect) {
                 AppSettings.autoSelect = it
             })

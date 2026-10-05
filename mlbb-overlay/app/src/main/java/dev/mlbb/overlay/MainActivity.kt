@@ -76,7 +76,24 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.hide()
         setContentView(buildUi())
         Thread { GeoDb.load(applicationContext) }.start()
-        if (savedInstanceState == null && AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+        if (savedInstanceState == null) {
+            CrashReport.take(this)?.let { showCrash(it) }
+            if (AppSettings.autoCheckUpdates) checkUpdate(manual = false)
+        }
+    }
+
+    /** Прошлый запуск упал — показываем причину, чтобы её можно было скинуть разработчику. */
+    private fun showCrash(text: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Прошлый запуск упал")
+            .setMessage("Скопируй и скинь разработчику — по этому тексту видно причину.\n\n" + text.take(3000))
+            .setPositiveButton("Скопировать") { _, _ ->
+                val cm = getSystemService(ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
+                toast("Скопировано")
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
     }
 
     override fun onResume() {
@@ -191,6 +208,8 @@ class MainActivity : AppCompatActivity() {
             Ui.button(this, "📋  Лог") { startActivity(Intent(this, LogActivity::class.java)) },
             Ui.button(this, "⚙  Настройки") { showSettings() },
         ))
+        root.addView(Ui.space(this, 10f))
+        root.addView(Ui.button(this, "⚡  Тест скорости интернета") { speedTest() }, LinearLayout.LayoutParams(-1, -2))
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
@@ -247,8 +266,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        playButton.text = if (running) "ИГРАТЬ\n" else "ИГРАТЬ"
-        playButton.append(if (running) "запустить MLBB" else "")
+        playButton.text = when {
+            running -> "ЗАПУСТИТЬ\nMLBB"
+            AppSettings.autoLaunch || AppSettings.mode != AppSettings.MODE_BOX -> "ИГРАТЬ"
+            else -> "ПОДКЛЮЧИТЬ"
+        }
+        playButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (running) 22f else 26f)
         stopButton.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
 
         val wi = wifiInfo
@@ -361,9 +384,9 @@ class MainActivity : AppCompatActivity() {
             }
             AppSettings.MODE_DIRECT -> withVpnPermission {
                 CaptureVpnService.start(this)
-                handler.postDelayed({ if (CaptureVpnService.isRunning) launchGame() }, 1500)
+                handler.postDelayed({ if (CaptureVpnService.isRunning && AppSettings.autoLaunch) launchGame() }, 1500)
             }
-            else -> startMonitorFlow { launchGame() }
+            else -> startMonitorFlow { if (AppSettings.autoLaunch) launchGame() }
         }
     }
 
@@ -407,7 +430,7 @@ class MainActivity : AppCompatActivity() {
                 val n = nodeByTag(AppSettings.selectedTag)
                 val r = n?.let { ServerTester.results[it.tag] }
                 if (n != null) toast("Сервер: ${Ui.cleanName(n)}" + (r?.let { " · ${it.medianMs} ms" } ?: ""))
-                launchGame()
+                if (AppSettings.autoLaunch) launchGame()
             }
         }.start()
     }
@@ -548,6 +571,68 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ----------------------------- Настройки -----------------------------
+
+    // ----------------------------- Тест скорости -----------------------------
+
+    @Volatile private var speedRunning = false
+
+    private fun speedTest() {
+        if (speedRunning) return
+        speedRunning = true
+        val d = { v: Float -> Ui.dp(this, v) }
+        val via = if (BoxVpnService.isRunning) "через VPN" else "напрямую"
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(Ui.CARD, d(22f).toFloat())
+            setPadding(d(22f), d(22f), d(22f), d(18f))
+        }
+        card.addView(Ui.text(this, "⚡ Тест скорости", 20f, bold = true))
+        card.addView(Ui.text(this, "Cloudflare · $via", 13f, Ui.MUTED).apply { setPadding(0, d(4f), 0, d(16f)) })
+        fun metric(title: String): TextView {
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(6f), 0, d(6f)) }
+            row.addView(Ui.text(this, title, 15f, Ui.MUTED), LinearLayout.LayoutParams(0, -2, 1f))
+            val v = Ui.text(this, "—", 20f, bold = true)
+            row.addView(v)
+            card.addView(row)
+            return v
+        }
+        val ping = metric("Пинг")
+        val jitter = metric("Разброс")
+        val down = metric("Загрузка")
+        val up = metric("Отдача")
+        val state = Ui.text(this, "Меряю пинг…", 13f, Ui.MUTED).apply { setPadding(0, d(10f), 0, 0) }
+        card.addView(state)
+        val dlg = android.app.Dialog(this)
+        dlg.setContentView(card)
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dlg.window?.setLayout((resources.displayMetrics.widthPixels * 0.88).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dlg.setOnDismissListener { speedRunning = false }
+        dlg.show()
+
+        fun mbps(v: Double) = if (v >= 100) "%.0f Мбит/с".format(v) else "%.1f Мбит/с".format(v)
+        Thread {
+            val p = SpeedTest.ping()
+            runOnUiThread {
+                ping.text = p?.let { "${it.first} ms" } ?: "✖"
+                ping.setTextColor(Ui.pingColor(p?.first))
+                jitter.text = p?.let { "${it.second} ms" } ?: "—"
+                state.text = "Меряю загрузку…"
+            }
+            if (!speedRunning) return@Thread
+            val dn = SpeedTest.download { v -> runOnUiThread { down.text = mbps(v) } }
+            runOnUiThread {
+                down.text = dn?.let { mbps(it) } ?: "✖"
+                state.text = "Меряю отдачу…"
+            }
+            if (!speedRunning) return@Thread
+            val upv = SpeedTest.upload { v -> runOnUiThread { up.text = mbps(v) } }
+            runOnUiThread {
+                up.text = upv?.let { mbps(it) } ?: "✖"
+                state.text = if (p == null && dn == null) "Нет доступа к интернету" else "Готово"
+                speedRunning = false
+            }
+        }.start()
+    }
 
     private fun showSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))

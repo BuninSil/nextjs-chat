@@ -21,6 +21,8 @@ object AppSettings {
     @Volatile var battleDirect = false
     /** Режим низкой задержки Wi-Fi во время игры */
     @Volatile var wifiBoost = true
+    /** ИГРАТЬ сразу запускает MLBB; если выключено — кнопка просто подключает VPN */
+    @Volatile var autoLaunch = true
 
     @Volatile var mode = MODE_DIRECT
     val chainEnabled get() = mode == MODE_CHAIN
@@ -50,6 +52,7 @@ object AppSettings {
         onlyGame = p.getBoolean("onlyGame", false)
         battleDirect = p.getBoolean("battleDirect", false)
         wifiBoost = p.getBoolean("wifiBoost", true)
+        autoLaunch = p.getBoolean("autoLaunch", true)
         // Режим цепочки убран из интерфейса: он включал наш VPN и выбивал VPN пользователя
         if (mode == MODE_CHAIN) mode = MODE_API
         // Версия 2.0: основной режим — встроенный VPN
@@ -78,6 +81,7 @@ object AppSettings {
             .putBoolean("onlyGame", onlyGame)
             .putBoolean("battleDirect", battleDirect)
             .putBoolean("wifiBoost", wifiBoost)
+            .putBoolean("autoLaunch", autoLaunch)
             .putInt("apiPort", apiPort)
             .putString("apiSecret", apiSecret)
             .putString("socksHost", socksHost)

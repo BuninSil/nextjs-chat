@@ -12,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -109,6 +110,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private fun startBox() {
         try {
             lastError = null
+            VpnLog.clear()
             AppSettings.load(this)
             Subscription.load(this)
             val nodes = Subscription.nodes
@@ -121,6 +123,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
                     workingPath = work.path
                     tempPath = cacheDir.path
                 })
+                // Паники ядра (Go) пишутся в stderr — сохраняем, чтобы показать при следующем запуске
+                try {
+                    Libbox.redirectStderr(File(filesDir, CrashReport.GO).path)
+                } catch (_: Exception) {
+                }
                 setupDone = true
             }
 
@@ -140,7 +147,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
             MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
-            lastError = "Не удалось подключить VPN: ${e.message}"
+            val tail = VpnLog.tail(8)
+            lastError = "Не удалось подключить VPN: ${e.message}" + if (tail.isNotEmpty()) "\n\nЖурнал ядра:\n$tail" else ""
             stopBox()
             stopSelf()
         } finally {
@@ -254,10 +262,20 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
             override fun onAvailable(network: Network) = update(network)
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = update(network)
-            override fun onLost(network: Network) = update(cm.activeNetwork)
+            override fun onLost(network: Network) = update(null)
         }
         networkCallback = cb
-        cm.registerDefaultNetworkCallback(cb)
+        // Важно: не «сеть по умолчанию» — после подъёма VPN ею для нас станет сам туннель,
+        // ядро привяжется к нему и уйдёт в петлю. Берём лучшую сеть БЕЗ VPN, как официальный клиент.
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        if (Build.VERSION.SDK_INT >= 31) {
+            cm.registerBestMatchingNetworkCallback(request, cb, android.os.Handler(android.os.Looper.getMainLooper()))
+        } else {
+            cm.requestNetwork(request, cb)
+        }
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
@@ -308,6 +326,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {}
     override fun writeLog(message: String) {
         Log.i("sing-box", message)
+        VpnLog.add(message)
     }
 
     private class StrIter(items: List<String>) : StringIterator {
