@@ -213,6 +213,7 @@ class CaptureVpnService : VpnService() {
         }, "pinger").also { it.start() }
 
         uidResolver = UidResolver(this)
+        WifiBoost.acquire(this)
         lastAlertIp = null
         if (Settings.canDrawOverlays(this)) {
             overlay = OverlayController(this).also { it.show() }
@@ -322,6 +323,7 @@ class CaptureVpnService : VpnService() {
         tunPfd = null
         overlay?.hide()
         overlay = null
+        WifiBoost.release()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 

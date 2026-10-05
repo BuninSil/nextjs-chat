@@ -141,6 +141,7 @@ class MonitorService : Service() {
         lastSeen = HashMap()
         lastAlertIp = null
         isRunning = true
+        WifiBoost.acquire(this)
 
         val builtIn = fixedApiPort > 0
         val port = if (builtIn) fixedApiPort else AppSettings.apiPort
@@ -306,6 +307,7 @@ class MonitorService : Service() {
         isRunning = false
         ConnTracker.battleOverride = null
         ShizukuSource.unbind()
+        WifiBoost.release()
         pollThread?.interrupt()
         pollThread = null
         pingThread?.interrupt()

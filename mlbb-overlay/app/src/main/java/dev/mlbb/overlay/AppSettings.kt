@@ -19,6 +19,8 @@ object AppSettings {
     @Volatile var onlyGame = false
     /** Матч (UDP игры) напрямую, мимо туннеля */
     @Volatile var battleDirect = false
+    /** Режим низкой задержки Wi-Fi во время игры */
+    @Volatile var wifiBoost = true
 
     @Volatile var mode = MODE_DIRECT
     val chainEnabled get() = mode == MODE_CHAIN
@@ -47,6 +49,7 @@ object AppSettings {
         autoSelect = p.getBoolean("autoSelect", true)
         onlyGame = p.getBoolean("onlyGame", false)
         battleDirect = p.getBoolean("battleDirect", false)
+        wifiBoost = p.getBoolean("wifiBoost", true)
         // Режим цепочки убран из интерфейса: он включал наш VPN и выбивал VPN пользователя
         if (mode == MODE_CHAIN) mode = MODE_API
         // Версия 2.0: основной режим — встроенный VPN
@@ -74,6 +77,7 @@ object AppSettings {
             .putBoolean("autoSelect", autoSelect)
             .putBoolean("onlyGame", onlyGame)
             .putBoolean("battleDirect", battleDirect)
+            .putBoolean("wifiBoost", wifiBoost)
             .putInt("apiPort", apiPort)
             .putString("apiSecret", apiSecret)
             .putString("socksHost", socksHost)

@@ -22,7 +22,8 @@ android {
         buildConfigField("String", "AUTHOR", "\"BuninSil\"")
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            // Только телефонные архитектуры: VPN-ядро большое, x86 на телефонах не нужен
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 

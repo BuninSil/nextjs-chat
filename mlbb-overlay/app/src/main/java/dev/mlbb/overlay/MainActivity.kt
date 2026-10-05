@@ -42,6 +42,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playButton: TextView
     private lateinit var stopButton: TextView
     private lateinit var infoLine: TextView
+    private lateinit var wifiCard: LinearLayout
+    private lateinit var wifiLine: TextView
+    private lateinit var wifiAdvice: TextView
+    @Volatile private var wifiInfo: WifiBoost.Info? = null
+    @Volatile private var wifiThread: Thread? = null
 
     private var shownError: String? = null
     private var afterVpnPermission: (() -> Unit)? = null
@@ -83,11 +88,20 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         handler.post(refresher)
+        // Замер Wi-Fi (пинг до роутера) — в фоне раз в 5 секунд
+        wifiThread = Thread {
+            while (wifiThread === Thread.currentThread()) {
+                wifiInfo = try { WifiBoost.info(applicationContext) } catch (_: Exception) { null }
+                try { Thread.sleep(5000) } catch (_: InterruptedException) { break }
+            }
+        }.also { it.start() }
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(refresher)
+        wifiThread?.interrupt()
+        wifiThread = null
     }
 
     // ------------------------------- UI -------------------------------
@@ -142,6 +156,15 @@ class MainActivity : AppCompatActivity() {
 
         stopButton = Ui.button(this, "■  Отключить VPN") { stopAll() }.apply { gravity = Gravity.CENTER }
         root.addView(stopButton)
+        root.addView(Ui.space(this, 12f))
+
+        // Wi-Fi: диапазон, сигнал, роутер, подсказки
+        wifiCard = Ui.card(this)
+        wifiLine = Ui.text(this, "", 14f)
+        wifiAdvice = Ui.text(this, "", 12f, Ui.YELLOW)
+        wifiCard.addView(wifiLine)
+        wifiCard.addView(wifiAdvice)
+        root.addView(wifiCard)
         root.addView(Ui.space(this, 12f))
 
         // Боевой сервер
@@ -233,6 +256,19 @@ class MainActivity : AppCompatActivity() {
         playButton.text = if (running) "ИГРАТЬ\n" else "ИГРАТЬ"
         playButton.append(if (running) "запустить MLBB" else "")
         stopButton.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
+
+        val wi = wifiInfo
+        if (wi == null) {
+            wifiCard.visibility = android.view.View.GONE
+        } else {
+            wifiCard.visibility = android.view.View.VISIBLE
+            val router = wi.routerPingMs?.let { " · роутер $it ms" } ?: ""
+            val boost = if (WifiBoost.active) "  ⚡ игровой режим" else ""
+            wifiLine.text = "📶 Wi-Fi ${wi.band} · сигнал ${WifiBoost.signalText(wi.rssi)} (${wi.rssi} dBm)$router$boost"
+            val adv = WifiBoost.advice(wi)
+            wifiAdvice.text = adv.joinToString("\n") { "• $it" }
+            wifiAdvice.visibility = if (adv.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        }
 
         val battle = ConnTracker.battleServer()
         if (battle == null) {
@@ -532,6 +568,7 @@ class MainActivity : AppCompatActivity() {
         val auto = check("Автовыбор самого быстрого сервера при ИГРАТЬ", AppSettings.autoSelect)
         val onlyGame = check("Через VPN только игра (весь канал — ей)", AppSettings.onlyGame)
         val battleDirect = check("Матч напрямую, мимо VPN (минимальный пинг, если оператор пускает)", AppSettings.battleDirect)
+        val wifiBoost = check("Игровой режим Wi-Fi (меньше скачков пинга, работает и без VPN)", AppSettings.wifiBoost)
         val alert = check("Вибрировать, если сервер матча не из списка стран", AppSettings.alertEnabled)
         val countries = EditText(this).apply {
             hint = "страны через запятую, например RU,BY,KZ"
@@ -553,6 +590,8 @@ class MainActivity : AppCompatActivity() {
             addView(modes)
             addView(label("Встроенный VPN"))
             addView(auto); addView(onlyGame); addView(battleDirect)
+            addView(label("Wi-Fi"))
+            addView(wifiBoost)
             addView(label("Предупреждение"))
             addView(alert); addView(countries)
             addView(label("База стран"))
@@ -588,6 +627,8 @@ class MainActivity : AppCompatActivity() {
                 AppSettings.autoSelect = auto.isChecked
                 AppSettings.onlyGame = onlyGame.isChecked
                 AppSettings.battleDirect = battleDirect.isChecked
+                AppSettings.wifiBoost = wifiBoost.isChecked
+                if (!wifiBoost.isChecked) WifiBoost.release()
                 AppSettings.alertEnabled = alert.isChecked
                 AppSettings.allowedCountries = AppSettings.parseCountries(countries.text.toString())
                 AppSettings.autoCheckUpdates = autoUpd.isChecked
