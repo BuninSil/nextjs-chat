@@ -393,7 +393,8 @@ class MainActivity : AppCompatActivity() {
         }
         if (playButton.text != label) {
             playButton.text = label
-            playButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (running) 24f else 26f)
+            // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
+            playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (label == "ИГРАТЬ") 28f else 22f)
             // Подключено — кнопка красная (отключить), иначе зелёная
             val colors = if (running) intArrayOf(0xFFE5534B.toInt(), 0xFFA8322C.toInt())
             else intArrayOf(0xFF43D17A.toInt(), Ui.GREEN_DARK)
