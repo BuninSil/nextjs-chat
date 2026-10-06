@@ -209,6 +209,9 @@ object ServerTester {
         return best
     }
 
+    /** Ключ кэша стран выхода. v2: старые записи были неверными (проверка шла через один сервер). */
+    const val EXITS_KEY = "exits_v2"
+
     /** Реальная страна выхода в интернет (tag -> код страны), по ответу Cloudflare через сервер. */
     val exitCountry = ConcurrentHashMap<String, String>()
     private var exitsLoaded = false
@@ -216,7 +219,7 @@ object ServerTester {
     fun loadExits(ctx: Context) {
         if (exitsLoaded) return
         exitsLoaded = true
-        val raw = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("exits", null) ?: return
+        val raw = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString(EXITS_KEY, null) ?: return
         try {
             val o = org.json.JSONObject(raw)
             for (k in o.keys()) exitCountry[k] = o.getString(k)
@@ -227,7 +230,7 @@ object ServerTester {
     private fun saveExits(ctx: Context) {
         val o = org.json.JSONObject()
         for ((k, v) in exitCountry) o.put(k, v)
-        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("exits", o.toString()).apply()
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString(EXITS_KEY, o.toString()).apply()
     }
 
     /**
@@ -276,6 +279,9 @@ object ServerTester {
                 c.connectTimeout = 4000
                 c.readTimeout = 4000
                 c.instanceFollowRedirects = true
+                // Новое соединение на каждую проверку: иначе Android переиспользует открытое
+                // через предыдущий сервер, и у всех серверов «выход» оказывается одинаковым
+                c.setRequestProperty("Connection", "close")
                 c.inputStream.bufferedReader().use { r ->
                     r.readLines().mapNotNull { line ->
                         val i = line.indexOf('=')

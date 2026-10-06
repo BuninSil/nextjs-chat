@@ -58,7 +58,7 @@ class ServersActivity : AppCompatActivity() {
 
         val autoCard = Ui.card(this)
         val auto = CheckBox(this).apply {
-            text = "Авто: самый быстрый при ИГРАТЬ"
+            text = "Автовыбор сервера"
             setTextColor(Ui.TEXT)
             isChecked = AppSettings.autoSelect
             setOnCheckedChangeListener { _, v ->
@@ -183,7 +183,7 @@ class ServersActivity : AppCompatActivity() {
             }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
                 .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
             if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${items.size} серверов · пинг напрямую до сервера · ↻ перемерить" +
+                header.text = "${items.size} серверов · пинг напрямую до сервера" +
                     if (AppSettings.gameMode) " · ★ ближе к серверам игры" else ""
             }
             notifyDataSetChanged()

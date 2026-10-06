@@ -13,7 +13,11 @@ object SpeedTest {
 
     private const val BASE = "https://speed.cloudflare.com"
 
-    private fun conn(path: String): HttpURLConnection {
+    /**
+     * close = true — соединение не переиспользуется. Важно: после смены сервера Android взял бы
+     * уже открытое соединение, проложенное через ПРЕДЫДУЩИЙ сервер, и замер был бы не того сервера.
+     */
+    private fun conn(path: String, close: Boolean = true): HttpURLConnection {
         val mixed = BoxVpnService.ports?.mixed
         val c = if (mixed != null) URL(BASE + path).openConnection(
             java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", mixed))
@@ -21,23 +25,26 @@ object SpeedTest {
         return (c as HttpURLConnection).apply {
             connectTimeout = 8000
             readTimeout = 8000
-            setRequestProperty("User-Agent", "mlbb-overlay")
+            setRequestProperty("User-Agent", "fast-vpn")
+            if (close) setRequestProperty("Connection", "close")
         }
     }
 
     fun ping(): Pair<Int, Int>? {
         val samples = ArrayList<Int>()
-        repeat(6) {
+        repeat(7) { i ->
             try {
                 val t = System.nanoTime()
-                val c = conn("/__down?bytes=0")
+                // Первый запрос закрывает старое соединение (могло идти через прошлый сервер),
+                // дальше одно свежее соединение переиспользуется — так пинг без рукопожатий
+                val c = conn("/__down?bytes=0", close = i == 0)
                 c.inputStream.use { it.readBytes() }
                 samples.add(((System.nanoTime() - t) / 1_000_000).toInt())
             } catch (_: Exception) {
             }
         }
-        // Первый замер — с рукопожатием TLS, его выкидываем
-        val s = (if (samples.size > 1) samples.drop(1) else samples).sorted()
+        // Первые два замера — со старым соединением и с рукопожатием TLS, их выкидываем
+        val s = (if (samples.size > 2) samples.drop(2) else samples).sorted()
         if (s.isEmpty()) return null
         return s[s.size / 2] to (s.last() - s.first())
     }
