@@ -106,6 +106,7 @@ object Subscription {
 
     /** Новый список серверов. Проверки (страна выхода, подбор) сбрасываются, только если он поменялся. */
     private fun setNodes(ctx: Context, parsed: List<Node>) {
+        AppLog.sub("подписка обновлена: ${parsed.size} серверов")
         val changed = parsed.map { it.name + "|" + it.server + ":" + it.port } != nodes.map { it.name + "|" + it.server + ":" + it.port }
         nodes = parsed
         if (changed) resetExits(ctx)
@@ -138,6 +139,7 @@ object Subscription {
                 if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
                 if (!ServerTester.exitOkForGame(ctx, n.tag)) continue
                 progress("Скачиваю подписку через «${Ui.cleanName(n)}»…")
+                AppLog.sub("пробую скачать через «${Ui.cleanName(n)}» (выход в России)")
                 try {
                     return update(ctx, url)
                 } catch (e: Exception) {
@@ -157,6 +159,7 @@ object Subscription {
         if (!url.startsWith("http")) return
         val at = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getLong("subAt", 0)
         if (System.currentTimeMillis() - at < 20 * 60 * 60 * 1000L) return
+        AppLog.sub("фоновое ежедневное обновление подписки")
         if (nodes.isEmpty()) load(ctx)
         try {
             update(ctx, url)
@@ -227,6 +230,7 @@ object Subscription {
 
     /** Скачивает подписку. Бросает исключение с понятным текстом. */
     fun update(ctx: Context, url: String): Int {
+        AppLog.sub("обновляю подписку с ${AppLog.host(url)} " + if (BoxVpnService.ports != null) "через VPN" else "напрямую")
         var lastProblem = "сервер подписки не ответил"
         for (ua in userAgents) {
             try {
@@ -238,6 +242,7 @@ object Subscription {
                 c.setRequestProperty("x-ver-os", android.os.Build.VERSION.RELEASE)
                 c.setRequestProperty("x-device-model", android.os.Build.MODEL)
                 val code = c.responseCode
+                AppLog.sub("ответ сервера подписки: HTTP $code")
                 if (code != 200) {
                     // Панели обычно объясняют отказ текстом — показываем его
                     val why = try {
@@ -246,12 +251,16 @@ object Subscription {
                     } catch (_: Exception) { null }
                     // Панель режет не российские адреса — смена User-Agent тут не поможет
                     val country = why?.let { Regex("country code:\\s*([A-Z]{2})").find(it)?.groupValues?.get(1) }
-                    if (code == 403 && country != null && country != "RU") throw GeoBlocked(country)
+                    if (code == 403 && country != null && country != "RU") {
+                        AppLog.sub("сервер подписки пускает только российские адреса, запрос пришёл из $country")
+                        throw GeoBlocked(country)
+                    }
                     lastProblem = "сервер подписки ответил HTTP $code" + (why?.takeIf { it.isNotEmpty() }?.let { " («$it»)" } ?: "")
                     continue
                 }
                 val body = c.inputStream.bufferedReader().use { it.readText() }
                 val parsed = parseAll(body)
+                AppLog.sub("получено ${body.length} байт, серверов распознано ${parsed.size}")
                 if (parsed.isEmpty()) {
                     lastProblem = "панель отдала подписку в формате, который я не понял"
                     continue
@@ -266,6 +275,7 @@ object Subscription {
             } catch (e: GeoBlocked) {
                 throw e
             } catch (e: Exception) {
+                AppLog.err("подписка: попытка не удалась", e)
                 lastProblem = e.message ?: lastProblem
             }
         }

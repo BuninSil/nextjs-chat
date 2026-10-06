@@ -51,7 +51,7 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(s)
         row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(Ui.text(this, "›", 22f, Ui.MUTED))
-        row.setOnClickListener { onClick() }
+        row.setOnClickListener { AppLog.ui("нажал «$title»"); onClick() }
         return row
     }
 
@@ -298,7 +298,7 @@ class SettingsActivity : AppCompatActivity() {
             val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
             thumbTintList = ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
             trackTintList = ColorStateList(states, intArrayOf(Ui.GREEN, Ui.SWITCH_OFF))
-            setOnCheckedChangeListener { _, v -> onChange(v) }
+            setOnCheckedChangeListener { _, v -> AppLog.set(title, v); onChange(v) }
         }
         row.addView(sw)
         row.setOnClickListener { sw.toggle() }
@@ -319,11 +319,15 @@ class SettingsActivity : AppCompatActivity() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(s: Editable?) = onChange(s?.toString() ?: "")
+                override fun afterTextChanged(s: Editable?) {
+                    AppLog.set("поле «$hint»", s?.toString())
+                    onChange(s?.toString() ?: "")
+                }
             })
         }
 
     private fun primary(text: CharSequence, onClick: () -> Unit) = TextView(this).apply {
+        val label = text.toString().trim()
         this.text = text
         gravity = Gravity.CENTER
         setTextColor(0xFFFFFFFF.toInt())
@@ -331,17 +335,18 @@ class SettingsActivity : AppCompatActivity() {
         setTypeface(typeface, android.graphics.Typeface.BOLD)
         background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
         setPadding(d(14f), d(13f), d(14f), d(13f))
-        setOnClickListener { onClick() }
+        setOnClickListener { AppLog.ui("нажал «$label»"); onClick() }
     }
 
     private fun secondary(text: CharSequence, onClick: () -> Unit) = TextView(this).apply {
+        val label = text.toString().trim()
         this.text = text
         gravity = Gravity.CENTER
         setTextColor(Ui.TEXT)
         textSize = 15f
         background = Ui.rounded(Ui.CARD2, d(14f).toFloat())
         setPadding(d(14f), d(12f), d(14f), d(12f))
-        setOnClickListener { onClick() }
+        setOnClickListener { AppLog.ui("нажал «$label»"); onClick() }
     }
 
     /** Карточка темы: превью цветов и название; выбор сразу перекрашивает приложение. */
@@ -373,6 +378,7 @@ class SettingsActivity : AppCompatActivity() {
         c.setOnClickListener {
             if (AppSettings.theme == t.id) return@setOnClickListener
             AppSettings.theme = t.id
+            AppLog.set("Тема", t.title)
             AppSettings.save(this)
             recreate()
         }
@@ -390,6 +396,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         c.setOnClickListener {
             if (AppSettings.profile == value) return@setOnClickListener
+            AppLog.set("Приложение", title)
             AppSettings.setProfile(this, value)
             vpnChanged = true
             Toast.makeText(this, if (AppSettings.simple) "Включён режим Fast VPN" else "Включён режим Fast VPN + MLBB", Toast.LENGTH_SHORT).show()
@@ -403,6 +410,7 @@ class SettingsActivity : AppCompatActivity() {
         c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f) })
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
         c.setOnClickListener {
+            AppLog.set("Режим подключения", title)
             if (AppSettings.mode != mode) vpnChanged = true
             AppSettings.mode = mode
             highlightMode()

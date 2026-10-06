@@ -32,11 +32,13 @@ object UpdateFlow {
             return
         }
         val status: (String) -> Unit = { msg -> statusText = msg; onStatus(msg) }
+        AppLog.upd(if (manual) "проверка обновлений вручную" else "проверка обновлений при запуске")
         busy = true
         if (manual) status("Проверяю обновления…")
         Thread {
             try {
                 val rel = Updater.check()
+                AppLog.upd(rel?.let { "есть версия ${it.tag.removePrefix("mlbb-v")}" } ?: "версия ${BuildConfig.VERSION_NAME} — последняя")
                 a.runOnUiThread {
                     status("")
                     if (rel == null) {
@@ -82,6 +84,7 @@ object UpdateFlow {
             background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
             setPadding(0, d(14f), 0, d(14f))
             setOnClickListener {
+                AppLog.upd("нажал «Обновить» до ${rel.tag.removePrefix("mlbb-v")}")
                 dlg.dismiss()
                 download(a, rel, status)
             }
@@ -92,7 +95,7 @@ object UpdateFlow {
             setTextColor(Ui.MUTED)
             textSize = 14f
             setPadding(0, d(12f), 0, d(4f))
-            setOnClickListener { dlg.dismiss() }
+            setOnClickListener { AppLog.upd("нажал «Позже»"); dlg.dismiss() }
         }, LinearLayout.LayoutParams(-1, -2))
         dlg.setContentView(card)
         dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -154,6 +157,7 @@ object UpdateFlow {
                     }
                 }
             } catch (e: Exception) {
+                AppLog.err("обновление не скачалось", e)
                 a.runOnUiThread { status("Ошибка обновления: ${e.message}") }
             } finally {
                 busy = false

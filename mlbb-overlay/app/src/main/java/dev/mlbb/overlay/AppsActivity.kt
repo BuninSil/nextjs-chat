@@ -106,6 +106,7 @@ class AppsActivity : AppCompatActivity() {
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(3f), 0, 0) })
         c.setOnClickListener {
             AppSettings.appsMode = mode
+            AppLog.set("Приложения через VPN — режим", title)
             AppSettings.save(this)
             highlight()
             adapter.reload()
@@ -186,6 +187,7 @@ class AppsActivity : AppCompatActivity() {
                 val set = AppSettings.appsList.toMutableSet()
                 if (!set.remove(a.pkg)) set.add(a.pkg)
                 AppSettings.appsList = set
+                AppLog.set("Приложения через VPN — ${a.label} (${a.pkg})", a.pkg in set)
                 AppSettings.save(this@AppsActivity)
                 h.check.isChecked = a.pkg in set
                 highlight()

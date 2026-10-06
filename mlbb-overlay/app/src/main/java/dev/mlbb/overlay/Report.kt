@@ -67,8 +67,13 @@ object Report {
         val dead = nodes.count { ServerTester.results.containsKey(it.tag) && ServerTester.results[it.tag] == null }
         line("Не ответили", dead)
 
-        sb.append("\n--- Журнал VPN-ядра ---\n")
-        sb.append(VpnLog.tail(200).ifBlank { "(пусто)" }).append('\n')
+        // Полный журнал: каждое нажатие, экраны, подключение по шагам, замеры, подписка, обновления,
+        // автоподключение, сеть, строки VPN-ядра (CORE) и ошибки — с точным временем
+        sb.append("\n--- Полный журнал действий (последний ~1 МБ) ---\n")
+        sb.append("Категории: UI — нажатия и экраны, SET — настройки, VPN, CONN — подключение, SRV — замеры серверов, ")
+        sb.append("SUB — подписка, UPD — обновления, AUTO — автоподключение, NET — сеть, TILE — плитка/виджет, ")
+        sb.append("SPEED — тест скорости, CORE — VPN-ядро, ERR — ошибки\n\n")
+        sb.append(AppLog.all().ifBlank { "(пусто)" }).append('\n')
 
         CrashReport.last(ctx)?.let {
             sb.append("\n--- Последнее падение ---\n").append(it).append('\n')
@@ -78,6 +83,7 @@ object Report {
 
     /** Собрать отчёт и показать окно: отправить файлом, скопировать или закрыть. */
     fun show(a: Activity) {
+        AppLog.ui("нажал «Сообщить о проблеме» — собираю отчёт")
         val text = try { build(a) } catch (e: Exception) { "Не удалось собрать отчёт: ${e.message}" }
         val dir = File(a.cacheDir, "reports").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
@@ -88,8 +94,9 @@ object Report {
             .setTitle("Отчёт готов")
             .setMessage(
                 "Отправь этот файл разработчику любым удобным способом — Telegram, почта, что угодно.\n\n" +
-                    "В отчёте нет ссылки подписки, адресов серверов и паролей. Есть журнал VPN-ядра — " +
-                    "в нём могут встречаться адреса сайтов, которые открывались."
+                    "В отчёте полный журнал: все нажатия, подключения, замеры серверов, ошибки — с точным временем. " +
+                    "Ссылки подписки, адресов серверов и паролей в нём нет. В строках VPN-ядра могут встречаться " +
+                    "адреса сайтов, которые открывались."
             )
             .setPositiveButton("Отправить") { _, _ ->
                 val uri = FileProvider.getUriForFile(a, "${a.packageName}.files", file)

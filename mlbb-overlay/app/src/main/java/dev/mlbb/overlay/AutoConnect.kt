@@ -60,7 +60,7 @@ object AutoConnect {
         if (p.getString("autoSuppressNet", "") != net) p.edit().remove("autoSuppressNet").apply()
         if (net == "wifi" && autoStarted && AppSettings.autoOffWifi && BoxVpnService.isRunning) {
             autoStarted = false
-            VpnLog.add("автоподключение: Wi-Fi — выключаю VPN")
+            AppLog.auto("Wi-Fi — выключаю VPN, который включался сам")
             BoxVpnService.stop(ctx, manual = false)
         }
     }
@@ -71,6 +71,8 @@ object AutoConnect {
             AppSettings.load(ctx)
             val net = ServerTester.netKey(ctx)
             val suppressed = prefs(ctx).getString("autoSuppressNet", "") == net
+            AppLog.auto("сработало: сеть $net, включено ${AppSettings.autoOnMobile}, VPN ${if (BoxVpnService.isRunning) "уже работает" else "выключен"}" +
+                (if (suppressed) ", в этой сети выключали руками" else ""))
             when {
                 !AppSettings.autoOnMobile -> {}
                 BoxVpnService.isRunning || BoxVpnService.isStarting -> {}
@@ -90,9 +92,10 @@ object AutoConnect {
             // Проверяем, что система даёт поднять VPN из фона; дальше — обычное быстрое подключение
             BoxVpnService.start(ctx)
             autoStarted = true
-            VpnLog.add("автоподключение: мобильная сеть — включаю VPN")
+            AppLog.auto("мобильная сеть — включаю VPN")
             Connector.connect(ctx)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLog.auto("Android не дал включить VPN в фоне (${e.javaClass.simpleName}) — отправил уведомление с кнопкой")
             // Фоновый запуск запрещён — просим нажать
             val nm = ctx.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Автоподключение", NotificationManager.IMPORTANCE_DEFAULT))
@@ -115,6 +118,7 @@ object AutoConnect {
 
     /** Нажали «Включить» в уведомлении — VPN-сервис уже запущен, доделываем подключение. */
     fun onNotificationStart(ctx: Context) {
+        AppLog.auto("нажали «включить» в уведомлении")
         ctx.getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
         autoStarted = true
         Connector.connect(ctx)

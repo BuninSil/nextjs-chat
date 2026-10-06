@@ -71,10 +71,13 @@ object ServerTester {
             }
             checked++
             progress(checked, candidates)
-            val mbps = SpeedTest.quickDownload(2) ?: continue
+            val mbps = SpeedTest.quickDownload(2)
+            AppLog.srv("скорость: «${AppLog.name(ctx, tag)}» — ${mbps?.let { String.format(java.util.Locale.US, "%.1f Мбит/с", it) } ?: "не замерилась"}")
+            if (mbps == null) continue
             speed[tag] = mbps
             if (mbps > bestSpeed) { bestSpeed = mbps; best = tag }
         }
+        AppLog.srv("по скорости: лучший «${best?.let { AppLog.name(ctx, it) }}» ${String.format(java.util.Locale.US, "%.1f", bestSpeed)} Мбит/с")
         val chosen = best ?: return pickWorking(ctx, ranked)
         ClashApi.select(p.api, p.secret, "proxy", chosen)
         AppSettings.selectedTag = chosen
@@ -169,6 +172,8 @@ object ServerTester {
         testing = false
         val byTag = nodes.associateBy { it.tag }
         var ranked = results.ranked()
+        AppLog.srv("пинг до серверов: ответили ${ranked.size} из ${nodes.size} (сеть ${netKey(ctx)}); лучшие: " +
+            ranked.take(5).joinToString { t -> "${byTag[t]?.let { Ui.cleanName(it) }} ${results[t]?.medianMs} ms" })
         if (game) {
             // Игровой режим: российские серверы всегда первыми (ближе к серверам MLBB в РФ),
             // зарубежные — только запасным вариантом
@@ -194,19 +199,23 @@ object ServerTester {
         // и кидает на зарубежный сервер. Проверяем до 20 кандидатов, обычный режим — до первого рабочего.
         val limit = if (game) 20 else maxTries
         for (tag in ranked.take(limit)) {
-            if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
+            if (!ClashApi.select(p.api, p.secret, "proxy", tag)) { AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — не переключился"); continue }
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
+                AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — трафик не идёт, пропускаю")
                 results.put(tag, null)
                 continue
             }
+            AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — работает")
             if (!game) { chosen = tag; break }
             if (fallback == null) fallback = tag
             // Страна выхода проверяется один раз и дальше берётся из памяти
             val loc = exitCountry[tag] ?: traceExit(p.mixed)?.also { exitCountry[tag] = it }
+            AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — выход ${loc ?: "не определён"}")
             if (loc == "RU") { chosen = tag; break }
         }
         saveExits(ctx)
-        val best = chosen ?: fallback ?: return null
+        val best = chosen ?: fallback ?: run { AppLog.srv("подбор: рабочих серверов не нашлось"); return null }
+        AppLog.srv("подбор: выбран «${AppLog.name(ctx, best)}»" + if (game && chosen == null) " (запасной — с выходом в России не нашлось)" else "")
         ClashApi.select(p.api, p.secret, "proxy", best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)
@@ -265,10 +274,13 @@ object ServerTester {
                 if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
                 // Мёртвый сервер — сразу дальше, не ждём таймаутов проверки выхода
                 if (ClashApi.delay(p.api, p.secret, n.tag, CHECK_URL, 2500) == null) {
+                    AppLog.srv("выход: «${Ui.cleanName(n)}» — не отвечает")
                     dead++
                     continue
                 }
-                val loc = traceExit(p.mixed) ?: continue
+                val loc = traceExit(p.mixed)
+                AppLog.srv("выход: «${Ui.cleanName(n)}» — ${loc ?: "не определён"}")
+                if (loc == null) continue
                 exitCountry[n.tag] = loc
                 found++
                 if (loc == "RU") ru++
@@ -376,6 +388,7 @@ object ServerTester {
 
     /** Переключает ядро на сервер и запоминает выбор. */
     fun use(ctx: Context, tag: String): Boolean {
+        AppLog.srv("переключаю на «${AppLog.name(ctx, tag)}»")
         val p = BoxVpnService.ports
         val ok = p == null || ClashApi.select(p.api, p.secret, "proxy", tag)
         if (ok) {

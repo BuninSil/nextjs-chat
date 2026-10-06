@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val next = afterVpnPermission
         afterVpnPermission = null
+        AppLog.vpn("запрос разрешения на VPN: " + if (it.resultCode == RESULT_OK) "разрешил" else "отказал")
         if (it.resultCode == RESULT_OK) next?.invoke()
         else showInfo("Нужно разрешение", "Без разрешения на VPN приложение не может подключиться. Нажми ИГРАТЬ и согласись.")
     }
@@ -140,6 +141,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun chooseProfile(value: String) {
+        AppLog.set("Режим приложения (первый запуск)", if (value == AppSettings.PROFILE_SIMPLE) "Fast VPN" else "Fast VPN + MLBB")
         AppSettings.setProfile(this, value)
         recreate()
     }
@@ -286,6 +288,7 @@ class MainActivity : AppCompatActivity() {
         })
         gameRow.addView(greenSwitch(AppSettings.gameMode) { v ->
             AppSettings.gameMode = v
+            AppLog.set("Игровой режим", v)
             AppSettings.save(this@MainActivity)
             if (anyRunning()) toast("Применится после переподключения")
         })
@@ -309,6 +312,7 @@ class MainActivity : AppCompatActivity() {
             trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, Ui.SWITCH_OFF))
             setOnCheckedChangeListener { _, v ->
                 AppSettings.autoLaunch = v
+                AppLog.set("Запускать MLBB после подключения", v)
                 AppSettings.save(this@MainActivity)
             }
         }
@@ -528,6 +532,7 @@ class MainActivity : AppCompatActivity() {
                 setupText.text = "В открывшемся списке найди «Fast VPN» и включи «Поверх других окон», потом вернись сюда."
                 setupButton.text = "Открыть разрешение"
                 setupButton.setOnClickListener {
+                    AppLog.ui("нажал «Открыть разрешение» (плашка поверх игры)")
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 }
             }
@@ -535,6 +540,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadDbFromSetup() {
+        AppLog.ui("нажал «Скачать базу стран»")
         if (dbDownloading) return
         dbDownloading = true
         Thread {
@@ -550,10 +556,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showInfo(title: String, msg: String, action: Pair<String, () -> Unit>? = null) {
+        AppLog.ui("окно «$title»: ${msg.replace('\n', ' ').take(400)}")
         if (isFinishing) return
         val b = AlertDialog.Builder(this).setTitle(title).setMessage(msg)
         if (action != null) {
-            b.setPositiveButton(action.first) { _, _ -> action.second() }
+            b.setPositiveButton(action.first) { _, _ -> AppLog.ui("в окне «$title» нажал «${action.first}»"); action.second() }
             b.setNegativeButton("Отмена", null)
         } else {
             b.setPositiveButton("Понятно", null)
@@ -561,7 +568,10 @@ class MainActivity : AppCompatActivity() {
         b.show()
     }
 
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+    private fun toast(s: String) {
+        AppLog.ui("сообщение: $s")
+        Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+    }
 
     // ------------------------------ ИГРАТЬ ------------------------------
 
@@ -574,6 +584,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun launchGame() {
         val i = packageManager.getLaunchIntentForPackage(CaptureVpnService.GAME_PACKAGE)
+        AppLog.ui("запуск Mobile Legends")
         if (i == null) toast("Не получилось запустить Mobile Legends") else startActivity(i)
     }
 
@@ -585,6 +596,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun play() {
+        AppLog.ui("нажал большую кнопку «${playButton.text}» (VPN ${if (anyRunning()) "включён" else "выключен"}" +
+            (if (busy) ", идёт подбор" else "") + ")")
         // Отключить можно всегда, даже пока идёт подбор сервера
         if (anyRunning()) {
             stopAll()
@@ -653,6 +666,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopAll() {
+        AppLog.vpn("выключаю VPN (кнопка в приложении)")
         BoxVpnService.stop(this)
         CaptureVpnService.stop(this)
         MonitorService.stop(this)
@@ -751,7 +765,11 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Подписка")
             .setView(box)
-            .setPositiveButton("Сохранить и обновить") { _, _ -> updateSubscription(input.text.toString().trim()) }
+            .setPositiveButton("Сохранить и обновить") { _, _ ->
+                val t = input.text.toString().trim()
+                AppLog.sub("нажал «Сохранить и обновить»: " + if (t.startsWith("http")) "ссылка, сервер ${AppLog.host(t)}" else "вставлены серверы текстом (${t.lines().size} строк)")
+                updateSubscription(t)
+            }
             .setNegativeButton("Отмена", null)
             .show()
     }
@@ -903,6 +921,8 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 up.text = upv?.let { mbps(it) } ?: "✖"
             }
+            AppLog.add("SPEED", "тест скорости (${if (BoxVpnService.isRunning) "через VPN" else "напрямую"}): " +
+                "пинг ${p?.first ?: "—"} ms, разброс ${p?.second ?: "—"} ms, загрузка ${dn?.let { mbps(it) } ?: "—"}, отдача ${upv?.let { mbps(it) } ?: "—"}")
             runOnUiThread {
                 if (p == null && dn == null) state.text = "Нет доступа к интернету"
                 else {

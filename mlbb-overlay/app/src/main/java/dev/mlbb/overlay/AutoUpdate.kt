@@ -70,6 +70,7 @@ object AutoUpdate {
     /** Фоновая проверка: скачать новую версию заранее и сообщить уведомлением. */
     private fun runInBackground(ctx: Context) {
         AppSettings.load(ctx)
+        AppLog.upd("фоновая задача: подписка и обновления")
         // Подписка: раз в сутки обновить и предупредить, если кончается срок или трафик
         try {
             Subscription.refreshInBackground(ctx)
@@ -79,8 +80,10 @@ object AutoUpdate {
         }
         // Приложение открыто — там и так покажется окно обновления
         if (!AppSettings.autoCheckUpdates || uiVisible) return
-        val rel = Updater.check() ?: return
+        val rel = Updater.check() ?: run { AppLog.upd("новой версии нет"); return }
+        AppLog.upd("найдена версия ${rel.tag.removePrefix("mlbb-v")}, качаю в фоне")
         val apk = Updater.download(ctx, rel) { }
+        AppLog.upd("скачано, отправил уведомление «нажми, чтобы установить»")
         rememberNotes(ctx, rel)
         notifyReady(ctx, rel, apk)
     }
@@ -92,6 +95,7 @@ object AutoUpdate {
         val p = prefs(ctx)
         if (p.getString("subWarnDay", "") == today) return
         p.edit().putString("subWarnDay", today).apply()
+        AppLog.sub("предупреждение: $title — $text")
         notify(ctx, NOTIF_SUB, title, text, openApp(ctx))
     }
 
@@ -119,6 +123,7 @@ object AutoUpdate {
     class ReplacedReceiver : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+            AppLog.upd("приложение обновлено до ${BuildConfig.VERSION_NAME}")
             ctx.getSystemService(NotificationManager::class.java).cancel(NOTIF_READY)
             val notes = updatedNotes(ctx)?.lineSequence()?.firstOrNull { it.isNotBlank() }
             notify(ctx, NOTIF_DONE, "Fast VPN обновлён до ${BuildConfig.VERSION_NAME}",

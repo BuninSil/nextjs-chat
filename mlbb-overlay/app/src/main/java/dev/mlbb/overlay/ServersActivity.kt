@@ -68,6 +68,7 @@ class ServersActivity : AppCompatActivity() {
             buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
             isChecked = AppSettings.autoSelect
             setOnCheckedChangeListener { _, v ->
+                AppLog.set("Автовыбор сервера (Серверы)", v)
                 AppSettings.autoSelect = v
                 AppSettings.save(this@ServersActivity)
             }
@@ -78,7 +79,7 @@ class ServersActivity : AppCompatActivity() {
         // Скрытые серверы — по кнопке, чтобы можно было вернуть
         hiddenToggle = Ui.text(this, "", 12f, Ui.GREEN, bold = true).apply {
             setPadding(0, d(8f), 0, 0)
-            setOnClickListener { showHidden = !showHidden; adapter.reload() }
+            setOnClickListener { showHidden = !showHidden; AppLog.ui("показать скрытые серверы: $showHidden"); adapter.reload() }
         }
         autoCard.addView(hiddenToggle)
         root.addView(autoCard)
@@ -130,6 +131,7 @@ class ServersActivity : AppCompatActivity() {
      * выключаем. work получает функцию для текста прогресса; вызывается не на главном потоке.
      */
     private fun withVpn(title: String, onStop: () -> Unit, work: ((String) -> Unit) -> String) {
+        AppLog.ui("запуск «$title» (VPN ${if (BoxVpnService.isRunning) "включён" else "выключен — включу на время"})")
         if (ServerTester.testing) {
             Toast.makeText(this, "Сейчас идёт замер пинга — подожди пару секунд", Toast.LENGTH_SHORT).show()
             return
@@ -137,7 +139,7 @@ class ServersActivity : AppCompatActivity() {
         val run = {
             val dlg = android.app.AlertDialog.Builder(this).setTitle(title).setMessage("Секунду…")
                 .setCancelable(false)
-                .setNegativeButton("Стоп") { _, _ -> onStop() }
+                .setNegativeButton("Стоп") { _, _ -> AppLog.ui("нажал «Стоп» в «$title»"); onStop() }
                 .show()
             Thread {
                 val startedHere = !BoxVpnService.isRunning
@@ -147,6 +149,7 @@ class ServersActivity : AppCompatActivity() {
                     if (Connector.startAndWait(applicationContext)) work(say)
                     else "VPN не подключился: ${BoxVpnService.lastError ?: "неизвестная ошибка"}"
                 } else work(say)
+                AppLog.srv("«$title» — итог: ${result.replace('\n', ' ')}")
                 if (startedHere) BoxVpnService.stop(this, manual = false)
                 runOnUiThread {
                     if (!isFinishing) {
@@ -197,6 +200,7 @@ class ServersActivity : AppCompatActivity() {
 
     /** Долгое нажатие: избранное / скрыть. */
     private fun marks(n: Subscription.Node) {
+        AppLog.ui("долгое нажатие на сервер «${Ui.cleanName(n)}»")
         val fav = Subscription.isFavorite(n)
         val hid = Subscription.isHidden(n)
         val items = arrayOf(
@@ -207,12 +211,14 @@ class ServersActivity : AppCompatActivity() {
             .setTitle(Ui.cleanName(n))
             .setItems(items) { _, which ->
                 if (which == 0) Subscription.toggleFavorite(this, n) else Subscription.toggleHidden(this, n)
+                AppLog.ui("«${Ui.cleanName(n)}»: избранный ${Subscription.isFavorite(n)}, скрыт ${Subscription.isHidden(n)}")
                 adapter.reload()
             }
             .show()
     }
 
     private fun pick(n: Subscription.Node) {
+        AppLog.ui("выбрал сервер вручную: «${Ui.cleanName(n)}» (${n.type}), автовыбор выключен")
         AppSettings.autoSelect = false
         if (BoxVpnService.isRunning) {
             Thread {

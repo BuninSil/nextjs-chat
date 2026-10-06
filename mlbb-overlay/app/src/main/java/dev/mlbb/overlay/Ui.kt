@@ -160,7 +160,7 @@ object Ui {
         setPadding(p, dp(ctx, 12f), p, dp(ctx, 12f))
         addView(text(ctx, "", 15f, bold = true).apply { maxLines = 1; text = iconText(ctx, iconRes, title, 18f) })
         addView(text(ctx, hint, 12f, MUTED).apply { setPadding(0, dp(ctx, 3f), 0, 0) })
-        setOnClickListener { onClick() }
+        setOnClickListener { AppLog.ui("нажал плитку «$title»"); onClick() }
     }
 
     /** Векторный значок нужного размера (dp). */
@@ -240,14 +240,21 @@ object Ui {
         scaleType = ImageView.ScaleType.CENTER
         background = rounded(CARD2, dp(ctx, 12f).toFloat())
         layoutParams = LinearLayout.LayoutParams(dp(ctx, 44f), dp(ctx, 44f))
-        setOnClickListener { onClick() }
+        setOnClickListener {
+            AppLog.ui("нажал кнопку «" + when (res) {
+                R.drawable.ic_settings_w -> "Настройки (шестерёнка)"
+                R.drawable.ic_refresh_w -> "перемерить пинг"
+                else -> ctx.resources.getResourceEntryName(res)
+            } + "»")
+            onClick()
+        }
     }
 
     /** Стрелка «назад» для шапки экрана. */
     fun backButton(ctx: Context, onClick: () -> Unit) = ImageView(ctx).apply {
         setImageDrawable(icon(ctx, R.drawable.ic_back_w, 24f))
         setPadding(0, 0, dp(ctx, 12f), 0)
-        setOnClickListener { onClick() }
+        setOnClickListener { AppLog.ui("нажал «назад»"); onClick() }
     }
 
     fun space(ctx: Context, h: Float) = View(ctx).apply {

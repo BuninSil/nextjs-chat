@@ -31,7 +31,9 @@ object Connector {
      * (сообщение для тоста: какой сервер, или почему не вышло; null — промолчать).
      */
     fun connect(ctx: Context, onReady: (String?) -> Unit = {}) {
-        if (busy) return
+        if (busy) { AppLog.conn("подключение уже идёт — повторное нажатие пропущено"); return }
+        AppLog.conn("подключаю: сервер «${AppLog.name(ctx, AppSettings.selectedTag)}», автовыбор ${AppSettings.autoSelect}, " +
+            "игровой режим ${AppSettings.gameMode}, сеть ${ServerTester.netKey(ctx)}")
         busy = true
         busyText = "Подключаюсь…"
         Widget.update(ctx)
@@ -49,11 +51,12 @@ object Connector {
 
     /** Включить или выключить — для плитки и виджета. false — нужно открыть приложение (нет разрешения/подписки). */
     fun toggle(ctx: Context): Boolean {
+        AppLog.add("TILE", "плитка/виджет: нажали (VPN ${if (BoxVpnService.isRunning) "включён" else "выключен"})")
         if (BoxVpnService.isRunning || BoxVpnService.isStarting) {
             BoxVpnService.stop(ctx)
             return true
         }
-        if (!canStart(ctx)) return false
+        if (!canStart(ctx)) { AppLog.add("TILE", "нет разрешения на VPN или подписки — открываю приложение"); return false }
         AppSettings.load(ctx)
         connect(ctx)
         return true
@@ -80,7 +83,9 @@ object Connector {
     }
 
     private fun afterStart(ctx: Context, onReady: (String?) -> Unit) {
-        if (!waitUp()) return
+        val t0 = System.currentTimeMillis()
+        if (!waitUp()) { AppLog.conn("VPN не поднялся: ${BoxVpnService.lastError}"); return }
+        AppLog.conn("VPN поднялся за ${System.currentTimeMillis() - t0} мс")
         val game = AppSettings.gameMode
         val tag = AppSettings.selectedTag
         busyText = "Проверяю сервер…"
@@ -88,6 +93,8 @@ object Connector {
         val alive = ServerTester.alive(tag)
         val goodForGame = !game || (alive && ServerTester.exitOkForGame(ctx, tag))
         val stale = ServerTester.rankingStale(ctx)
+        AppLog.conn("проверка сервера «${nodeName(ctx, tag)}»: отвечает $alive" +
+            (if (game) ", выход в России $goodForGame" else "") + ", подбор устарел $stale")
         fun current() = "Сервер: ${nodeName(ctx, AppSettings.selectedTag)}"
 
         when {
@@ -107,12 +114,14 @@ object Connector {
                 // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий
                 rank(ctx, game) { onReady(current()) }
         }
+        AppLog.conn("готово за ${System.currentTimeMillis() - t0} мс, сервер «${nodeName(ctx, AppSettings.selectedTag)}»")
         if (!game) startWatchdog(ctx)
     }
 
     /** Полный подбор при работающем VPN; прогресс — в busyText. Прерывается, если VPN выключили. */
     private fun rank(ctx: Context, game: Boolean, onWorking: () -> Unit) {
         if (!BoxVpnService.isRunning) return
+        AppLog.conn("полный подбор сервера (${if (game) "игровой режим" else "обычный режим"})")
         busyText = "Меряю пинг до серверов…"
         val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
         if (!BoxVpnService.isRunning) return
@@ -150,6 +159,7 @@ object Connector {
                 if (ServerTester.alive(AppSettings.selectedTag)) { fails = 0; continue }
                 // Без сети менять сервер бесполезно
                 if (ServerTester.netKey(ctx) == "none") continue
+                AppLog.conn("сторож: сервер «${nodeName(ctx, AppSettings.selectedTag)}» не ответил (${fails + 1}-й раз)")
                 if (++fails < 2) continue
                 fails = 0
                 busy = true

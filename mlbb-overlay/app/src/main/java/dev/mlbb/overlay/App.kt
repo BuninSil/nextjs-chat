@@ -8,9 +8,30 @@ import java.io.File
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(this)
+        // Переходы между экранами — в журнал
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private fun name(a: android.app.Activity) = when (a) {
+                is MainActivity -> "Главный"
+                is ServersActivity -> "Серверы"
+                is SettingsActivity -> "Настройки"
+                is AppsActivity -> "Приложения через VPN"
+                is LogActivity -> "Лог соединений"
+                else -> a.javaClass.simpleName
+            }
+            override fun onActivityResumed(a: android.app.Activity) = AppLog.ui("открыт экран «${name(a)}»")
+            override fun onActivityPaused(a: android.app.Activity) = AppLog.ui("ушёл с экрана «${name(a)}»")
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+            override fun onActivityStarted(a: android.app.Activity) {}
+            override fun onActivityStopped(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) {}
+        })
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             try {
+                AppLog.err("ПАДЕНИЕ в потоке ${t.name}", e)
+                AppLog.add("ERR", e.stackTraceToString().take(3000))
                 File(filesDir, CrashReport.KOTLIN).writeText(
                     "Версия ${BuildConfig.VERSION_NAME}, поток ${t.name}\n" + e.stackTraceToString().take(6000)
                 )
@@ -53,6 +74,7 @@ object VpnLog {
 
     @Synchronized
     fun add(s: String) {
+        AppLog.add("CORE", s.trim())
         lines.addLast(s.trim())
         while (lines.size > 200) lines.removeFirst()
     }

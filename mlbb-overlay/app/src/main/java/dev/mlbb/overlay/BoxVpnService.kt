@@ -76,6 +76,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             val manual = intent.getBooleanExtra("manual", true)
+            AppLog.vpn("стоп: " + if (manual) "выключил пользователь" else "выключено автоматически")
             Thread {
                 stopBox()
                 if (manual) AutoConnect.onManualStop(applicationContext) else AutoConnect.arm(applicationContext)
@@ -85,7 +86,9 @@ class BoxVpnService : VpnService(), PlatformInterface {
         }
         if (intent?.action == ACTION_AUTO) AutoConnect.onNotificationStart(applicationContext)
         startForegroundCompat()
+        if (intent == null) AppLog.vpn("сервис перезапущен системой (постоянный VPN или после выгрузки)")
         if (!isRunning && !isStarting) {
+            AppLog.vpn("старт VPN-ядра")
             isStarting = true
             Thread { startBox() }.start()
         }
@@ -218,17 +221,22 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 appsMode = AppSettings.appsMode,
                 appsList = AppSettings.appsList,
             )
+            AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
+                "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
+                "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size})")
             val service = Libbox.newService(config, this)
             service.start()
             box = service
             ports = p
             isRunning = true
+            AppLog.vpn("VPN работает")
             Widget.update(this)
             startTicker()
             // Оверлей и лог: читаем соединения игры у своего же ядра
             if (AppSettings.gameMode) MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
+            AppLog.err("VPN не запустился", e)
             val tail = VpnLog.tail(8)
             lastError = "Не удалось подключить VPN: ${e.message}" + if (tail.isNotEmpty()) "\n\nЖурнал ядра:\n$tail" else ""
             stopBox()
@@ -258,6 +266,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     }
 
     override fun onRevoke() {
+        AppLog.vpn("Android отозвал VPN (включили другое VPN-приложение или выключили в настройках)")
         // Android забирает VPN, когда его включает другое приложение (или его выключили в настройках)
         if (isRunning) lastError = "VPN отключился: его забрало другое VPN-приложение. Если оно включается само — " +
             "выключи у него автоподключение и «Постоянный VPN» (Настройки → Сеть и интернет → VPN)."
@@ -350,6 +359,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 if (name == null) {
                     if (lastKey != "") {
                         lastKey = ""
+                        AppLog.net("сеть пропала")
                         listener.updateDefaultInterface("", -1, false, false)
                     }
                     return
@@ -361,6 +371,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 val caps = cm.getNetworkCapabilities(network)
                 val expensive = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
                 listener.updateDefaultInterface(name, idx, expensive, false)
+                AppLog.net("сеть сменилась: $name (${ServerTester.netKey(this@BoxVpnService)}${if (expensive) ", платная" else ""})")
                 // Автоподключение: на Wi-Fi выключить VPN, если он включался сам
                 try { AutoConnect.onNetworkChanged(this@BoxVpnService) } catch (_: Exception) {}
             }
