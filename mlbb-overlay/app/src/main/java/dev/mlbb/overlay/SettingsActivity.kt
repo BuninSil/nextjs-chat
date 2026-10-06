@@ -32,6 +32,29 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun d(v: Float) = Ui.dp(this, v)
 
+    private var appsRow: LinearLayout? = null
+    private var appsSub: TextView? = null
+
+    private fun appsSummary() = when (AppSettings.appsMode) {
+        AppSettings.APPS_ONLY -> "Только выбранные (${AppSettings.appsList.size})"
+        AppSettings.APPS_EXCEPT -> "Все, кроме выбранных (${AppSettings.appsList.size})"
+        else -> "Все приложения"
+    }
+
+    /** Строка-ссылка на отдельный экран: заголовок, текущее значение и стрелка. */
+    private fun linkRow(title: String, sub: String, onClick: () -> Unit): LinearLayout {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(Ui.text(this, title, 15f))
+        val s = Ui.text(this, sub, 12f, Ui.GREEN).apply { setPadding(0, d(2f), d(12f), 0) }
+        appsSub = s
+        col.addView(s)
+        row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(Ui.text(this, "›", 22f, Ui.MUTED))
+        row.setOnClickListener { onClick() }
+        return row
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Тема — до создания экрана, чтобы системные окна были в её цветах
         AppSettings.load(this)
@@ -105,6 +128,12 @@ class SettingsActivity : AppCompatActivity() {
             addView(switchRow("Блокировать рекламу и трекеры", "Рекламные и следящие домены не загружаются", AppSettings.adBlock) {
                 AppSettings.adBlock = it; vpnChanged = true
             })
+            addView(divider())
+            appsRow = linkRow("Приложения через VPN", appsSummary()) {
+                vpnChanged = true
+                startActivity(android.content.Intent(this@SettingsActivity, AppsActivity::class.java))
+            }
+            addView(appsRow)
             if (simple) return@apply
             addView(divider())
             addView(switchRow("Через VPN только игра", "Весь канал — игре, остальные приложения без VPN", AppSettings.onlyGame) {
@@ -113,6 +142,22 @@ class SettingsActivity : AppCompatActivity() {
             addView(divider())
             addView(switchRow("Матч напрямую", "UDP матча мимо VPN — минимальный пинг, если оператор пускает", AppSettings.battleDirect) {
                 AppSettings.battleDirect = it; vpnChanged = true
+            })
+        })
+
+        // ---------- Автоподключение ----------
+        root.addView(section("Автоподключение"))
+        root.addView(Ui.card(this).apply {
+            addView(switchRow("Включать на мобильном интернете",
+                "Ушёл с Wi-Fi — VPN включится сам. Если телефон не даст, придёт уведомление с кнопкой",
+                AppSettings.autoOnMobile) {
+                AppSettings.autoOnMobile = it
+                AppSettings.save(this@SettingsActivity)
+                AutoConnect.arm(applicationContext)
+            })
+            addView(divider())
+            addView(switchRow("Выключать на Wi-Fi", "Если VPN включился сам — на Wi-Fi он выключится", AppSettings.autoOffWifi) {
+                AppSettings.autoOffWifi = it
             })
         })
 
@@ -185,6 +230,14 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(apiCard)
         apiCard.visibility = if (AppSettings.mode == AppSettings.MODE_API) View.VISIBLE else View.GONE
 
+        // ---------- Помощь ----------
+        root.addView(section("Помощь"))
+        root.addView(Ui.card(this).apply {
+            addView(Ui.text(this@SettingsActivity, "Что-то не работает? Собери отчёт и отправь его разработчику любым способом.", 12f, Ui.MUTED))
+            addView(Ui.space(this@SettingsActivity, 10f))
+            addView(secondary("Сообщить о проблеме") { Report.show(this@SettingsActivity) })
+        })
+
         root.addView(Ui.slogan(this, 13f, bold = true).apply {
             gravity = Gravity.CENTER
             setPadding(0, d(28f), 0, d(2f))
@@ -208,6 +261,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        appsSub?.text = appsSummary()
         handler.post(updRefresher)
     }
 

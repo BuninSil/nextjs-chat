@@ -65,6 +65,9 @@ object BoxConfig {
         adBlock: Boolean = false,
         /** Папка с наборами правил (.srs), см. [rulesDir] */
         rulesPath: String = "",
+        /** Выбор приложений: AppSettings.APPS_* и список пакетов */
+        appsMode: Int = AppSettings.APPS_ALL,
+        appsList: Set<String> = emptySet(),
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -96,8 +99,15 @@ object BoxConfig {
         // Иначе через VPN идёт всё, включая нас самих (обновления и база DB-IP под блокировками)
         // Наше приложение — мимо туннеля: соединения ядра Xray (отдельный процесс) иначе ушли бы
         // обратно в VPN. Свои замеры через VPN приложение делает явно, через SOCKS-вход.
-        if (gameMode && onlyGame) tun.put("include_package", JSONArray().put(GAME))
-        else tun.put("exclude_package", JSONArray().put(selfPackage))
+        val apps = appsList.filter { it != selfPackage }
+        when {
+            gameMode && onlyGame -> tun.put("include_package", JSONArray().put(GAME))
+            // Через VPN — только выбранные приложения
+            appsMode == AppSettings.APPS_ONLY && apps.isNotEmpty() -> tun.put("include_package", JSONArray(apps))
+            // Все, кроме выбранных (и нас самих)
+            appsMode == AppSettings.APPS_EXCEPT -> tun.put("exclude_package", JSONArray(apps + selfPackage))
+            else -> tun.put("exclude_package", JSONArray().put(selfPackage))
+        }
 
         val mixed = JSONObject().put("type", "mixed").put("tag", "mixed-in")
             .put("listen", "127.0.0.1").put("listen_port", ports.mixed)

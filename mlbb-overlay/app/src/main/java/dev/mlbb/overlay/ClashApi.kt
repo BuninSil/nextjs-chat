@@ -47,6 +47,21 @@ object ClashApi {
         return c
     }
 
+    /** Сколько всего скачано и отдано через ядро (байты): (вниз, вверх). Читаем только начало ответа. */
+    fun totals(port: Int, secret: String): Pair<Long, Long>? = try {
+        val c = open(port, "/connections", secret, 800)
+        val head = c.inputStream.bufferedReader().use { r ->
+            val buf = CharArray(400)
+            val n = r.read(buf)
+            if (n > 0) String(buf, 0, n) else ""
+        }
+        val down = Regex("\"downloadTotal\":(\\d+)").find(head)?.groupValues?.get(1)?.toLongOrNull()
+        val up = Regex("\"uploadTotal\":(\\d+)").find(head)?.groupValues?.get(1)?.toLongOrNull()
+        if (down != null && up != null) down to up else null
+    } catch (_: Exception) {
+        null
+    }
+
     /** Отчёт по портам для диагностики, если ничего не нашлось. */
     @Volatile
     var lastReport: String = ""

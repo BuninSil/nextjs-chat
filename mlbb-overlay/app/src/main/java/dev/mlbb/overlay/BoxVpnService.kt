@@ -45,6 +45,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         private const val CHANNEL_ID = "box"
         private const val NOTIF_ID = 3
         private const val ACTION_STOP = "dev.mlbb.overlay.BOX_STOP"
+        /** Включение из уведомления автоподключения */
+        const val ACTION_AUTO = "dev.mlbb.overlay.BOX_AUTO"
 
         @Volatile var isRunning = false
             private set
@@ -60,8 +62,9 @@ class BoxVpnService : VpnService(), PlatformInterface {
             ctx.startForegroundService(Intent(ctx, BoxVpnService::class.java))
         }
 
-        fun stop(ctx: Context) {
-            ctx.startService(Intent(ctx, BoxVpnService::class.java).setAction(ACTION_STOP))
+        /** manual — выключил пользователь (тогда автоподключение в этой сети больше не включает). */
+        fun stop(ctx: Context, manual: Boolean = true) {
+            ctx.startService(Intent(ctx, BoxVpnService::class.java).setAction(ACTION_STOP).putExtra("manual", manual))
         }
     }
 
@@ -72,9 +75,15 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            Thread { stopBox(); stopSelf() }.start()
+            val manual = intent.getBooleanExtra("manual", true)
+            Thread {
+                stopBox()
+                if (manual) AutoConnect.onManualStop(applicationContext) else AutoConnect.arm(applicationContext)
+                stopSelf()
+            }.start()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_AUTO) AutoConnect.onNotificationStart(applicationContext)
         startForegroundCompat()
         if (!isRunning && !isStarting) {
             isStarting = true
@@ -84,25 +93,74 @@ class BoxVpnService : VpnService(), PlatformInterface {
     }
 
     private fun startForegroundCompat() {
+        val n = buildNotification(
+            if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры" else "Подключаюсь…", null
+        )
+        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else startForeground(NOTIF_ID, n)
+    }
+
+    private fun buildNotification(text: String, sub: String?): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "VPN", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(
             this, 3, Intent(this, BoxVpnService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE
         )
-        val n = Notification.Builder(this, CHANNEL_ID)
+        return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
             .setContentTitle("Fast VPN")
-            .setContentText(
-                if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры"
-                else "Подключено · быстрее нас — только свет"
-            )
+            .setContentText(text)
+            .apply { if (sub != null) setSubText(sub) }
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
             .build()
-        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        else startForeground(NOTIF_ID, n)
+    }
+
+    // --------------------- скорость и трафик в уведомлении ---------------------
+
+    @Volatile private var ticker: Thread? = null
+
+    private fun fmtBytes(b: Double) = when {
+        b >= 1_073_741_824 -> String.format(java.util.Locale.US, "%.2f ГБ", b / 1_073_741_824)
+        b >= 1_048_576 -> String.format(java.util.Locale.US, "%.1f МБ", b / 1_048_576)
+        else -> String.format(java.util.Locale.US, "%.0f КБ", b / 1024)
+    }
+
+    /** Раз в 2 секунды: скорость ↓↑ и трафик за сессию и за сегодня — в уведомлении VPN. */
+    private fun startTicker() {
+        if (ticker?.isAlive == true) return
+        ticker = Thread {
+            val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+            val nm = getSystemService(NotificationManager::class.java)
+            var last: Pair<Long, Long>? = null
+            var lastAt = System.nanoTime()
+            var session = 0L
+            while (isRunning) {
+                try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
+                val p = ports ?: break
+                val now = ClashApi.totals(p.api, p.secret) ?: continue
+                val t = System.nanoTime()
+                val prev = last
+                last = now
+                if (prev == null) { lastAt = t; continue }
+                val sec = (t - lastAt) / 1e9
+                lastAt = t
+                val dDown = (now.first - prev.first).coerceAtLeast(0)
+                val dUp = (now.second - prev.second).coerceAtLeast(0)
+                session += dDown + dUp
+                // Трафик за сегодня — копится между сессиями
+                val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+                val dayBytes = (if (prefs.getString("trafDay", "") == today) prefs.getLong("trafBytes", 0) else 0L) + dDown + dUp
+                prefs.edit().putString("trafDay", today).putLong("trafBytes", dayBytes).apply()
+                val text = "↓ ${fmtBytes(dDown / sec)}/с · ↑ ${fmtBytes(dUp / sec)}/с"
+                val sub = "за сессию ${fmtBytes(session.toDouble())} · сегодня ${fmtBytes(dayBytes.toDouble())}"
+                if (isRunning) nm.notify(NOTIF_ID, buildNotification(text, sub))
+            }
+        }.apply { isDaemon = true; start() }
     }
 
     private fun freePort(): Int = ServerSocket().use {
@@ -157,6 +215,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 ruDirect = AppSettings.ruDirect,
                 adBlock = AppSettings.adBlock,
                 rulesPath = try { BoxConfig.rulesDir(this) } catch (_: Exception) { "" },
+                appsMode = AppSettings.appsMode,
+                appsList = AppSettings.appsList,
             )
             val service = Libbox.newService(config, this)
             service.start()
@@ -164,6 +224,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             ports = p
             isRunning = true
             Widget.update(this)
+            startTicker()
             // Оверлей и лог: читаем соединения игры у своего же ядра
             if (AppSettings.gameMode) MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
@@ -300,6 +361,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 val caps = cm.getNetworkCapabilities(network)
                 val expensive = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
                 listener.updateDefaultInterface(name, idx, expensive, false)
+                // Автоподключение: на Wi-Fi выключить VPN, если он включался сам
+                try { AutoConnect.onNetworkChanged(this@BoxVpnService) } catch (_: Exception) {}
             }
 
             override fun onAvailable(network: Network) {

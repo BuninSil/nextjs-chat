@@ -57,6 +57,17 @@ object AppSettings {
     /** Блокировать рекламу и трекеры */
     @Volatile var adBlock = false
 
+    /** Какие приложения через VPN: все / только выбранные / все, кроме выбранных */
+    const val APPS_ALL = 0
+    const val APPS_ONLY = 1
+    const val APPS_EXCEPT = 2
+    @Volatile var appsMode = APPS_ALL
+    @Volatile var appsList: Set<String> = emptySet()
+
+    /** Автоподключение: включать VPN на мобильном интернете / выключать на Wi-Fi */
+    @Volatile var autoOnMobile = false
+    @Volatile var autoOffWifi = true
+
     /** Тема оформления: dark (по умолчанию), light, neon, amoled */
     @Volatile var theme = "dark"
 
@@ -93,6 +104,10 @@ object AppSettings {
         autoCheckUpdates = p.getBoolean("updAuto2", true)
         theme = p.getString("theme", "dark") ?: "dark"
         ruDirect = p.getBoolean("ruDirect", true)
+        autoOnMobile = p.getBoolean("autoOnMobile", false)
+        autoOffWifi = p.getBoolean("autoOffWifi", true)
+        appsMode = p.getInt("appsMode", APPS_ALL)
+        appsList = p.getStringSet("appsList", emptySet())?.toSet() ?: emptySet()
         adBlock = p.getBoolean("adBlock", false)
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
@@ -138,6 +153,10 @@ object AppSettings {
             .putString("profile", profile)
             .putString("theme", theme)
             .putBoolean("ruDirect", ruDirect)
+            .putBoolean("autoOnMobile", autoOnMobile)
+            .putBoolean("autoOffWifi", autoOffWifi)
+            .putInt("appsMode", appsMode)
+            .putStringSet("appsList", HashSet(appsList))
             .putBoolean("adBlock", adBlock)
             .apply()
     }

@@ -22,6 +22,9 @@ class App : Application() {
 }
 
 object CrashReport {
+    /** Последнее падение (для отчёта о проблеме). */
+    fun last(ctx: Context): String? = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("lastCrash", null)
+
     const val KOTLIN = "crash.txt"
     const val GO = "core-stderr.log"
 
@@ -37,7 +40,10 @@ object CrashReport {
             if (t.contains("panic") || t.contains("fatal")) parts.add("Ядро VPN:\n" + t.takeLast(6000))
             it.delete()
         }
-        return parts.joinToString("\n\n").ifBlank { null }
+        val text = parts.joinToString("\n\n").ifBlank { null }
+        // Копия для отчёта о проблеме — файлы падения после показа удаляются
+        if (text != null) ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("lastCrash", text.take(8000)).apply()
+        return text
     }
 }
 

@@ -104,6 +104,49 @@ object Subscription {
         "ClashMetaForAndroid/2.11.1.Meta", "clash-verge/v2.0.3", "Streisand", "FoXray",
     )
 
+    /** Новый список серверов. Проверки (страна выхода, подбор) сбрасываются, только если он поменялся. */
+    private fun setNodes(ctx: Context, parsed: List<Node>) {
+        val changed = parsed.map { it.name + "|" + it.server + ":" + it.port } != nodes.map { it.name + "|" + it.server + ":" + it.port }
+        nodes = parsed
+        if (changed) resetExits(ctx)
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+            .putLong("subAt", System.currentTimeMillis()).apply()
+    }
+
+    /** Фоновое обновление подписки — не чаще раза в ~сутки. Ошибки молча пропускаем. */
+    fun refreshInBackground(ctx: Context) {
+        AppSettings.load(ctx)
+        val url = AppSettings.subUrl
+        if (!url.startsWith("http")) return
+        val at = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getLong("subAt", 0)
+        if (System.currentTimeMillis() - at < 20 * 60 * 60 * 1000L) return
+        if (nodes.isEmpty()) load(ctx)
+        try { update(ctx, url) } catch (_: Exception) {}
+    }
+
+    /** Что сказать про подписку: скоро кончится срок или трафик. null — всё в порядке. */
+    fun warning(): Pair<String, String>? {
+        val i = info ?: return null
+        if (i.expireSec > 0) {
+            val days = (i.expireSec * 1000 - System.currentTimeMillis()) / 86_400_000.0
+            if (days <= 0) return "Подписка закончилась" to "Продли её у своего VPN-сервиса, иначе серверы перестанут работать"
+            if (days <= 3) {
+                val d = kotlin.math.ceil(days).toInt()
+                return "Подписка заканчивается через $d " + (if (d == 1) "день" else "дня") to
+                    "Продли её заранее, чтобы VPN не отключился"
+            }
+        }
+        if (i.total > 0) {
+            val used = i.upload + i.download
+            if (used >= i.total * 0.9) {
+                val left = (i.total - used).coerceAtLeast(0) / 1_073_741_824.0
+                return "Трафик подписки почти кончился" to
+                    String.format(java.util.Locale.US, "Осталось %.1f ГБ из %.0f ГБ", left, i.total / 1_073_741_824.0)
+            }
+        }
+        return null
+    }
+
     private fun resetExits(ctx: Context) {
         ServerTester.exitCountry.clear()
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove(ServerTester.EXITS_KEY).apply()
@@ -118,8 +161,7 @@ object Subscription {
         file(ctx).writeText(text)
         infoFile(ctx).delete()
         info = null
-        nodes = parsed
-        resetExits(ctx)
+        setNodes(ctx, parsed)
         return parsed.size
     }
 
@@ -164,8 +206,7 @@ object Subscription {
                     infoFile(ctx).writeText(it)
                     info = parseUserInfo(it)
                 }
-                nodes = parsed
-                resetExits(ctx)
+                setNodes(ctx, parsed)
                 return parsed.size
             } catch (e: Exception) {
                 lastProblem = e.message ?: lastProblem

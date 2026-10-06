@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var statusLine: TextView
     private lateinit var serverFlag: TextView
+    private lateinit var subWarn: TextView
     private lateinit var serverName: TextView
     private lateinit var serverSub: TextView
     private lateinit var serverPing: TextView
@@ -98,6 +99,7 @@ class MainActivity : AppCompatActivity() {
             if (updated != null) UpdateFlow.showUpdated(this, updated)
             else if (AppSettings.autoCheckUpdates) checkUpdate(manual = false)
             AutoUpdate.schedule(applicationContext)
+            AutoConnect.arm(applicationContext)
             if (AppSettings.profile.isEmpty()) askProfile()
         }
     }
@@ -243,6 +245,9 @@ class MainActivity : AppCompatActivity() {
         serverPing = Ui.text(this, "", 16f, Ui.GREEN, bold = true)
         srv.addView(serverPing)
         status.addView(srv)
+        // Подписка скоро кончится (срок или трафик)
+        subWarn = Ui.text(this, "", 12f, Ui.YELLOW).apply { setPadding(0, d(10f), 0, 0); visibility = android.view.View.GONE }
+        status.addView(subWarn)
         root.addView(status)
 
         // Кнопка ИГРАТЬ
@@ -439,6 +444,9 @@ class MainActivity : AppCompatActivity() {
         launchRow.visibility = if (AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
 
         updateSetup()
+        val warn = if (AppSettings.mode == AppSettings.MODE_BOX) Subscription.warning() else null
+        subWarn.visibility = if (warn == null) android.view.View.GONE else android.view.View.VISIBLE
+        if (warn != null) subWarn.text = "${warn.first}. ${warn.second}"
         playHint.text = when {
             busy && running -> "VPN уже работает — пользуйся. Лучший сервер подбираю в фоне."
             BoxVpnService.isStarting || busy -> "Подключаюсь…"

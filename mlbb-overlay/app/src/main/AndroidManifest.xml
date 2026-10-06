@@ -23,6 +23,11 @@
         <intent>
             <action android:name="android.net.VpnService" />
         </intent>
+        <!-- Список приложений для выбора «через VPN / мимо» -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
@@ -51,6 +56,10 @@
 
         <activity
             android:name=".SettingsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".AppsActivity"
             android:exported="false" />
 
         <service
@@ -99,6 +108,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Shows which game server Mobile Legends is connected to, without a VPN" />
         </service>
+
+        <!-- Автоподключение по сети -->
+        <service
+            android:name=".AutoConnect$Job"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- Плитка в шторке быстрых настроек -->
         <service

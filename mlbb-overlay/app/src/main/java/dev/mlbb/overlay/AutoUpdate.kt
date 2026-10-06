@@ -29,6 +29,7 @@ object AutoUpdate {
 
     const val NOTIF_READY = 41
     const val NOTIF_DONE = 42
+    const val NOTIF_SUB = 43
 
     /** Открыт ли сейчас главный экран — тогда фоновая установка не трогает приложение. */
     @Volatile var uiVisible = false
@@ -39,10 +40,7 @@ object AutoUpdate {
 
     fun schedule(ctx: Context) {
         val js = ctx.getSystemService(JobScheduler::class.java)
-        if (!AppSettings.autoCheckUpdates) {
-            js.cancel(JOB_ID)
-            return
-        }
+        // Задача нужна всегда: кроме обновлений приложения она обновляет подписку
         if (js.getPendingJob(JOB_ID) != null) return
         js.schedule(
             JobInfo.Builder(JOB_ID, ComponentName(ctx, Job::class.java))
@@ -72,12 +70,29 @@ object AutoUpdate {
     /** Фоновая проверка: скачать новую версию заранее и сообщить уведомлением. */
     private fun runInBackground(ctx: Context) {
         AppSettings.load(ctx)
+        // Подписка: раз в сутки обновить и предупредить, если кончается срок или трафик
+        try {
+            Subscription.refreshInBackground(ctx)
+            subscriptionWarning(ctx)
+        } catch (e: Exception) {
+            Log.w(TAG, "subscription refresh failed", e)
+        }
         // Приложение открыто — там и так покажется окно обновления
         if (!AppSettings.autoCheckUpdates || uiVisible) return
         val rel = Updater.check() ?: return
         val apk = Updater.download(ctx, rel) { }
         rememberNotes(ctx, rel)
         notifyReady(ctx, rel, apk)
+    }
+
+    /** Предупреждение о подписке — не чаще раза в день. */
+    fun subscriptionWarning(ctx: Context) {
+        val (title, text) = Subscription.warning() ?: return
+        val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+        val p = prefs(ctx)
+        if (p.getString("subWarnDay", "") == today) return
+        p.edit().putString("subWarnDay", today).apply()
+        notify(ctx, NOTIF_SUB, title, text, openApp(ctx))
     }
 
     fun rememberNotes(ctx: Context, rel: Updater.Release) {
