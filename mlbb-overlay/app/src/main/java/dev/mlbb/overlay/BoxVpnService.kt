@@ -142,10 +142,19 @@ class BoxVpnService : VpnService(), PlatformInterface {
             var last: Pair<Long, Long>? = null
             var lastAt = System.nanoTime()
             var session = 0L
+            // Сразу после подключения — «Подключено», дальше каждые 2 секунды скорость и трафик
+            if (isRunning) nm.notify(NOTIF_ID, buildNotification(
+                if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры" else "Подключено", null))
+            var misses = 0
             while (isRunning) {
                 try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
                 val p = ports ?: break
-                val now = ClashApi.totals(p.api, p.secret) ?: continue
+                val now = ClashApi.totals(p.api, p.secret)
+                if (now == null) {
+                    if (++misses == 5) AppLog.err("уведомление: ядро не отдаёт счётчики трафика")
+                    continue
+                }
+                misses = 0
                 val t = System.nanoTime()
                 val prev = last
                 last = now
