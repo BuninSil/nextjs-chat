@@ -37,9 +37,52 @@ object Subscription {
         private set
 
     /** Серверы, которые работают на этом устройстве: XHTTP — только если есть ядро Xray (64 бита). */
-    fun usable(ctx: Context): List<Node> {
+    /**
+     * Серверы, которыми можно пользоваться. Скрытые пользователем — только если includeHidden.
+     * Если приложение ещё не открывали (виджет, плитка), подписка подгружается из файла.
+     */
+    fun usable(ctx: Context, includeHidden: Boolean = false): List<Node> {
+        if (nodes.isEmpty()) load(ctx)
+        loadMarks(ctx)
         val xray = XrayCore.available(ctx)
-        return nodes.filter { it.xrayLink == null || xray }
+        return nodes.filter { (it.xrayLink == null || xray) && (includeHidden || it.name !in hidden) }
+    }
+
+    // ------------------------- избранные и скрытые -------------------------
+    // Храним по названию сервера: номера (n0, n1…) меняются при обновлении подписки.
+
+    val favorites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    val hidden: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    @Volatile private var marksLoaded = false
+
+    private fun loadMarks(ctx: Context) {
+        if (marksLoaded) return
+        marksLoaded = true
+        val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        favorites.addAll(p.getStringSet("favorites", emptySet()) ?: emptySet())
+        hidden.addAll(p.getStringSet("hidden", emptySet()) ?: emptySet())
+    }
+
+    private fun saveMarks(ctx: Context) {
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+            .putStringSet("favorites", HashSet(favorites))
+            .putStringSet("hidden", HashSet(hidden))
+            .apply()
+    }
+
+    fun isFavorite(n: Node) = n.name in favorites
+    fun isHidden(n: Node) = n.name in hidden
+
+    fun toggleFavorite(ctx: Context, n: Node) {
+        loadMarks(ctx)
+        if (!favorites.remove(n.name)) { favorites.add(n.name); hidden.remove(n.name) }
+        saveMarks(ctx)
+    }
+
+    fun toggleHidden(ctx: Context, n: Node) {
+        loadMarks(ctx)
+        if (!hidden.remove(n.name)) { hidden.add(n.name); favorites.remove(n.name) }
+        saveMarks(ctx)
     }
 
     private fun file(ctx: Context) = File(ctx.filesDir, "subscription.txt")

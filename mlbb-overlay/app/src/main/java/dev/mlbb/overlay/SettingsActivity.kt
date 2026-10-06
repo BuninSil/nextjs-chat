@@ -92,10 +92,18 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Встроенный VPN ----------
         root.addView(section(if (simple) "VPN" else "Встроенный VPN"))
         root.addView(Ui.card(this).apply {
-            addView(switchRow("Автовыбор сервера",
-                if (simple) "Самый быстрый сервер при подключении" else "Самый быстрый и стабильный при нажатии ИГРАТЬ",
-                AppSettings.autoSelect) {
+            addView(switchRow("Автовыбор сервера", "Самый быстрый рабочий сервер при подключении", AppSettings.autoSelect) {
                 AppSettings.autoSelect = it
+            })
+            addView(divider())
+            addView(switchRow("Российские сайты напрямую",
+                "Банки, Госуслуги, маркетплейсы, Яндекс и VK — мимо VPN: работают как без него, VPN можно не выключать",
+                AppSettings.ruDirect) {
+                AppSettings.ruDirect = it; vpnChanged = true
+            })
+            addView(divider())
+            addView(switchRow("Блокировать рекламу и трекеры", "Рекламные и следящие домены не загружаются", AppSettings.adBlock) {
+                AppSettings.adBlock = it; vpnChanged = true
             })
             if (simple) return@apply
             addView(divider())

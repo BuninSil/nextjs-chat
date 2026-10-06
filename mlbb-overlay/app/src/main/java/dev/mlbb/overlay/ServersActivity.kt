@@ -18,6 +18,8 @@ class ServersActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val adapter = Adapter()
     private lateinit var header: TextView
+    private lateinit var hiddenToggle: TextView
+    private var showHidden = false
 
     private val refresher = object : Runnable {
         override fun run() {
@@ -55,7 +57,7 @@ class ServersActivity : AppCompatActivity() {
         actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         root.addView(actions)
-        root.addView(Ui.text(this, "Круглая стрелка вверху — перемерить пинг. Тапни сервер в списке, чтобы подключиться к нему вручную.", 12f, Ui.MUTED)
+        root.addView(Ui.text(this, "Круглая стрелка вверху — перемерить пинг. Тап по серверу — подключиться к нему, долгое нажатие — в избранное или скрыть.", 12f, Ui.MUTED)
             .apply { setPadding(d(4f), d(10f), d(4f), 0) })
         root.addView(Ui.space(this, 12f))
 
@@ -73,6 +75,12 @@ class ServersActivity : AppCompatActivity() {
         autoCard.addView(auto)
         header = Ui.text(this, "", 12f, Ui.MUTED)
         autoCard.addView(header)
+        // Скрытые серверы — по кнопке, чтобы можно было вернуть
+        hiddenToggle = Ui.text(this, "", 12f, Ui.GREEN, bold = true).apply {
+            setPadding(0, d(8f), 0, 0)
+            setOnClickListener { showHidden = !showHidden; adapter.reload() }
+        }
+        autoCard.addView(hiddenToggle)
         root.addView(autoCard)
         root.addView(Ui.space(this, 10f))
 
@@ -146,6 +154,23 @@ class ServersActivity : AppCompatActivity() {
         }.start()
     }
 
+    /** Долгое нажатие: избранное / скрыть. */
+    private fun marks(n: Subscription.Node) {
+        val fav = Subscription.isFavorite(n)
+        val hid = Subscription.isHidden(n)
+        val items = arrayOf(
+            if (fav) "Убрать из избранного" else "В избранное — автовыбор берёт его первым",
+            if (hid) "Показать снова" else "Скрыть — автовыбор его не берёт",
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(Ui.cleanName(n))
+            .setItems(items) { _, which ->
+                if (which == 0) Subscription.toggleFavorite(this, n) else Subscription.toggleHidden(this, n)
+                adapter.reload()
+            }
+            .show()
+    }
+
     private fun pick(n: Subscription.Node) {
         AppSettings.autoSelect = false
         if (BoxVpnService.isRunning) {
@@ -175,10 +200,20 @@ class ServersActivity : AppCompatActivity() {
 
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
-            val all = Subscription.usable(this@ServersActivity).filterNot { ServerTester.isSeparator(it) }
+            val all = Subscription.usable(this@ServersActivity, includeHidden = showHidden).filterNot { ServerTester.isSeparator(it) }
+            val hiddenCount = Subscription.usable(this@ServersActivity, includeHidden = true).count { Subscription.isHidden(it) }
+            hiddenToggle.visibility = if (hiddenCount > 0) android.view.View.VISIBLE else android.view.View.GONE
+            hiddenToggle.text = if (showHidden) "Убрать скрытые из списка" else "Показать скрытые ($hiddenCount)"
             // Рабочие сверху; в игровом режиме среди них российские первыми
             val game = AppSettings.gameMode
+            // Избранные — всегда сверху, скрытые — в самом низу
             items = all.sortedWith(compareBy<Subscription.Node> {
+                when {
+                    Subscription.isHidden(it) -> 2
+                    Subscription.isFavorite(it) -> 0
+                    else -> 1
+                }
+            }.thenBy {
                 when {
                     !ServerTester.results.containsKey(it.tag) -> 1
                     ServerTester.results[it.tag] == null -> 2
@@ -187,8 +222,7 @@ class ServersActivity : AppCompatActivity() {
             }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
                 .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
             if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${items.size} серверов · пинг напрямую до сервера" +
-                    if (AppSettings.gameMode) " · ★ ближе к серверам игры" else ""
+                header.text = "${items.size} серверов · пинг напрямую до сервера"
             }
             notifyDataSetChanged()
         }
@@ -222,12 +256,16 @@ class ServersActivity : AppCompatActivity() {
             val selected = n.tag == AppSettings.selectedTag
             h.root.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             Ui.setFlag(h.flag, Ui.flagFor(n), 24f)
-            h.name.text = (if (AppSettings.gameMode && ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
+            val fav = Subscription.isFavorite(n)
+            h.name.text = if (fav) Ui.iconText(h.root.context, R.drawable.ic_star, Ui.cleanName(n), 14f, 6f, tint = Ui.YELLOW)
+            else Ui.cleanName(n)
+            h.root.alpha = if (Subscription.isHidden(n)) 0.45f else 1f
             val r = ServerTester.results[n.tag]
             val udp = if (n.nativeUdp) " · UDP ✓" else ""
             val exit = ServerTester.exitCountry[n.tag]
             val sp = ServerTester.speed[n.tag]
-            h.sub.text = n.type + udp + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
+            val forGame = if (AppSettings.gameMode && ServerTester.isRussian(n)) " · приоритет для игры" else ""
+            h.sub.text = n.type + udp + forGame + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
                 (sp?.let { " · ↓ " + String.format(java.util.Locale.US, "%.0f", it) + " Мбит/с" } ?: "") +
                 (exit?.let { " · выход ${GeoDb.flag(it)}" } ?: "")
             h.ping.text = when {
@@ -237,6 +275,7 @@ class ServersActivity : AppCompatActivity() {
             }
             h.ping.setTextColor(if (r == null && ServerTester.results.containsKey(n.tag)) Ui.RED else Ui.pingColor(r?.medianMs))
             h.root.setOnClickListener { pick(n) }
+            h.root.setOnLongClickListener { marks(n); true }
         }
     }
 }

@@ -167,13 +167,17 @@ object ServerTester {
         pool.shutdown()
         pool.awaitTermination(60, TimeUnit.SECONDS)
         testing = false
-        val ranked = results.ranked()
-        if (!game) return ranked
-        // Игровой режим: российские серверы всегда первыми (ближе к серверам MLBB в РФ),
-        // зарубежные — только запасным вариантом
         val byTag = nodes.associateBy { it.tag }
-        val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
-        return ru + other
+        var ranked = results.ranked()
+        if (game) {
+            // Игровой режим: российские серверы всегда первыми (ближе к серверам MLBB в РФ),
+            // зарубежные — только запасным вариантом
+            val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
+            ranked = ru + other
+        }
+        // Избранные пользователем — в начало, порядок внутри сохраняется
+        val (fav, rest) = ranked.partition { tag -> byTag[tag]?.let { Subscription.isFavorite(it) } == true }
+        return fav + rest
     }
 
     /**

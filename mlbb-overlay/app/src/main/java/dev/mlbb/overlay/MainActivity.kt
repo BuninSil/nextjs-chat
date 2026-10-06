@@ -58,7 +58,11 @@ class MainActivity : AppCompatActivity() {
 
     private var shownError: String? = null
     private var afterVpnPermission: (() -> Unit)? = null
-    @Volatile private var busy = false
+    /** Идёт подключение или подбор сервера — общее состояние с плиткой и виджетом */
+    private var busy: Boolean
+        get() = Connector.busy
+        set(v) { Connector.busy = v }
+    private val busyText get() = Connector.busyText
 
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val next = afterVpnPermission
@@ -629,106 +633,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Что сейчас делает фоновый подбор — показывается в строке статуса. */
-    @Volatile private var busyText = ""
-
-    /**
-     * Подключение без ожидания: сразу к последнему удачному серверу, быстрая проверка, что он живой.
-     * Полный подбор (пинг до всех, скорость) — только если сервер не отвечает, сменилась сеть
-     * или с прошлого подбора прошло больше 6 часов, и уже при работающем VPN, в фоне.
-     */
+    /** Подключение — общее с плиткой в шторке и виджетом (см. [Connector]). */
     private fun playBox() {
-        busy = true
-        busyText = "Подключаюсь…"
-        Thread {
-            val ctx = applicationContext
-            if (!startBoxAndWait()) {
-                busy = false
-                return@Thread
+        val game = AppSettings.gameMode
+        Connector.connect(applicationContext) { msg ->
+            runOnUiThread {
+                if (msg != null) toast(msg)
+                if (game && AppSettings.autoLaunch) launchGame()
             }
-            val game = AppSettings.gameMode
-            val tag = AppSettings.selectedTag
-            busyText = "Проверяю сервер…"
-            val alive = ServerTester.alive(tag)
-            val goodForGame = !game || (alive && ServerTester.exitOkForGame(ctx, tag))
-            val stale = ServerTester.rankingStale(ctx)
-
-            fun done(msg: String?) {
-                runOnUiThread {
-                    if (msg != null) toast(msg)
-                    if (game && AppSettings.autoLaunch) launchGame()
-                }
-            }
-            fun serverName() = nodeByTag(AppSettings.selectedTag)?.let { Ui.cleanName(it) } ?: ""
-
-            when {
-                !AppSettings.autoSelect -> {
-                    // Сервер выбран вручную — не трогаем, только предупреждаем, если он не отвечает
-                    busy = false
-                    done(if (alive) "Сервер: ${serverName()}" else "Выбранный сервер не отвечает — выбери другой в «Серверах» или включи автовыбор")
-                }
-                game && alive && goodForGame -> {
-                    // Игровой режим: сервер выбирается один раз при подключении и дальше не меняется —
-                    // никакого фонового подбора, иначе пинг в игре скакал бы
-                    busy = false
-                    done("Сервер: ${serverName()}")
-                }
-                alive && !stale -> {
-                    // Всё хорошо и подбор свежий — готово за пару секунд
-                    busy = false
-                    done("Сервер: ${serverName()}")
-                }
-                alive && goodForGame -> {
-                    // Работает, но подбор устарел: пользуемся сразу, лучший ищем в фоне
-                    done(null)
-                    rank(ctx, game) {}
-                    busy = false
-                    runOnUiThread { toast("Подобран сервер: ${serverName()}") }
-                }
-                else -> {
-                    // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий,
-                    // чтобы интернет пошёл сразу; самый быстрый — следом, в фоне
-                    rank(ctx, game) { done("Сервер: ${serverName()}") }
-                    busy = false
-                }
-            }
-        }.start()
-    }
-
-    /** Полный подбор при работающем VPN; прогресс — в строке статуса. Прерывается, если VPN выключили. */
-    private fun rank(ctx: android.content.Context, game: Boolean, onWorking: () -> Unit) {
-        if (!BoxVpnService.isRunning) return
-        busyText = "Меряю пинг до серверов…"
-        val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
-        if (!BoxVpnService.isRunning) return
-        if (ranked.isEmpty()) {
-            onWorking()
-            return
         }
-        // Сначала — первый рабочий (в игре — с выходом в России): интернет есть уже через секунды
-        busyText = if (game) "Ищу сервер с выходом в России…" else "Проверяю сервер…"
-        ServerTester.pickWorking(ctx, ranked)
-        onWorking()
-        // Обычный режим: дальше в фоне — самый быстрый по скорости
-        if (!game && BoxVpnService.isRunning) {
-            ServerTester.pickFastest(ctx, ranked) { done, total -> busyText = "Проверяю скорость: $done из $total" }
-        }
-        if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
-    }
-
-    /** Запускает встроенный VPN и ждёт подключения (до 20 с). Вызывать не с главного потока. */
-    private fun startBoxAndWait(): Boolean {
-        BoxVpnService.lastError = null
-        BoxVpnService.start(this)
-        Thread.sleep(300)
-        val deadline = System.currentTimeMillis() + 20_000
-        while ((BoxVpnService.isStarting || !BoxVpnService.isRunning) && BoxVpnService.lastError == null &&
-            System.currentTimeMillis() < deadline
-        ) Thread.sleep(200)
-        if (!BoxVpnService.isRunning && BoxVpnService.lastError == null) {
-            BoxVpnService.lastError = "VPN не подключился за 20 секунд"
-        }
-        return BoxVpnService.isRunning
     }
 
     private fun stopAll() {
@@ -886,7 +799,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             var error: String? = null
             var n = 0
-            if (!startBoxAndWait()) {
+            if (!Connector.startAndWait(applicationContext)) {
                 error = BoxVpnService.lastError ?: "VPN не подключился"
             } else {
                 // Берём рабочий сервер: замер пинга и проверка, что через него ходит трафик

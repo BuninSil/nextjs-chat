@@ -154,12 +154,16 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
                 gameMode = AppSettings.gameMode,
                 xrayPorts = xrayPorts,
+                ruDirect = AppSettings.ruDirect,
+                adBlock = AppSettings.adBlock,
+                rulesPath = try { BoxConfig.rulesDir(this) } catch (_: Exception) { "" },
             )
             val service = Libbox.newService(config, this)
             service.start()
             box = service
             ports = p
             isRunning = true
+            Widget.update(this)
             // Оверлей и лог: читаем соединения игры у своего же ядра
             if (AppSettings.gameMode) MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
@@ -175,6 +179,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
     private fun stopBox() {
         isRunning = false
+        try { Widget.update(this) } catch (_: Exception) {}
         ports = null
         XrayCore.stop()
         MonitorService.stop(this)

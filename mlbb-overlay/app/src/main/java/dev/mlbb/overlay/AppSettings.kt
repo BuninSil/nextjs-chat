@@ -52,6 +52,11 @@ object AppSettings {
 
     @Volatile var autoCheckUpdates = true
 
+    /** Российские сайты (банки, Госуслуги, маркетплейсы…) — напрямую, мимо VPN */
+    @Volatile var ruDirect = true
+    /** Блокировать рекламу и трекеры */
+    @Volatile var adBlock = false
+
     /** Тема оформления: dark (по умолчанию), light, neon, amoled */
     @Volatile var theme = "dark"
 
@@ -87,6 +92,8 @@ object AppSettings {
         // Автообновления теперь бесшовные — включаем всем (новый ключ, старый «проверять при запуске» не учитываем)
         autoCheckUpdates = p.getBoolean("updAuto2", true)
         theme = p.getString("theme", "dark") ?: "dark"
+        ruDirect = p.getBoolean("ruDirect", true)
+        adBlock = p.getBoolean("adBlock", false)
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
         if (simple) applySimple()
@@ -130,6 +137,8 @@ object AppSettings {
             .putBoolean("updAuto2", autoCheckUpdates)
             .putString("profile", profile)
             .putString("theme", theme)
+            .putBoolean("ruDirect", ruDirect)
+            .putBoolean("adBlock", adBlock)
             .apply()
     }
 

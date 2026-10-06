@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Fast VPN</string>
+    <string name="widget_desc">Статус VPN, сервер и кнопка подключения</string>
+    <string name="tile_label">Fast VPN</string>
 </resources>

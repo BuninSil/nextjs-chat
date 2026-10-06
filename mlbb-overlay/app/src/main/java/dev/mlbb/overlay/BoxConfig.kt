@@ -15,6 +15,37 @@ import org.json.JSONObject
 object BoxConfig {
     const val GAME = CaptureVpnService.GAME_PACKAGE
 
+    /** Российские зоны и сервисы с не-.ru доменами, которые точно должны идти напрямую. */
+    private val RU_SUFFIXES = JSONArray(listOf(
+        "ru", "su", "xn--p1ai", "xn--80adxhks", "moscow", "xn--d1acj3b",
+        // Банки и платежи
+        "sberbank.com", "sber.ru", "tbank.ru", "tinkoff.ru", "vtb.ru", "alfabank.ru", "gazprombank.ru", "nspk.ru",
+        "mironline.ru", "qiwi.com", "yoomoney.ru",
+        // Госуслуги и госсервисы
+        "gosuslugi.ru", "mos.ru", "nalog.gov.ru", "pfr.gov.ru",
+        // Яндекс, VK, Mail.ru
+        "yandex.net", "yandex.com", "yastatic.net", "ya.ru", "vk.com", "vk.me", "vkuser.net", "userapi.com",
+        "vk-cdn.net", "vkuseraudio.net", "vkuservideo.net", "mycdn.me", "ok.ru", "mail.ru", "imgsmail.ru",
+        // Маркетплейсы и сервисы
+        "ozon.ru", "ozone.ru", "wildberries.ru", "wb.ru", "wbbasket.ru", "avito.ru", "avito.st", "kinopoisk.ru",
+        "rutube.ru", "dzen.ru", "2gis.com", "kaspersky.com",
+    ))
+
+    /** Папка с наборами правил: копируются из APK при первом запуске и после обновлений. */
+    fun rulesDir(ctx: android.content.Context): String {
+        val dir = java.io.File(ctx.filesDir, "rules").apply { mkdirs() }
+        val stamp = java.io.File(dir, "version")
+        val version = BuildConfig.VERSION_CODE.toString()
+        if (stamp.takeIf { it.exists() }?.readText() != version) {
+            val am = ctx.assets
+            for (name in am.list("rules") ?: emptyArray()) {
+                am.open("rules/$name").use { input -> java.io.File(dir, name).outputStream().use { input.copyTo(it) } }
+            }
+            stamp.writeText(version)
+        }
+        return dir.path
+    }
+
     data class Ports(val api: Int, val secret: String, val mixed: Int)
 
     fun build(
@@ -28,6 +59,12 @@ object BoxConfig {
         gameMode: Boolean,
         /** tag XHTTP-сервера -> локальный SOCKS-порт Xray */
         xrayPorts: Map<String, Int> = emptyMap(),
+        /** Российские сайты напрямую */
+        ruDirect: Boolean = false,
+        /** Блокировать рекламу и трекеры */
+        adBlock: Boolean = false,
+        /** Папка с наборами правил (.srs), см. [rulesDir] */
+        rulesPath: String = "",
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -69,6 +106,26 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+        val ruleSets = JSONArray()
+        fun ruleSet(tag: String, file: String) {
+            ruleSets.put(JSONObject().put("type", "local").put("tag", tag).put("format", "binary")
+                .put("path", "$rulesPath/$file"))
+        }
+        if (adBlock && rulesPath.isNotEmpty()) {
+            // Реклама и трекеры — соединение отклоняется
+            ruleSet("ads", "geosite-category-ads-all.srs")
+            rules.put(JSONObject().put("rule_set", JSONArray().put("ads")).put("action", "reject"))
+        }
+        if (ruDirect) {
+            // Российские сайты напрямую: банки и Госуслуги не пускают с зарубежных адресов, а
+            // маркетплейсы и видео быстрее без лишнего круга. Только по доменам — российские IP
+            // (в том числе серверы игр) не трогаем, они идут как раньше.
+            rules.put(JSONObject().put("domain_suffix", RU_SUFFIXES).put("outbound", "direct"))
+            if (rulesPath.isNotEmpty()) {
+                ruleSet("ru", "geosite-category-ru.srs")
+                rules.put(JSONObject().put("rule_set", JSONArray().put("ru")).put("outbound", "direct"))
+            }
+        }
         if (gameMode && battleDirect) {
             // Матч напрямую: UDP игры мимо туннеля (минимальный пинг, если оператор пускает)
             rules.put(
@@ -102,6 +159,7 @@ object BoxConfig {
             .put("outbounds", outbounds)
             .put("route", JSONObject()
                 .put("rules", rules)
+                .put("rule_set", ruleSets)
                 .put("final", "proxy")
                 .put("auto_detect_interface", true)
                 // Определение приложения по каждому соединению — только для игровых функций
