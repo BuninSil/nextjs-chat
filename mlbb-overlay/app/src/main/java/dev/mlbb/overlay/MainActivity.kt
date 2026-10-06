@@ -773,10 +773,18 @@ class MainActivity : AppCompatActivity() {
             .setCancelable(false).show()
         Thread {
             var error: String? = null
+            var geo = false
             val msg = try {
-                val n = Subscription.update(applicationContext, url)
+                val n = try {
+                    Subscription.update(applicationContext, url)
+                } catch (e: Subscription.GeoBlocked) {
+                    // Панель пускает только российские адреса: если наш VPN включён — через сервер с выходом в России
+                    if (!BoxVpnService.isRunning) throw e
+                    Subscription.updateViaRuExit(applicationContext, url) { m -> runOnUiThread { progress.setMessage(m) } }
+                }
                 "Готово: серверов $n" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
             } catch (e: Exception) {
+                geo = e is Subscription.GeoBlocked
                 error = e.message
                 ""
             }
@@ -784,43 +792,48 @@ class MainActivity : AppCompatActivity() {
                 progress.dismiss()
                 when {
                     error == null -> toast(msg)
-                    // Напрямую адрес подписки часто заблокирован — пробуем через свой VPN на старых серверах
-                    canUpdateViaOwnVpn() -> withVpnPermission { updateSubscriptionViaVpn(url) }
+                    // Напрямую не открылась или панель режет зарубежный адрес — через свой VPN на сохранённых серверах
+                    canUpdateViaOwnVpn() -> withVpnPermission { updateSubscriptionViaVpn(url, geo) }
                     else -> showInfo("Подписка не загрузилась", error!!)
                 }
             }
         }.start()
     }
 
+    /** Есть сохранённые серверы — можно скачать подписку через свой VPN (сторонний Android отключит сам). */
     private fun canUpdateViaOwnVpn() =
-        !BoxVpnService.isRunning && !CaptureVpnService.isRunning && !ServerTester.otherVpnActive(this) &&
+        !BoxVpnService.isRunning && !CaptureVpnService.isRunning &&
             AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isNotEmpty()
 
     /**
-     * Подписка не скачалась напрямую: поднимаем свой VPN на уже сохранённых серверах,
-     * качаем подписку через него и отключаемся. Сторонний VPN для обновления не нужен.
+     * Подписка не скачалась: поднимаем свой VPN на уже сохранённых серверах, качаем подписку
+     * через него и отключаемся. Если панель пускает только российские адреса — через сервер
+     * с выходом в России.
      */
-    private fun updateSubscriptionViaVpn(url: String) {
+    private fun updateSubscriptionViaVpn(url: String, needRu: Boolean) {
         busy = true
         val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку через VPN")
-            .setMessage("Напрямую не открылась — подключаюсь к сохранённому серверу…").setCancelable(false).show()
+            .setMessage("Подключаюсь к сохранённому серверу…").setCancelable(false).show()
         Thread {
             var error: String? = null
             var n = 0
             if (!Connector.startAndWait(applicationContext)) {
                 error = BoxVpnService.lastError ?: "VPN не подключился"
             } else {
-                // Берём рабочий сервер: замер пинга и проверка, что через него ходит трафик
-                runOnUiThread { progress.setMessage("Ищу рабочий сервер…") }
-                val ranked = ServerTester.measure(applicationContext) { _, _ -> }
-                if (ranked.isNotEmpty()) ServerTester.pickWorking(applicationContext, ranked, 6)
-                runOnUiThread { progress.setMessage("Скачиваю подписку…") }
-                try {
-                    n = Subscription.update(applicationContext, url)
+                val say: (String) -> Unit = { m -> runOnUiThread { progress.setMessage(m) } }
+                n = try {
+                    if (needRu) Subscription.updateViaRuExit(applicationContext, url, say)
+                    else try {
+                        say("Скачиваю подписку…")
+                        Subscription.update(applicationContext, url)
+                    } catch (e: Subscription.GeoBlocked) {
+                        Subscription.updateViaRuExit(applicationContext, url, say)
+                    }
                 } catch (e: Exception) {
                     error = e.message
+                    0
                 }
-                BoxVpnService.stop(this)
+                BoxVpnService.stop(this, manual = false)
             }
             busy = false
             runOnUiThread {

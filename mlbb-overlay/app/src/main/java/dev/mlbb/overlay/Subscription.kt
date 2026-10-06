@@ -113,6 +113,43 @@ object Subscription {
             .putLong("subAt", System.currentTimeMillis()).apply()
     }
 
+    /**
+     * Скачать подписку через сервер с выходом в России (нужен работающий встроенный VPN):
+     * для панелей, которые пускают только российские адреса. Выбранный сервер потом возвращается.
+     */
+    fun updateViaRuExit(ctx: Context, url: String, progress: (String) -> Unit = {}): Int {
+        val p = BoxVpnService.ports ?: throw RuntimeException("VPN не подключён")
+        ServerTester.loadExits(ctx)
+        val keep = AppSettings.selectedTag
+        // Сначала с уже известным выходом в России, потом российские по названию, потом остальные
+        val candidates = usable(ctx).filterNot { ServerTester.isSeparator(it) }.sortedBy {
+            when {
+                ServerTester.exitCountry[it.tag] == "RU" -> 0
+                ServerTester.exitCountry[it.tag] == null && ServerTester.isRussian(it) -> 1
+                ServerTester.exitCountry[it.tag] == null -> 2
+                else -> 3
+            }
+        }.take(12)
+        var last: Exception = RuntimeException("не нашёл сервер с выходом в России")
+        try {
+            for ((i, n) in candidates.withIndex()) {
+                if (ServerTester.exitCountry[n.tag]?.let { it != "RU" } == true) break
+                progress("Ищу сервер с выходом в России: ${i + 1} из ${candidates.size}…")
+                if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
+                if (!ServerTester.exitOkForGame(ctx, n.tag)) continue
+                progress("Скачиваю подписку через «${Ui.cleanName(n)}»…")
+                try {
+                    return update(ctx, url)
+                } catch (e: Exception) {
+                    last = e
+                }
+            }
+        } finally {
+            if (keep.isNotEmpty()) ClashApi.select(p.api, p.secret, "proxy", keep)
+        }
+        throw last
+    }
+
     /** Фоновое обновление подписки — не чаще раза в ~сутки. Ошибки молча пропускаем. */
     fun refreshInBackground(ctx: Context) {
         AppSettings.load(ctx)
@@ -121,7 +158,14 @@ object Subscription {
         val at = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getLong("subAt", 0)
         if (System.currentTimeMillis() - at < 20 * 60 * 60 * 1000L) return
         if (nodes.isEmpty()) load(ctx)
-        try { update(ctx, url) } catch (_: Exception) {}
+        try {
+            update(ctx, url)
+        } catch (_: GeoBlocked) {
+            // Панель пускает только российские адреса — через сервер с выходом в России,
+            // но не в игровом режиме: там сервер посреди сессии не трогаем
+            if (BoxVpnService.isRunning && !AppSettings.gameMode) try { updateViaRuExit(ctx, url) } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     /** Что сказать про подписку: скоро кончится срок или трафик. null — всё в порядке. */
@@ -173,6 +217,14 @@ object Subscription {
         return id
     }
 
+    /** Сервер подписки пускает только с российских адресов, а запрос пришёл из другой страны. */
+    class GeoBlocked(val country: String) : RuntimeException(
+        "Сервер подписки пускает только с российских адресов, а запрос пришёл из $country — " +
+            "скорее всего, через включённый VPN с зарубежным сервером.\n\n" +
+            "Что сделать: выключи сторонний VPN или переключи его на российский сервер и обнови ещё раз. " +
+            "Если в Fast VPN уже есть серверы — он сам скачает подписку через сервер с выходом в России."
+    )
+
     /** Скачивает подписку. Бросает исключение с понятным текстом. */
     fun update(ctx: Context, url: String): Int {
         var lastProblem = "сервер подписки не ответил"
@@ -192,6 +244,9 @@ object Subscription {
                         c.errorStream?.bufferedReader()?.use { it.readText() }
                             ?.replace(Regex("<[^>]+>"), " ")?.replace(Regex("\\s+"), " ")?.trim()?.take(160)
                     } catch (_: Exception) { null }
+                    // Панель режет не российские адреса — смена User-Agent тут не поможет
+                    val country = why?.let { Regex("country code:\\s*([A-Z]{2})").find(it)?.groupValues?.get(1) }
+                    if (code == 403 && country != null && country != "RU") throw GeoBlocked(country)
                     lastProblem = "сервер подписки ответил HTTP $code" + (why?.takeIf { it.isNotEmpty() }?.let { " («$it»)" } ?: "")
                     continue
                 }
@@ -208,6 +263,8 @@ object Subscription {
                 }
                 setNodes(ctx, parsed)
                 return parsed.size
+            } catch (e: GeoBlocked) {
+                throw e
             } catch (e: Exception) {
                 lastProblem = e.message ?: lastProblem
             }
