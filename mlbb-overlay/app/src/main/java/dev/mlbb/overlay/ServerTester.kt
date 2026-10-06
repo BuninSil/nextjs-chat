@@ -241,26 +241,43 @@ object ServerTester {
      * Проверяет страну выхода у всех серверов заново (кнопка «Выходы»). Нужен запущенный VPN.
      * В конце возвращает ядро на выбранный сервер.
      */
-    fun checkAllExits(ctx: Context, progress: (Int, Int) -> Unit): Pair<Int, Int> {
-        val p = BoxVpnService.ports ?: return 0 to 0
+    /** Остановить проверку выходов (кнопка «Стоп»). */
+    @Volatile var cancelExits = false
+
+    /**
+     * Проверяет страну выхода у всех серверов заново (кнопка «Выходы»). Нужен запущенный VPN.
+     * Неотвечающие серверы пропускаются быстро. В конце ядро возвращается на выбранный сервер.
+     * Возвращает (определено, в России, не ответили).
+     */
+    fun checkAllExits(ctx: Context, progress: (Int, Int, String) -> Unit): Triple<Int, Int, Int> {
+        val p = BoxVpnService.ports ?: return Triple(0, 0, 0)
         loadExits(ctx)
+        cancelExits = false
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
         val keep = AppSettings.selectedTag
         var found = 0
         var ru = 0
-        nodes.forEachIndexed { i, n ->
-            progress(i + 1, nodes.size)
-            if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) return@forEachIndexed
-            val loc = traceExit(p.mixed)
-            if (loc != null) {
+        var dead = 0
+        try {
+            for ((i, n) in nodes.withIndex()) {
+                if (cancelExits || BoxVpnService.ports == null) break
+                progress(i + 1, nodes.size, Ui.cleanName(n))
+                if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
+                // Мёртвый сервер — сразу дальше, не ждём таймаутов проверки выхода
+                if (ClashApi.delay(p.api, p.secret, n.tag, CHECK_URL, 2500) == null) {
+                    dead++
+                    continue
+                }
+                val loc = traceExit(p.mixed) ?: continue
                 exitCountry[n.tag] = loc
                 found++
                 if (loc == "RU") ru++
             }
+        } finally {
+            saveExits(ctx)
+            if (keep.isNotEmpty() && BoxVpnService.ports != null) ClashApi.select(p.api, p.secret, "proxy", keep)
         }
-        saveExits(ctx)
-        if (keep.isNotEmpty()) ClashApi.select(p.api, p.secret, "proxy", keep)
-        return found to ru
+        return Triple(found, ru, dead)
     }
 
     /** Адреса, где Cloudflare отвечает, с какого IP и из какой страны пришёл запрос (только https — с http редирект). */
@@ -280,8 +297,8 @@ object ServerTester {
                 val c = java.net.URL(url).openConnection(
                     java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
                 ) as java.net.HttpURLConnection
-                c.connectTimeout = 4000
-                c.readTimeout = 4000
+                c.connectTimeout = 3000
+                c.readTimeout = 3000
                 c.instanceFollowRedirects = true
                 // Новое соединение на каждую проверку: иначе Android переиспользует открытое
                 // через предыдущий сервер, и у всех серверов «выход» оказывается одинаковым

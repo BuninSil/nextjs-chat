@@ -116,42 +116,83 @@ class ServersActivity : AppCompatActivity() {
         }.start()
     }
 
-    /** Проверка реальной страны выхода у всех серверов (запоминается до обновления подписки). */
-    private fun checkExits() {
-        if (!BoxVpnService.isRunning) {
-            Toast.makeText(this, "Страна выхода проверяется через VPN — сначала подключись", Toast.LENGTH_LONG).show()
+    /** Разрешение на VPN, если проверке нужно поднять VPN самой. */
+    private var afterVpnPermission: (() -> Unit)? = null
+    private val vpnPermission = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        val next = afterVpnPermission
+        afterVpnPermission = null
+        if (it.resultCode == RESULT_OK) next?.invoke()
+        else Toast.makeText(this, "Без разрешения на VPN проверку не запустить", Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * Выполнить проверку через VPN. Если VPN выключен — поднимаем его на время проверки и потом
+     * выключаем. work получает функцию для текста прогресса; вызывается не на главном потоке.
+     */
+    private fun withVpn(title: String, onStop: () -> Unit, work: ((String) -> Unit) -> String) {
+        if (ServerTester.testing) {
+            Toast.makeText(this, "Сейчас идёт замер пинга — подожди пару секунд", Toast.LENGTH_SHORT).show()
             return
         }
-        if (ServerTester.testing) return
-        Thread {
-            val (n, ru) = ServerTester.checkAllExits(applicationContext) { done, total ->
-                runOnUiThread { header.text = "Выходы: $done из $total…" }
+        val run = {
+            val dlg = android.app.AlertDialog.Builder(this).setTitle(title).setMessage("Секунду…")
+                .setCancelable(false)
+                .setNegativeButton("Стоп") { _, _ -> onStop() }
+                .show()
+            Thread {
+                val startedHere = !BoxVpnService.isRunning
+                val say: (String) -> Unit = { m -> runOnUiThread { dlg.setMessage(m) } }
+                val result = if (startedHere) {
+                    say("Включаю VPN на время проверки…")
+                    if (Connector.startAndWait(applicationContext)) work(say)
+                    else "VPN не подключился: ${BoxVpnService.lastError ?: "неизвестная ошибка"}"
+                } else work(say)
+                if (startedHere) BoxVpnService.stop(this, manual = false)
+                runOnUiThread {
+                    if (!isFinishing) {
+                        dlg.dismiss()
+                        android.app.AlertDialog.Builder(this).setTitle(title).setMessage(result)
+                            .setPositiveButton("Понятно", null).show()
+                    }
+                    adapter.reload()
+                }
+            }.start()
+        }
+        val prep = android.net.VpnService.prepare(this)
+        if (BoxVpnService.isRunning || prep == null) run()
+        else {
+            afterVpnPermission = run
+            vpnPermission.launch(prep)
+        }
+    }
+
+    /** Проверка реальной страны выхода у всех серверов (запоминается до обновления подписки). */
+    private fun checkExits() {
+        withVpn("Проверяю выходы", onStop = { ServerTester.cancelExits = true }) { say ->
+            val (n, ru, dead) = ServerTester.checkAllExits(applicationContext) { done, total, name ->
+                say("Сервер $done из $total\n$name")
             }
-            runOnUiThread {
-                header.text = ""
-                val msg = if (n == 0) "Не удалось определить выход ни у одного сервера — проверь, что VPN работает"
-                else "Выход определён у $n серверов, в России: $ru"
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-            }
-        }.start()
+            if (n == 0) "Не удалось определить выход ни у одного сервера. Проверь, что интернет есть, и попробуй ещё раз."
+            else "Выход определён у $n серверов.\nС выходом в России: $ru." +
+                (if (dead > 0) "\nНе ответили: $dead." else "") +
+                "\n\nВ списке у каждого теперь написано «выход» и флаг страны."
+        }
     }
 
     /** Замер скорости через лучшие по пингу серверы; выбирает самый быстрый. */
     private fun speedRank() {
-        if (!BoxVpnService.isRunning) {
-            Toast.makeText(this, "Скорость меряется через VPN — сначала подключись", Toast.LENGTH_LONG).show()
-            return
+        withVpn("Ищу самый быстрый", onStop = {}) { say ->
+            say("Меряю пинг до серверов…")
+            val ranked = ServerTester.measure(applicationContext) { done, total -> say("Пинг: $done из $total") }
+            val best = ServerTester.pickFastest(applicationContext, ranked, 8) { done, total ->
+                say("Скорость: сервер $done из $total")
+            }
+            val n = Subscription.usable(applicationContext).firstOrNull { it.tag == best }
+            if (n == null) "Не получилось замерить скорость — попробуй ещё раз"
+            else "Самый быстрый: ${Ui.cleanName(n)}" +
+                (ServerTester.speed[n.tag]?.let { String.format(java.util.Locale.US, " — %.0f Мбит/с", it) } ?: "") +
+                ". Он выбран."
         }
-        if (ServerTester.testing) return
-        Thread {
-            val ranked = ServerTester.measure(applicationContext) { done, total ->
-                runOnUiThread { header.text = "Пинг: $done из $total…" }
-            }
-            ServerTester.pickFastest(applicationContext, ranked, 8) { done, total ->
-                runOnUiThread { header.text = "Скорость: сервер $done из $total…" }
-            }
-            runOnUiThread { header.text = "" }
-        }.start()
     }
 
     /** Долгое нажатие: избранное / скрыть. */
