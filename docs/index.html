@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Понятный гайд по всем функциям Fast VPN">
+<title>Гайд по Fast VPN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Раскладка: узкая колонка чтения + липкое оглавление слева на широком экране, на телефоне — оглавление сверху */
+:root {
+  --bg: #F3F6F2;
+  --surface: #FFFFFF;
+  --surface-2: #E8EEE9;
+  --fg: #141A17;
+  --muted: #56615B;
+  --line: #D9E1DB;
+  --accent: #178C43;
+  --accent-ink: #FFFFFF;
+  --bolt: #B88700;
+  --warn-bg: #FFF6DB;
+  --warn-fg: #6B4E00;
+  --font-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --font-body: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1211; --surface: #161C1A; --surface-2: #1E2623; --fg: #E6ECE8; --muted: #8E9A94;
+    --line: #26302C; --accent: #3DDC7A; --accent-ink: #062012; --bolt: #FFD54A;
+    --warn-bg: #2A2410; --warn-fg: #F3D27A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1211; --surface: #161C1A; --surface-2: #1E2623; --fg: #E6ECE8; --muted: #8E9A94;
+  --line: #26302C; --accent: #3DDC7A; --accent-ink: #062012; --bolt: #FFD54A;
+  --warn-bg: #2A2410; --warn-fg: #F3D27A; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 0 64px;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.35rem, 3.2vw, 1.7rem); margin: 0 0 12px; scroll-margin-top: 20px; }
+h3 { font-size: 1.05rem; margin: 26px 0 8px; font-weight: 500; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+li { margin: 4px 0; }
+li::marker { color: var(--muted); }
+
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 32px; }
+@media (min-width: 980px) {
+  .wrap { grid-template-columns: 240px minmax(0, 1fr); gap: 48px; }
+}
+
+/* Шапка */
+.hero { max-width: 1120px; margin: 0 auto; padding-block: 40px 28px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.hero svg { flex: none; width: 76px; height: 76px; border-radius: 20px; }
+.hero h1 { font-size: clamp(1.9rem, 6vw, 2.8rem); margin: 0; font-weight: 700; }
+.hero .slogan { display: flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; margin-top: 4px; }
+.hero .slogan svg { width: 15px; height: 15px; border-radius: 0; }
+.hero .lead { flex-basis: 100%; max-width: 62ch; color: var(--muted); margin: 6px 0 0; font-size: 1.05rem; }
+
+/* Оглавление */
+nav.toc { font-size: 0.95rem; }
+nav.toc details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; }
+nav.toc summary { cursor: pointer; font-weight: 600; }
+nav.toc ol { margin: 10px 0 2px; padding-left: 1.4em; }
+nav.toc a { color: var(--fg); text-decoration: none; }
+nav.toc a:hover { color: var(--accent); }
+@media (min-width: 980px) {
+  nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; max-height: calc(100vh - 40px); overflow: auto; }
+  nav.toc details { background: transparent; border: 0; padding: 0; }
+  nav.toc summary { list-style: none; font-family: var(--font-display); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); pointer-events: none; }
+  nav.toc summary::-webkit-details-marker { display: none; }
+}
+
+main { min-width: 0; display: flex; flex-direction: column; gap: 52px; }
+section { min-width: 0; max-width: 72ch; }
+section.wide { max-width: none; }
+
+/* Текст + картинка экрана */
+.with-shot { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; max-width: 860px; }
+.with-shot > div { min-width: 0; }
+@media (min-width: 720px) { .with-shot { grid-template-columns: minmax(0, 1fr) 230px; gap: 32px; } }
+figure { margin: 0; }
+figure img { display: block; width: 100%; max-width: 260px; border-radius: 22px; border: 1px solid var(--line); background: #121417; }
+figcaption { font-size: 0.82rem; color: var(--muted); margin-top: 6px; max-width: 260px; }
+
+/* Названия кнопок и пунктов приложения */
+.k { display: inline-block; font-weight: 600; font-size: 0.92em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 0 7px; white-space: nowrap; }
+.k.go { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+/* Шаги быстрого старта — настоящая последовательность, поэтому номера */
+ol.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 12px; }
+ol.steps > li { counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 14px 58px; position: relative; margin: 0; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 16px; top: 13px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: 0.85rem; display: grid; place-items: center; }
+ol.steps b { display: block; }
+
+.note { background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; margin: 14px 0; }
+.warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: var(--radius); padding: 12px 16px; margin: 14px 0; }
+.warn a { color: inherit; }
+
+/* Таблица настроек */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+td:first-child { font-weight: 600; min-width: 11em; }
+.tag { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+
+/* Частые вопросы */
+.faq { display: flex; flex-direction: column; gap: 10px; }
+.faq details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; }
+.faq summary { cursor: pointer; font-weight: 600; }
+.faq details[open] summary { margin-bottom: 8px; }
+.faq details p:last-child, .faq details ul:last-child { margin-bottom: 0; }
+
+dl.gloss { display: grid; grid-template-columns: 1fr; gap: 4px 20px; margin: 0; }
+@media (min-width: 640px) { dl.gloss { grid-template-columns: 9em minmax(0, 1fr); } }
+dl.gloss dt { font-weight: 700; }
+dl.gloss dd { margin: 0 0 10px; color: var(--fg); }
+
+.dl-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 700; text-decoration: none; border-radius: 12px; padding: 10px 16px; margin: 4px 0 12px; }
+footer { max-width: 1120px; margin: 48px auto 0; color: var(--muted); font-size: 0.88rem; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+
+<header class="hero">
+  <svg viewBox="0 0 108 108" aria-hidden="true">
+    <defs>
+      <radialGradient id="ibg" cx="60" cy="54" r="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#173D2A"/><stop offset="1" stop-color="#0E1013"/></radialGradient>
+      <linearGradient id="ibl" x1="66" y1="24" x2="48" y2="84" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFE45C"/><stop offset="1" stop-color="#2FD27A"/></linearGradient>
+    </defs>
+    <rect width="108" height="108" fill="url(#ibg)"/>
+    <g transform="translate(54 54) scale(.85) translate(-54 -54)">
+      <g stroke-linecap="round" stroke-width="4" fill="none">
+        <path d="M27,45H43" stroke="#2FD27A"/><path d="M23,55H40" stroke="#2FD27A" stroke-opacity=".65"/><path d="M29,65H41" stroke="#2FD27A" stroke-opacity=".4"/>
+      </g>
+      <path d="M68,23L44,57L57,57L50,85L79,47L65,47L73,23Z" fill="url(#ibl)"/>
+    </g>
+  </svg>
+  <div>
+    <h1>Fast VPN</h1>
+    <div class="slogan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13,2L3,14h9l-1,8 10,-12h-9l1,-8z" fill="currentColor"/></svg>Быстрее нас — только свет</div>
+  </div>
+  <p class="lead">Полный гайд: как установить, подключиться за пару секунд и пользоваться всеми функциями. Читай с начала или открывай нужный раздел в оглавлении.</p>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Оглавление">
+    <details open>
+      <summary>Содержание</summary>
+      <ol>
+        <li><a href="#what">Что это за приложение</a></li>
+        <li><a href="#start">Быстрый старт</a></li>
+        <li><a href="#install">Установка</a></li>
+        <li><a href="#first">Первый запуск</a></li>
+        <li><a href="#main">Главный экран</a></li>
+        <li><a href="#connect">Как работает подключение</a></li>
+        <li><a href="#servers">Экран «Серверы»</a></li>
+        <li><a href="#sub">Подписка</a></li>
+        <li><a href="#settings">Настройки</a></li>
+        <li><a href="#ru">Российские сайты напрямую</a></li>
+        <li><a href="#apps">Приложения через VPN</a></li>
+        <li><a href="#tile">Плитка в шторке и виджет</a></li>
+        <li><a href="#auto">Автоподключение</a></li>
+        <li><a href="#speed">Тест скорости</a></li>
+        <li><a href="#game">Для игроков MLBB</a></li>
+        <li><a href="#notify">Уведомления</a></li>
+        <li><a href="#updates">Обновления</a></li>
+        <li><a href="#xiaomi">Чтобы VPN не отключался</a></li>
+        <li><a href="#faq">Если что-то не работает</a></li>
+        <li><a href="#report">Сообщить о проблеме</a></li>
+        <li><a href="#words">Словарик</a></li>
+      </ol>
+    </details>
+  </nav>
+
+  <main>
+    <section id="what">
+      <h2>Что это за приложение</h2>
+      <p>Fast VPN — это VPN-клиент для Android. Своих серверов у него нет: ты вставляешь ссылку <b>подписки</b> своего VPN-сервиса (ту же, что используешь в Karing, Hiddify или v2rayNG), а Fast VPN сам выбирает самый быстрый рабочий сервер и подключается к нему.</p>
+      <p>Что умеет кроме обычного VPN:</p>
+      <ul>
+        <li>подключается за пару секунд и сам держит рабочий сервер;</li>
+        <li>пускает банки, Госуслуги и маркетплейсы мимо VPN, поэтому VPN можно вообще не выключать;</li>
+        <li>плитка в шторке, виджет, автоподключение на мобильном интернете;</li>
+        <li>отдельный режим для игроков Mobile Legends: плашка с сервером матча поверх игры и запуск игры одной кнопкой.</li>
+      </ul>
+    </section>
+
+    <section id="start">
+      <h2>Быстрый старт</h2>
+      <ol class="steps">
+        <li><b>Скачай и установи</b> файл <code>fast-vpn.apk</code> со страницы релизов (подробнее — в разделе <a href="#install">«Установка»</a>).</li>
+        <li><b>Выбери режим</b> при первом запуске: <span class="k">Fast VPN</span> — просто VPN, или <span class="k">Fast VPN + MLBB</span> — если играешь в Mobile Legends.</li>
+        <li><b>Вставь ссылку подписки:</b> скопируй её в боте или кабинете своего VPN и нажми <span class="k">Вставить ссылку</span>.</li>
+        <li><b>Нажми большую зелёную кнопку</b> <span class="k go">ПОДКЛЮЧИТЬ</span> и согласись на запрос Android про VPN. Всё.</li>
+      </ol>
+    </section>
+
+    <section id="install">
+      <h2>Установка</h2>
+      <p>Приложения нет в Google Play, оно ставится файлом.</p>
+      <a class="dl-btn" href="https://github.com/BuninSil/nextjs-chat/releases/latest">Скачать последнюю версию</a>
+      <ol>
+        <li>Открой ссылку выше на телефоне и скачай файл <code>fast-vpn.apk</code> из раздела «Assets».</li>
+        <li>Открой скачанный файл. Если телефон скажет, что установка из этого источника запрещена, нажми <span class="k">Настройки</span> и разреши.</li>
+        <li>Может появиться окно <b>«Google Play Защита — Рекомендуется проверка приложения»</b>. Это нормально: так Google встречает любое приложение не из Play Маркета. Нажми <span class="k">Установить без проверки</span> или <span class="k">Проверить</span>. Не нажимай «Не устанавливать».</li>
+      </ol>
+      <div class="note">Чтобы окно Play Защиты не появлялось при каждом обновлении: Play Маркет → аватарка справа вверху → <b>Play Защита</b> → шестерёнка → выключи «Проверять приложения с помощью Play Защиты». Учти, что тогда Google перестанет проверять и другие приложения не из Маркета.</div>
+    </section>
+
+    <section id="first" class="wide">
+      <div class="with-shot">
+        <div>
+          <h2>Первый запуск</h2>
+          <p>Приложение спросит, для чего оно тебе:</p>
+          <ul>
+            <li><span class="k">Fast VPN</span> — просто быстрый VPN. Всё, что связано с игрой, скрыто.</li>
+            <li><span class="k">Fast VPN + MLBB</span> — то же самое, плюс функции для Mobile Legends.</li>
+          </ul>
+          <p>Выбор можно поменять в любой момент: Настройки → «Приложение».</p>
+          <p>Потом сверху появится зелёная карточка с шагами. Просто иди по ней:</p>
+          <ul>
+            <li><b>Добавь подписку</b> — нажми <span class="k">Вставить ссылку</span>. Можно вставить и сами серверы: строки <code>vless://</code>, <code>trojan://</code> и т. п.</li>
+            <li>Только в режиме MLBB: <b>скачай базу стран</b> (около 100 МБ, один раз) и <b>разреши плашку поверх игры</b>.</li>
+          </ul>
+          <p>Когда всё готово, карточка исчезает сама.</p>
+        </div>
+        <figure><img src="img/first.jpg" alt="Окно выбора режима при первом запуске" width="260"><figcaption>Выбор режима при первом запуске (примерный вид)</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="main" class="wide">
+      <div class="with-shot">
+        <div>
+          <h2>Главный экран</h2>
+          <ul>
+            <li><b>Шапка.</b> Название, слоган и шестерёнка — это вход в Настройки.</li>
+            <li><b>Карточка сервера.</b> Статус («Отключено», «Подключаюсь…», «VPN подключён»), флаг, название сервера и его пинг. Жёлтая строка здесь — предупреждение, что подписка скоро кончится.</li>
+            <li><b>Большая кнопка.</b> Зелёная <span class="k go">ПОДКЛЮЧИТЬ</span> включает VPN, красная <span class="k">ОТКЛЮЧИТЬ</span> выключает. Под кнопкой написано, что она сейчас сделает.</li>
+            <li><b>Wi-Fi.</b> Диапазон (2.4 или 5 ГГц), сигнал и пинг до роутера. Если Wi-Fi плохой, там появится совет.</li>
+            <li><b>Плитки.</b> <span class="k">Серверы</span>, <span class="k">Подписка</span>, <span class="k">Тест скорости</span>, <span class="k">Настройки</span>. В режиме MLBB есть ещё <span class="k">Лог</span>.</li>
+          </ul>
+        </div>
+        <figure><img src="img/main.jpg" alt="Главный экран Fast VPN с подключённым VPN" width="260"><figcaption>VPN подключён (примерный вид)</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="connect">
+      <h2>Как работает подключение</h2>
+      <p>Нажал <span class="k go">ПОДКЛЮЧИТЬ</span> — приложение сразу подключается к последнему удачному серверу и за секунду проверяет, что он отвечает. Обычно на всё уходит 2–3 секунды.</p>
+      <p>Полный подбор (пинг до всех серверов, потом скорость лучших) запускается, только когда он нужен:</p>
+      <ul>
+        <li>сервер не отвечает;</li>
+        <li>ты сменил сеть (Wi-Fi ↔ мобильный интернет);</li>
+        <li>с прошлого подбора прошло больше 6 часов;</li>
+        <li>обновилась подписка.</li>
+      </ul>
+      <p>Подбор идёт, когда VPN уже работает: интернетом можно пользоваться сразу, а прогресс видно в карточке сервера. <span class="k">ОТКЛЮЧИТЬ</span> нажимается в любой момент.</p>
+      <p>Пока VPN включён, приложение раз в полминуты проверяет сервер. Если он перестал отвечать, приложение само тихо переключится на рабочий. В режиме для игры так не делается: там сервер не меняется никогда, иначе скакал бы пинг.</p>
+    </section>
+
+    <section id="servers" class="wide">
+      <div class="with-shot">
+        <div>
+          <h2>Экран «Серверы»</h2>
+          <p>Здесь все серверы из подписки. У каждого: флаг, название, протокол, пинг (зелёный — хорошо, жёлтый — так себе, красный — плохо), разброс пинга, а после проверок ещё скорость <code>↓ N Мбит/с</code> и страна выхода.</p>
+          <ul>
+            <li><b>Тап по серверу</b> — подключиться к нему вручную. Автовыбор при этом выключается.</li>
+            <li><b>Долгое нажатие</b> — меню: <span class="k">В избранное</span> или <span class="k">Скрыть</span>. Избранные всегда сверху с жёлтой звёздочкой, и автовыбор берёт их первыми. Скрытые автовыбор не трогает; вернуть их можно кнопкой «Показать скрытые».</li>
+            <li><b>Галочка «Автовыбор сервера»</b> — сервер подбирается сам. Включи её обратно, если выбирал сервер вручную.</li>
+            <li><b>Круглая стрелка вверху</b> — перемерить пинг до всех серверов.</li>
+            <li><span class="k">Выходы</span> — узнать, в какой стране каждый сервер на самом деле выходит в интернет. Это важно для серверов «Обход» и «Мост»: подключаешься к ним в России, а сайты видят тебя, например, из Нидерландов.</li>
+            <li><span class="k">По скорости</span> — замерить скорость через лучшие серверы и включить самый быстрый.</li>
+          </ul>
+          <p>«Выходы» и «По скорости» работают через VPN. Если он выключен, приложение само включит его на время проверки и потом выключит. Идёт окно с прогрессом и кнопкой <span class="k">Стоп</span>, в конце показывается итог.</p>
+        </div>
+        <figure><img src="img/servers.jpg" alt="Экран со списком серверов" width="260"><figcaption>Список серверов (примерный вид)</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="sub">
+      <h2>Подписка</h2>
+      <p>Плитка <span class="k">Подписка</span> на главном экране. Вставь ссылку (кнопка <span class="k">Вставить из буфера</span>) и нажми <span class="k">Сохранить и обновить</span>. Внизу окна видно, сколько серверов, сколько трафика использовано и до какого числа подписка.</p>
+      <ul>
+        <li><b>Сама обновляется раз в сутки</b> — ничего нажимать не нужно.</li>
+        <li><b>Предупреждает:</b> за 3 дня до конца срока или когда трафика почти не осталось, придёт уведомление, а на главном экране появится жёлтая строка.</li>
+        <li><b>Если ссылка не открывается напрямую</b> (на мобильном интернете такое бывает), приложение скачает подписку через свой VPN на уже сохранённых серверах.</li>
+      </ul>
+      <div class="warn"><b>«Сервер подписки пускает только с российских адресов».</b> Некоторые VPN-сервисы отдают подписку только на российский IP. Если в Fast VPN уже есть серверы, он сам скачает подписку через сервер с выходом в России. Если это первый раз и серверов ещё нет, выключи другой VPN или переключи его на российский сервер, либо подключись к обычному Wi-Fi.</div>
+    </section>
+
+    <section id="settings">
+      <h2>Настройки</h2>
+      <p>Шестерёнка на главном экране. Всё сохраняется сразу, кнопки «Сохранить» нет. Что касается VPN, применится после переподключения: <span class="k">ОТКЛЮЧИТЬ</span> → <span class="k go">ПОДКЛЮЧИТЬ</span>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Пункт</th><th>Что делает</th></tr></thead>
+          <tbody>
+            <tr><td>Приложение</td><td>Fast VPN или Fast VPN + MLBB.</td></tr>
+            <tr><td>Тема</td><td>Тёмная (по умолчанию), Светлая, Неон, AMOLED (чёрная — экономит батарею на AMOLED-экранах).</td></tr>
+            <tr><td>Автовыбор сервера</td><td>Сам выбирает самый быстрый рабочий сервер при подключении.</td></tr>
+            <tr><td>Российские сайты напрямую</td><td>Банки, Госуслуги, маркетплейсы, Яндекс, VK — мимо VPN. Включено по умолчанию. <a href="#ru">Подробнее</a>.</td></tr>
+            <tr><td>Блокировать рекламу и трекеры</td><td>Рекламные и следящие сайты не загружаются.</td></tr>
+            <tr><td>Приложения через VPN</td><td>Все, только выбранные или все, кроме выбранных. <a href="#apps">Подробнее</a>.</td></tr>
+            <tr><td>Через VPN только игра <span class="tag">MLBB</span></td><td>Через VPN идёт только Mobile Legends, всё остальное — напрямую.</td></tr>
+            <tr><td>Матч напрямую <span class="tag">MLBB</span></td><td>Трафик самого матча идёт мимо VPN — минимальный пинг. Работает, только если оператор пускает к игровым серверам без VPN.</td></tr>
+            <tr><td>Режим <span class="tag">MLBB</span></td><td>Встроенный VPN (рекомендую), Без VPN (только плашка с сервером) или Внешний VPN-клиент.</td></tr>
+            <tr><td>Автоподключение</td><td>Включать VPN на мобильном интернете и выключать на Wi-Fi. <a href="#auto">Подробнее</a>.</td></tr>
+            <tr><td>Ускорение Wi-Fi</td><td>Wi-Fi не засыпает между пакетами — меньше скачков пинга. Работает и без VPN.</td></tr>
+            <tr><td>Предупреждение <span class="tag">MLBB</span></td><td>Вибрация, если матч попал на сервер не из твоих стран (по умолчанию RU).</td></tr>
+            <tr><td>База стран</td><td>Скачать или загрузить файлом базу, по которой определяется страна и город серверов.</td></tr>
+            <tr><td>Обновления</td><td>Обновлять автоматически и кнопка «Проверить обновления».</td></tr>
+            <tr><td>Помощь</td><td>«Сообщить о проблеме» — <a href="#report">подробнее</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="ru">
+      <h2>Российские сайты напрямую</h2>
+      <p>Обычно с VPN банк или Госуслуги не открываются, и VPN приходится выключать. Fast VPN решает это сам: сайты в зонах <code>.ru</code>, <code>.рф</code>, <code>.su</code>, банки, Госуслуги, Озон, Wildberries, Авито, Яндекс, VK и другие российские сервисы идут <b>мимо VPN</b>, а всё остальное — через него.</p>
+      <p>Включено по умолчанию, выключается в Настройках. Определение идёт только по адресам сайтов. Игровые серверы и всё, что подключается напрямую по IP, идёт через VPN как раньше.</p>
+    </section>
+
+    <section id="apps">
+      <h2>Приложения через VPN</h2>
+      <p>Настройки → «Приложения через VPN». Три варианта:</p>
+      <ul>
+        <li><b>Все приложения</b> — через VPN идёт весь телефон (по умолчанию).</li>
+        <li><b>Только выбранные</b> — через VPN только отмеченные, например YouTube и Telegram.</li>
+        <li><b>Все, кроме выбранных</b> — отмеченные идут напрямую, например банковское приложение.</li>
+      </ul>
+      <p>Ниже — список приложений с поиском, отмечай галочками. Применится после переподключения VPN.</p>
+    </section>
+
+    <section id="tile">
+      <h2>Плитка в шторке и виджет</h2>
+      <h3>Плитка «Fast VPN»</h3>
+      <ol>
+        <li>Опусти шторку уведомлений до конца.</li>
+        <li>Нажми карандаш («Изменить»).</li>
+        <li>Найди плитку <b>Fast VPN</b> с молнией и перетащи её к остальным.</li>
+      </ol>
+      <p>Нажатие на плитку включает и выключает VPN, а под ней видно сервер.</p>
+      <h3>Виджет на рабочий стол</h3>
+      <p>Долгое нажатие на пустом месте рабочего стола → «Виджеты» → <b>Fast VPN</b>. На виджете статус, сервер с пингом и кнопка <span class="k">Подключить</span> / <span class="k">Отключить</span>.</p>
+      <div class="note">Если VPN ещё ни разу не разрешали или подписки нет, плитка и виджет откроют приложение.</div>
+    </section>
+
+    <section id="auto">
+      <h2>Автоподключение</h2>
+      <p>Настройки → «Автоподключение».</p>
+      <ul>
+        <li><b>Включать на мобильном интернете</b> — ушёл с Wi-Fi, и VPN включился сам. На некоторых телефонах Android не даёт приложению включить VPN в фоне. Тогда придёт уведомление «Ты на мобильном интернете — нажми, чтобы включить».</li>
+        <li><b>Выключать на Wi-Fi</b> — если VPN включился сам, на Wi-Fi он выключится.</li>
+      </ul>
+      <p>Если выключил VPN руками, сам он не включится, пока ты не сменишь сеть.</p>
+    </section>
+
+    <section id="speed" class="wide">
+      <div class="with-shot">
+        <div>
+          <h2>Тест скорости</h2>
+          <p>Плитка <span class="k">Тест скорости</span>. Меряет пинг, разброс, скорость загрузки и отдачи через серверы Cloudflare. Если VPN включён — через него, если нет — напрямую.</p>
+          <p>Удобно сравнить: сделай тест без VPN, потом с VPN. Если без VPN тоже медленно, тормозит сам интернет или Wi-Fi, а не VPN.</p>
+        </div>
+        <figure><img src="img/speed.jpg" alt="Окно теста скорости" width="260"><figcaption>Тест скорости (примерный вид)</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="game" class="wide">
+      <div class="with-shot">
+        <div>
+          <h2>Для игроков MLBB</h2>
+          <p>Включается выбором <span class="k">Fast VPN + MLBB</span>. На главном экране появляются:</p>
+          <ul>
+            <li><b>Игровой режим</b> — переключатель. Включён: российские серверы в приоритете, сервер выбирается один раз до запуска игры и дальше не меняется, работает плашка поверх игры.</li>
+            <li><b>Запускать MLBB после подключения</b> — тогда большая кнопка называется <span class="k go">ИГРАТЬ</span>: подключает VPN и сама открывает игру.</li>
+            <li><b>Боевой сервер в последнем матче</b> — где проходил матч и какой был пинг.</li>
+            <li><b>Лог</b> — куда подключалась игра, с выгрузкой в CSV.</li>
+          </ul>
+          <p>Сервер для игры выбирается с <b>выходом в России</b>. Иначе игра решит, что ты за границей, и закинет матч, например, в Лондон.</p>
+        </div>
+        <figure><img src="img/mlbb.jpg" alt="Главный экран в режиме для MLBB" width="260"><figcaption>Режим Fast VPN + MLBB (примерный вид)</figcaption></figure>
+      </div>
+      <div class="with-shot" style="margin-top:28px">
+        <div>
+          <h3>Плашка поверх игры</h3>
+          <p>Появляется, когда начинается матч. Показывает флаг, город и пинг сервера матча.</p>
+          <ul>
+            <li><b>Зелёная</b> — матч на сервере в России (или в твоих странах из настроек).</li>
+            <li><b>Красная</b> — тебя закинуло на зарубежный сервер. Если включено «Предупреждение», телефон ещё и завибрирует.</li>
+          </ul>
+          <p>Плашку можно двигать пальцем в любое место экрана.</p>
+        </div>
+        <figure><img src="img/overlay.jpg" alt="Плашка с сервером матча поверх игры" width="260"><figcaption>Плашка в игре (примерный вид)</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="notify">
+      <h2>Уведомления</h2>
+      <ul>
+        <li><b>Уведомление VPN</b> висит, пока VPN работает. В нём скорость прямо сейчас (↓ загрузка, ↑ отдача) и сколько трафика ушло за сессию и за сегодня. Кнопка <span class="k">Стоп</span> выключает VPN.</li>
+        <li><b>Подписка</b> — скоро закончится срок или трафик.</li>
+        <li><b>Обновление</b> — вышла новая версия, она уже скачана, нажми, чтобы установить.</li>
+        <li><b>Автоподключение</b> — нажми, чтобы включить VPN на мобильном интернете.</li>
+      </ul>
+      <p>Разреши приложению уведомления, когда оно спросит, иначе ничего этого не увидишь.</p>
+    </section>
+
+    <section id="updates">
+      <h2>Обновления</h2>
+      <p>Раз в несколько часов приложение само проверяет, есть ли новая версия, и скачивает её. Потом приходит уведомление «Обновление Fast VPN скачано — нажми, чтобы установить». Нажимаешь, и открывается обычный установщик Android.</p>
+      <ul>
+        <li>Проверить вручную: Настройки → <span class="k">Проверить обновления</span>.</li>
+        <li>Если пропустил несколько версий, в окне обновления будут изменения каждой по порядку.</li>
+        <li>После установки откроется окно «Обновлено до …» с тем, что нового.</li>
+        <li>Выключить: Настройки → «Обновлять автоматически».</li>
+      </ul>
+    </section>
+
+    <section id="xiaomi">
+      <h2>Чтобы VPN не отключался сам</h2>
+      <p>Xiaomi, Redmi, POCO, Huawei, Honor, Samsung и другие экономят батарею и могут закрывать приложения в фоне вместе с VPN. Один раз настрой так:</p>
+      <ol>
+        <li>Настройки телефона → Приложения → <b>Fast VPN</b>.</li>
+        <li><b>Контроль активности / Батарея</b> → «Нет ограничений».</li>
+        <li><b>Автозапуск</b> → включить (есть на Xiaomi и Huawei).</li>
+        <li>Можно ещё закрепить приложение в списке недавних (замочек), чтобы его не выгружало.</li>
+      </ol>
+    </section>
+
+    <section id="faq">
+      <h2>Если что-то не работает</h2>
+      <div class="faq">
+        <details><summary>VPN не подключается</summary>
+          <p>Появится окно с причиной. Чаще всего помогает: проверить интернет без VPN, обновить подписку, нажать круглую стрелку в «Серверах» и включить «Автовыбор сервера».</p>
+          <p>Если в ошибке написано, что Android не дал поднять VPN, значит, у другого VPN-приложения включён «Постоянный VPN». Выключи его: Настройки телефона → Сеть и интернет → VPN → шестерёнка у того приложения.</p>
+        </details>
+        <details><summary>Подключился, но интернета нет</summary>
+          <p>Значит, сервер подключается, но трафик через него не идёт. Включи «Автовыбор сервера» и переподключись: приложение найдёт рабочий. Или выбери другой сервер вручную в «Серверах».</p>
+        </details>
+        <details><summary>Банк или Госуслуги не открываются с VPN</summary>
+          <p>Проверь, что в Настройках включено «Российские сайты напрямую», и переподключи VPN. Если у банка не российский адрес сайта, добавь приложение банка в «Приложения через VPN» → «Все, кроме выбранных».</p>
+        </details>
+        <details><summary>Подписка не обновляется</summary>
+          <ul>
+            <li>Ошибка про устройства (device, HWID, limit): удали старое устройство в боте или кабинете своего VPN или увеличь лимит.</li>
+            <li>«Пускает только с российских адресов» — смотри раздел <a href="#sub">«Подписка»</a>.</li>
+            <li>Можно вставить в «Подписку» не ссылку, а сами серверы (строки <code>vless://</code>, <code>trojan://</code>…).</li>
+          </ul>
+        </details>
+        <details><summary>Медленно работает</summary>
+          <p>Сделай <a href="#speed">тест скорости</a> без VPN и с VPN. Если без VPN тоже медленно — дело в интернете или Wi-Fi: подойди к роутеру, переключись на 5 ГГц. Если медленно только с VPN — в «Серверах» нажми <span class="k">По скорости</span>.</p>
+        </details>
+        <details><summary>Большой пинг в игре</summary>
+          <p>Убедись, что включён «Игровой режим» и у выбранного сервера выход в России (кнопка <span class="k">Выходы</span> в «Серверах»). Попробуй «Матч напрямую», если оператор пускает. На Wi-Fi включи «Ускорение Wi-Fi».</p>
+        </details>
+        <details><summary>VPN сам отключается</summary>
+          <p>Это прошивка закрывает приложение в фоне. Сделай настройки из раздела <a href="#xiaomi">«Чтобы VPN не отключался»</a>. Ещё VPN отключается, если включить другое VPN-приложение: Android держит только один VPN.</p>
+        </details>
+        <details><summary>Автоподключение не включает VPN</summary>
+          <p>На части телефонов Android не даёт включить VPN в фоне. Тогда приходит уведомление с кнопкой — нажми её. Проверь, что уведомления приложению разрешены.</p>
+        </details>
+        <details><summary>«Выходы» показывают у всех одну страну</summary>
+          <p>Это было в старых версиях. Обнови приложение и нажми <span class="k">Выходы</span> ещё раз.</p>
+        </details>
+        <details><summary>Приложение вылетело</summary>
+          <p>При следующем запуске появится окно «Прошлый запуск упал» с текстом ошибки. Нажми <span class="k">Скопировать</span> и отправь разработчику, или воспользуйся <a href="#report">«Сообщить о проблеме»</a>.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="report">
+      <h2>Сообщить о проблеме</h2>
+      <p>Настройки → «Помощь» → <span class="k">Сообщить о проблеме</span>. Приложение соберёт отчёт файлом: версия, телефон, настройки, замеры серверов, журнал VPN и последнее падение. Нажми <span class="k">Отправить</span> и выбери, куда отправить разработчику: Telegram, почта, что угодно. Или <span class="k">Скопировать</span> и вставь в сообщение.</p>
+      <p>В отчёте <b>нет</b> ссылки подписки, адресов серверов и паролей. В журнале VPN могут встречаться адреса сайтов, которые открывались.</p>
+    </section>
+
+    <section id="words">
+      <h2>Словарик</h2>
+      <dl class="gloss">
+        <dt>VPN</dt><dd>Защищённый «туннель»: телефон ходит в интернет через другой компьютер — сервер. Сайты видят адрес сервера, а не твой.</dd>
+        <dt>Подписка</dt><dd>Ссылка от твоего VPN-сервиса, в которой лежит список его серверов. Её выдают в боте или личном кабинете.</dd>
+        <dt>Сервер</dt><dd>Компьютер VPN-сервиса, через который идёт трафик. У разных серверов разные страны, скорость и пинг.</dd>
+        <dt>Пинг</dt><dd>За сколько миллисекунд (ms) сигнал доходит до сервера и обратно. Меньше — лучше. До 60 ms — отлично, 60–100 — нормально, больше 100 — заметно в играх.</dd>
+        <dt>Разброс</dt><dd>Насколько пинг скачет. Чем меньше, тем стабильнее.</dd>
+        <dt>Выход</dt><dd>Страна, из которой сервер на самом деле выходит в интернет. Подключиться можно к серверу в России, а выйти через Нидерланды.</dd>
+        <dt>Мбит/с</dt><dd>Скорость интернета. Для видео в хорошем качестве хватает 10–20 Мбит/с, для игр важнее пинг.</dd>
+      </dl>
+    </section>
+  </main>
+</div>
+
+<footer>Fast VPN · BuninSil · Картинки экранов примерные, в приложении всё может выглядеть чуть иначе.</footer>
+
+</body>
+</html>
