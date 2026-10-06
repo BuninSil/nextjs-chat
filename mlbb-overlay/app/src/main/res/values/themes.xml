@@ -25,4 +25,28 @@
         <item name="android:windowBackground">@drawable/dialog_bg</item>
         <item name="android:textColorPrimary">#E8EAED</item>
     </style>
+
+    <!-- Светлая тема: системные окна (AlertDialog) светлые -->
+    <style name="AppTheme.Light" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#F3F5F7</item>
+        <item name="colorPrimaryDark">#F3F5F7</item>
+        <item name="colorAccent">#1FA34A</item>
+        <item name="android:windowBackground">#F3F5F7</item>
+        <item name="android:textColorPrimary">#15181C</item>
+        <item name="android:textColorSecondary">#6B7280</item>
+        <item name="alertDialogTheme">@style/AppDialog.Light</item>
+        <item name="android:alertDialogTheme">@style/AppDialogFramework.Light</item>
+    </style>
+
+    <style name="AppDialog.Light" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="colorAccent">#1FA34A</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_light</item>
+        <item name="android:textColorPrimary">#15181C</item>
+    </style>
+
+    <style name="AppDialogFramework.Light" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#1FA34A</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_light</item>
+        <item name="android:textColorPrimary">#15181C</item>
+    </style>
 </resources>

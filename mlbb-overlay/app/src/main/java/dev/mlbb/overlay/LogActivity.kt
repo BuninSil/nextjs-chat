@@ -36,10 +36,19 @@ class LogActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Тема — до создания экрана, чтобы системные окна были в её цветах
+        AppSettings.load(this)
+        setTheme(Ui.themeRes())
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_log)
+        Ui.applyWindow(this)
         title = "Лог соединений"
         summary = findViewById(R.id.summary)
+        summary.setTextColor(Ui.MUTED)
+        for (id in listOf(R.id.btnClear, R.id.btnExport)) findViewById<Button>(id).apply {
+            setTextColor(Ui.TEXT)
+            background = Ui.rounded(Ui.CARD2, Ui.dp(this@LogActivity, 12f).toFloat())
+        }
         val list = findViewById<RecyclerView>(R.id.list)
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = adapter

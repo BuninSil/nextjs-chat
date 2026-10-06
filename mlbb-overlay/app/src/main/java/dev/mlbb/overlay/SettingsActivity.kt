@@ -33,9 +33,12 @@ class SettingsActivity : AppCompatActivity() {
     private fun d(v: Float) = Ui.dp(this, v)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Тема — до создания экрана, чтобы системные окна были в её цветах
+        AppSettings.load(this)
+        setTheme(Ui.themeRes())
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
-        window.decorView.setBackgroundColor(Ui.BG)
+        Ui.applyWindow(this)
         AppSettings.load(this)
 
         val root = LinearLayout(this).apply {
@@ -56,6 +59,21 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(Ui.space(this, 8f))
         root.addView(profileCard(AppSettings.PROFILE_SIMPLE, R.drawable.ic_bolt, "Fast VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
+
+        // ---------- Тема ----------
+        root.addView(section("Тема"))
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        Ui.THEMES.chunked(2).forEach { pair ->
+            val row = LinearLayout(this)
+            pair.forEachIndexed { i, t ->
+                row.addView(themeCard(t), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (i == 0) marginEnd = d(5f) else marginStart = d(5f)
+                })
+            }
+            if (pair.size == 1) row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = d(5f) })
+            grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = d(10f) })
+        }
+        root.addView(grid)
 
         // ---------- Режим (только для игры) ----------
         if (!simple) {
@@ -203,7 +221,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun divider() = View(this).apply {
-        setBackgroundColor(0xFF262A30.toInt())
+        setBackgroundColor(Ui.DIVIDER)
         layoutParams = LinearLayout.LayoutParams(-1, d(1f)).apply { topMargin = d(12f); bottomMargin = d(12f) }
     }
 
@@ -217,7 +235,7 @@ class SettingsActivity : AppCompatActivity() {
             isChecked = value
             val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
             thumbTintList = ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
-            trackTintList = ColorStateList(states, intArrayOf(Ui.GREEN, 0xFF3A3F46.toInt()))
+            trackTintList = ColorStateList(states, intArrayOf(Ui.GREEN, Ui.SWITCH_OFF))
             setOnCheckedChangeListener { _, v -> onChange(v) }
         }
         row.addView(sw)
@@ -230,9 +248,9 @@ class SettingsActivity : AppCompatActivity() {
             setText(value)
             this.hint = hint
             setTextColor(Ui.TEXT)
-            setHintTextColor(0xFF5F6368.toInt())
+            setHintTextColor(Ui.HINT)
             textSize = 15f
-            background = Ui.rounded(0xFF0F1114.toInt(), d(12f).toFloat())
+            background = Ui.rounded(Ui.INPUT, d(12f).toFloat())
             setPadding(d(12f), d(10f), d(12f), d(10f))
             if (number) inputType = InputType.TYPE_CLASS_NUMBER
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(6f) }
@@ -249,7 +267,7 @@ class SettingsActivity : AppCompatActivity() {
         setTextColor(0xFFFFFFFF.toInt())
         textSize = 15f
         setTypeface(typeface, android.graphics.Typeface.BOLD)
-        background = Ui.rounded(0xFF2FB565.toInt(), d(14f).toFloat())
+        background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
         setPadding(d(14f), d(13f), d(14f), d(13f))
         setOnClickListener { onClick() }
     }
@@ -259,18 +277,53 @@ class SettingsActivity : AppCompatActivity() {
         gravity = Gravity.CENTER
         setTextColor(Ui.TEXT)
         textSize = 15f
-        background = Ui.rounded(0xFF23272D.toInt(), d(14f).toFloat())
+        background = Ui.rounded(Ui.CARD2, d(14f).toFloat())
         setPadding(d(14f), d(12f), d(14f), d(12f))
         setOnClickListener { onClick() }
+    }
+
+    /** Карточка темы: превью цветов и название; выбор сразу перекрашивает приложение. */
+    private fun themeCard(t: Theme): LinearLayout {
+        val selected = AppSettings.theme == t.id
+        val c = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(d(12f), d(12f), d(12f), d(12f))
+            background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
+                if (selected) setStroke(d(2f), Ui.GREEN)
+            }
+        }
+        // Мини-превью: фон темы, карточка и кнопка акцентного цвета
+        val preview = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(d(8f), d(8f), d(8f), d(8f))
+            background = Ui.rounded(t.bg.toInt(), d(10f).toFloat()).apply { setStroke(d(1f), Ui.DIVIDER) }
+        }
+        preview.addView(View(this).apply { background = Ui.rounded(t.card.toInt(), d(5f).toFloat()) },
+            LinearLayout.LayoutParams(0, d(16f), 1f).apply { marginEnd = d(6f) })
+        preview.addView(View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(t.accentTop.toInt(), t.accentBottom.toInt())
+            ).apply { shape = android.graphics.drawable.GradientDrawable.OVAL }
+        }, LinearLayout.LayoutParams(d(18f), d(18f)))
+        c.addView(preview, LinearLayout.LayoutParams(-1, -2))
+        c.addView(Ui.text(this, t.title, 14f, bold = selected).apply { setPadding(0, d(8f), 0, 0) })
+        c.setOnClickListener {
+            if (AppSettings.theme == t.id) return@setOnClickListener
+            AppSettings.theme = t.id
+            AppSettings.save(this)
+            recreate()
+        }
+        return c
     }
 
     /** Карточка «для чего приложение»; выбор сразу перестраивает приложение. */
     private fun profileCard(value: String, iconRes: Int, title: String, sub: String): LinearLayout {
         val c = Ui.card(this)
-        c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f) })
+        c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f, under = if (AppSettings.profile == value) Ui.SEL else Ui.CARD) })
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
         val selected = AppSettings.profile == value
-        c.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, d(18f).toFloat()).apply {
+        c.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
             if (selected) setStroke(d(2f), Ui.GREEN)
         }
         c.setOnClickListener {
@@ -300,7 +353,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun highlightMode() {
         for ((mode, card) in modeCards) {
             val selected = mode == AppSettings.mode
-            card.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, d(18f).toFloat()).apply {
+            card.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
                 if (selected) setStroke(d(2f), Ui.GREEN)
             }
         }

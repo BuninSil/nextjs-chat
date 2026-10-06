@@ -77,10 +77,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Тема — до создания экрана, чтобы системные окна были в её цветах
+        AppSettings.load(this)
+        setTheme(Ui.themeRes())
         super.onCreate(savedInstanceState)
         AppSettings.load(this)
         Subscription.load(this)
-        window.decorView.setBackgroundColor(Ui.BG)
+        Ui.applyWindow(this)
         supportActionBar?.hide()
         setContentView(buildUi())
         Thread { GeoDb.load(applicationContext) }.start()
@@ -108,9 +111,9 @@ class MainActivity : AppCompatActivity() {
         card.addView(Ui.slogan(this, 13f).apply { setPadding(0, d(4f), 0, d(8f)) })
         fun choice(icon: Int, title: String, sub: String, value: String) = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = Ui.rounded(0xFF23272D.toInt(), d(16f).toFloat())
+            background = Ui.rounded(Ui.CARD2, d(16f).toFloat())
             setPadding(d(14f), d(12f), d(14f), d(12f))
-            addView(Ui.text(this@MainActivity, "", 16f, bold = true).apply { text = Ui.iconText(this@MainActivity, icon, title, 22f, 10f) })
+            addView(Ui.text(this@MainActivity, "", 16f, bold = true).apply { text = Ui.iconText(this@MainActivity, icon, title, 22f, 10f, under = Ui.CARD2) })
             addView(Ui.text(this@MainActivity, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
             setOnClickListener { dlg.dismiss(); chooseProfile(value) }
         }
@@ -151,12 +154,13 @@ class MainActivity : AppCompatActivity() {
 
     /** Для какого режима построен экран — если в Настройках поменяли, перестраиваем. */
     private var builtProfile = ""
+    private var builtTheme = ""
 
     override fun onResume() {
         super.onResume()
         AppSettings.load(this)
         AutoUpdate.uiVisible = true
-        if (AppSettings.profile != builtProfile) {
+        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme) {
             recreate()
             return
         }
@@ -182,6 +186,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildUi(): ScrollView {
         builtProfile = AppSettings.profile
+        builtTheme = AppSettings.theme
         val d = { v: Float -> Ui.dp(this, v) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -200,16 +205,16 @@ class MainActivity : AppCompatActivity() {
 
         // Мастер первого запуска: что сделать по шагам, пока не всё готово
         setupCard = Ui.card(this).apply {
-            background = Ui.rounded(0xFF182A20.toInt(), d(18f).toFloat()).apply { setStroke(d(2f), Ui.GREEN) }
+            background = Ui.rounded(Ui.SEL, d(18f).toFloat()).apply { setStroke(d(2f), Ui.GREEN) }
         }
         setupTitle = Ui.text(this, "", 16f, bold = true)
-        setupText = Ui.text(this, "", 13f, 0xFFC9CCD1.toInt()).apply { setPadding(0, d(6f), 0, d(12f)) }
+        setupText = Ui.text(this, "", 13f, Ui.SUB).apply { setPadding(0, d(6f), 0, d(12f)) }
         setupButton = TextView(this).apply {
             gravity = Gravity.CENTER
             setTextColor(0xFFFFFFFF.toInt())
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            background = Ui.rounded(0xFF2FB565.toInt(), d(14f).toFloat())
+            background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
             setPadding(0, d(12f), 0, d(12f))
         }
         setupCard.addView(setupTitle)
@@ -243,7 +248,7 @@ class MainActivity : AppCompatActivity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
             setTypeface(typeface, Typeface.BOLD)
             background = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF43D17A.toInt(), Ui.GREEN_DARK)
+                GradientDrawable.Orientation.TL_BR, intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
             ).apply { shape = GradientDrawable.OVAL }
             elevation = d(8f).toFloat()
             setOnClickListener { play() }
@@ -261,13 +266,13 @@ class MainActivity : AppCompatActivity() {
         fun greenSwitch(v: Boolean, onChange: (Boolean) -> Unit) = androidx.appcompat.widget.SwitchCompat(this).apply {
             isChecked = v
             val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
-            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, 0xFF3A3F46.toInt()))
+            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt())) // белый ползунок во всех темах
+            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, Ui.SWITCH_OFF))
             setOnCheckedChangeListener { _, x -> onChange(x) }
         }
         val gameRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(6f)) }
         gameRow.addView(Ui.text(this, "", 15f, bold = true).apply {
-            text = Ui.iconText(this@MainActivity, R.drawable.ic_game_bg, "Игровой режим", 20f)
+            text = Ui.iconText(this@MainActivity, R.drawable.ic_game, "Игровой режим", 20f, under = Ui.BG)
             setPadding(0, 0, d(10f), 0)
         })
         gameRow.addView(greenSwitch(AppSettings.gameMode) { v ->
@@ -291,8 +296,8 @@ class MainActivity : AppCompatActivity() {
         launchSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
             isChecked = AppSettings.autoLaunch
             val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt()))
-            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, 0xFF3A3F46.toInt()))
+            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB0B4BA.toInt())) // белый ползунок во всех темах
+            trackTintList = android.content.res.ColorStateList(states, intArrayOf(Ui.GREEN, Ui.SWITCH_OFF))
             setOnCheckedChangeListener { _, v ->
                 AppSettings.autoLaunch = v
                 AppSettings.save(this@MainActivity)
@@ -421,8 +426,8 @@ class MainActivity : AppCompatActivity() {
             // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
             playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (label == "ИГРАТЬ") 28f else 22f)
             // Подключено — кнопка красная (отключить), иначе зелёная
-            val colors = if (running) intArrayOf(0xFFE5534B.toInt(), 0xFFA8322C.toInt())
-            else intArrayOf(0xFF43D17A.toInt(), Ui.GREEN_DARK)
+            val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
+            else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
             playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                 .apply { shape = GradientDrawable.OVAL }
         }

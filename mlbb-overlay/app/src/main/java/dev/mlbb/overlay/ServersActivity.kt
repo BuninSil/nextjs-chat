@@ -27,9 +27,12 @@ class ServersActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Тема — до создания экрана, чтобы системные окна были в её цветах
+        AppSettings.load(this)
+        setTheme(Ui.themeRes())
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
-        window.decorView.setBackgroundColor(Ui.BG)
+        Ui.applyWindow(this)
         val d = { v: Float -> Ui.dp(this, v) }
         AppSettings.load(this)
         Subscription.load(this)
@@ -60,6 +63,7 @@ class ServersActivity : AppCompatActivity() {
         val auto = CheckBox(this).apply {
             text = "Автовыбор сервера"
             setTextColor(Ui.TEXT)
+            buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
             isChecked = AppSettings.autoSelect
             setOnCheckedChangeListener { _, v ->
                 AppSettings.autoSelect = v
@@ -216,7 +220,7 @@ class ServersActivity : AppCompatActivity() {
         override fun onBindViewHolder(h: Holder, pos: Int) {
             val n = items[pos]
             val selected = n.tag == AppSettings.selectedTag
-            h.root.background = Ui.rounded(if (selected) 0xFF182A20.toInt() else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
+            h.root.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             Ui.setFlag(h.flag, Ui.flagFor(n), 24f)
             h.name.text = (if (AppSettings.gameMode && ServerTester.isRussian(n)) "★ " else "") + Ui.cleanName(n)
             val r = ServerTester.results[n.tag]

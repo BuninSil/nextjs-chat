@@ -71,7 +71,7 @@ object UpdateFlow {
         card.addView(Ui.slogan(a, 13f).apply { setPadding(0, d(4f), 0, 0) })
         card.addView(Ui.text(a, "Версия ${rel.tag.removePrefix("mlbb-v")} · сейчас ${BuildConfig.VERSION_NAME}", 13f, Ui.MUTED)
             .apply { setPadding(0, d(4f), 0, d(12f)) })
-        val notes = Ui.text(a, rel.notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, 0xFFC9CCD1.toInt())
+        val notes = Ui.text(a, rel.notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, Ui.SUB)
         card.addView(notesScroll(a).apply { addView(notes) }, LinearLayout.LayoutParams(-1, -2))
         card.addView(TextView(a).apply {
             text = "Обновить"
@@ -79,7 +79,7 @@ object UpdateFlow {
             setTextColor(Color.WHITE)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
-            background = Ui.rounded(0xFF2FB565.toInt(), d(14f).toFloat())
+            background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
             setPadding(0, d(14f), 0, d(14f))
             setOnClickListener {
                 dlg.dismiss()
@@ -121,7 +121,7 @@ object UpdateFlow {
             LinearLayout.LayoutParams(-2, -2))
         card.addView(Ui.text(a, "Обновлено до ${BuildConfig.VERSION_NAME}", 20f, bold = true).apply { setPadding(0, d(6f), 0, 0) })
         card.addView(Ui.slogan(a, 13f).apply { setPadding(0, d(4f), 0, d(12f)) })
-        val text = Ui.text(a, notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, 0xFFC9CCD1.toInt())
+        val text = Ui.text(a, notes.ifBlank { "Исправления и улучшения." }.take(6000), 14f, Ui.SUB)
         card.addView(notesScroll(a).apply { addView(text) }, LinearLayout.LayoutParams(-1, -2))
         card.addView(TextView(a).apply {
             this.text = "Отлично"
@@ -129,7 +129,7 @@ object UpdateFlow {
             setTextColor(Color.WHITE)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
-            background = Ui.rounded(0xFF2FB565.toInt(), d(14f).toFloat())
+            background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
             setPadding(0, d(14f), 0, d(14f))
             setOnClickListener { dlg.dismiss() }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(18f) })

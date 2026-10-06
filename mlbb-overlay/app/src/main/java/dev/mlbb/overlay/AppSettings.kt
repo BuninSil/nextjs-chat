@@ -52,6 +52,9 @@ object AppSettings {
 
     @Volatile var autoCheckUpdates = true
 
+    /** Тема оформления: dark (по умолчанию), light, neon, amoled */
+    @Volatile var theme = "dark"
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     fun load(ctx: Context) {
@@ -83,6 +86,7 @@ object AppSettings {
         allowedCountries = parseCountries(p.getString("allowed", "RU") ?: "RU")
         // Автообновления теперь бесшовные — включаем всем (новый ключ, старый «проверять при запуске» не учитываем)
         autoCheckUpdates = p.getBoolean("updAuto2", true)
+        theme = p.getString("theme", "dark") ?: "dark"
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
         if (simple) applySimple()
@@ -125,6 +129,7 @@ object AppSettings {
             .putString("allowed", allowedCountries.joinToString(","))
             .putBoolean("updAuto2", autoCheckUpdates)
             .putString("profile", profile)
+            .putString("theme", theme)
             .apply()
     }
 
