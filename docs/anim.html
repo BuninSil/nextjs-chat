@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Fast VPN анимации</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@400;600;700&display=swap">
+<style>
+/* Тёмная витрина в цветах приложения: три телефона рядом, тап по кнопке — живая анимация */
+:root{
+  --bg:#0c0e11; --phone:#121417; --card:#1a1d22; --line:#262a30;
+  --text:#e8eaed; --muted:#8b9098; --green:#34c759;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);padding:28px 16px 40px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(22px,4vw,34px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 b{color:var(--green)}
+.lead{color:var(--muted);margin:0;max-width:62ch;line-height:1.55;font-size:15px}
+.bar{display:flex;gap:10px;flex-wrap:wrap}
+button.all{font:600 14px var(--body);color:#06210f;background:var(--green);border:0;border-radius:12px;padding:11px 18px;cursor:pointer}
+button.all.ghost{background:var(--card);color:var(--text);border:1px solid var(--line)}
+button.all:focus-visible,canvas:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.phone{background:var(--phone);border:1px solid var(--line);border-radius:30px;padding:18px 16px 20px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.phone.shake{animation:shake .32s linear}
+@keyframes shake{0%,100%{transform:translate(0,0)}15%{transform:translate(-3px,1px)}30%{transform:translate(3px,-1px)}45%{transform:translate(-2px,1px)}60%{transform:translate(2px,0)}80%{transform:translate(-1px,0)}}
+.tag{font:600 11px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);align-self:flex-start}
+.name{font-family:var(--display);font-weight:600;font-size:20px;align-self:flex-start;margin:0}
+.desc{color:var(--muted);font-size:13px;line-height:1.5;align-self:flex-start;margin:0 0 4px;min-height:58px}
+canvas{width:100%;max-width:300px;aspect-ratio:1;cursor:pointer;border-radius:50%;touch-action:manipulation}
+.status{font-size:13px;color:var(--muted);height:18px;font-variant-numeric:tabular-nums}
+.status.on{color:var(--green)}
+.buzz{font-size:12px;color:var(--green);opacity:0;transition:opacity .2s;height:16px}
+.buzz.show{opacity:1}
+.note{color:var(--muted);font-size:13px;line-height:1.5;max-width:70ch;margin:0}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Анимация подключения: <b>три варианта</b></h1>
+  <p class="lead">Тапни по кнопке в любом телефоне: пойдёт подключение (2,5 секунды, как в среднем в жизни), потом момент «подключено». Тап ещё раз — отключение. Встряска телефона — это где сработает вибрация.</p>
+  <div class="bar">
+    <button class="all" id="runAll">Запустить все три</button>
+    <button class="all ghost" id="resetAll">Сбросить</button>
+  </div>
+
+  <div class="grid">
+    <section class="phone" data-v="warp">
+      <span class="tag">Вариант 1</span>
+      <h2 class="name">Гиперпрыжок</h2>
+      <p class="desc">Звёзды на световой скорости летят в кнопку и разгоняются. Подключилось — белая вспышка, ударная волна, звёзды разлетаются наружу. Прямо про «быстрее нас — только свет».</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Гиперпрыжок"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+    <section class="phone" data-v="charge">
+      <span class="tag">Вариант 2</span>
+      <h2 class="name">Заряд</h2>
+      <p class="desc">Кнопка заполняется зелёной энергией с волной, вокруг трещат электрические разряды. Подключилось — удары молний в кнопку и сноп искр.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Заряд"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+    <section class="phone" data-v="orbit">
+      <span class="tag">Вариант 3</span>
+      <h2 class="name">Орбиты</h2>
+      <p class="desc">Три кометы с хвостами носятся вокруг кнопки как в атоме, всё быстрее. Подключилось — схлопываются в центр и взрываются частицами с двойной волной.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Орбиты"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+  </div>
+  <p class="note">Всё это рисуется обычной отрисовкой Android, без тяжёлых библиотек, батарею жрёт только пока идёт подключение. Можно и смешать: например, звёзды из первого и взрыв частиц из третьего.</p>
+</div>
+
+<script>
+const G1='#43d17a',G2='#1f8f4c',R1='#ff6b6b',R2='#c62828',GREEN='#34c759';
+const TAU=Math.PI*2, CONNECT_MS=2500;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ease=t=>1-Math.pow(1-t,3);
+
+function bolt(c,x,y,s,color){
+  c.save();c.translate(x,y);c.scale(s/24,s/24);c.translate(-12,-12);
+  c.beginPath();c.moveTo(13,2);c.lineTo(4,14);c.lineTo(11,14);c.lineTo(10,22);c.lineTo(20,9);c.lineTo(13,9);c.closePath();
+  c.fillStyle=color;c.fill();c.restore();
+}
+function jag(c,x1,y1,x2,y2,amp,segs){
+  c.beginPath();c.moveTo(x1,y1);
+  for(let i=1;i<segs;i++){const t=i/segs,nx=-(y2-y1),ny=x2-x1,l=Math.hypot(nx,ny)||1,o=rnd(-amp,amp);
+    c.lineTo(x1+(x2-x1)*t+nx/l*o,y1+(y2-y1)*t+ny/l*o);}
+  c.lineTo(x2,y2);c.stroke();
+}
+
+class Stage{
+  constructor(sec){
+    this.sec=sec;this.v=sec.dataset.v;this.cv=sec.querySelector('canvas');this.c=this.cv.getContext('2d');
+    this.st=sec.querySelector('.status');this.bz=sec.querySelector('.buzz');
+    this.state='idle';this.t0=performance.now();this.parts=[];this.waves=[];this.flash=0;this.scale=1;this.bump=0;
+    this.comets=[0,1,2].map(i=>({a:i*TAU/3,tilt:i*TAU/3+0.3,trail:[]}));
+    this.cv.addEventListener('click',()=>this.tap());
+    this.cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.tap()}});
+    this.resize();addEventListener('resize',()=>this.resize());
+  }
+  resize(){const d=devicePixelRatio||1,w=this.cv.clientWidth||300;this.cv.width=w*d;this.cv.height=w*d;this.k=w*d/320;}
+  tap(){ if(this.state==='idle'||this.state==='off') this.go('connecting'); else if(this.state==='on') this.go('off'); }
+  reset(){this.state='idle';this.parts=[];this.waves=[];this.flash=0;this.setStatus('Отключено',false)}
+  setStatus(t,on){this.st.textContent=t;this.st.classList.toggle('on',on)}
+  vibrate(strong){
+    if(!strong)return;
+    this.sec.classList.remove('shake');void this.sec.offsetWidth;this.sec.classList.add('shake');
+    this.bz.classList.add('show');clearTimeout(this.bzT);this.bzT=setTimeout(()=>this.bz.classList.remove('show'),700);
+  }
+  go(s){
+    this.state=s;this.t0=performance.now();
+    if(s==='connecting'){this.parts=[];this.fill=0;this.setStatus('Подключаюсь…',false)}
+    if(s==='on'){this.setStatus('VPN подключён',true);this.vibrate(true);this.bump=1;this.onConnect()}
+    if(s==='off'){this.setStatus('Отключено',false);this.waves.push({r:88,v:-1.2,a:.5,w:3})}
+  }
+  onConnect(){
+    const v=this.v;
+    if(v==='warp'){
+      this.flash=1;
+      this.waves.push({r:88,v:7,a:1,w:6},{r:88,v:4.5,a:.7,w:3});
+      for(const p of this.parts){p.dir=1;p.sp=rnd(8,16)}
+      for(let i=0;i<40;i++){const a=rnd(0,TAU);this.parts.push({a,d:rnd(80,100),sp:rnd(6,14),dir:1,len:rnd(10,30),col:Math.random()<.5?'#fff':GREEN})}
+    }
+    if(v==='charge'){
+      this.flash=.6;this.strikes=[0,60,130,210];
+      this.waves.push({r:88,v:5,a:.9,w:4});
+      for(let i=0;i<70;i++){const a=rnd(0,TAU),s=rnd(2,7);this.parts.push({x:160+Math.cos(a)*88,y:160+Math.sin(a)*88,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.012,.03),col:Math.random()<.3?'#fff':(Math.random()<.5?GREEN:'#b6ffcf')})}
+    }
+    if(v==='orbit'){
+      this.collapse=performance.now();
+    }
+  }
+  burstOrbit(){
+    this.flash=.9;
+    this.waves.push({r:20,v:6.5,a:1,w:5},{r:10,v:4,a:.8,w:2.5});
+    for(let i=0;i<90;i++){const a=rnd(0,TAU),s=rnd(1.5,9);this.parts.push({x:160,y:160,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.01,.025),col:Math.random()<.35?'#fff':GREEN})}
+  }
+
+  frame(now){
+    const c=this.c,k=this.k,t=(now-this.t0)/1000,cx=160,cy=160,R=88;
+    c.setTransform(k,0,0,k,0,0);c.clearRect(0,0,320,320);
+    if(this.state==='connecting'&&now-this.t0>CONNECT_MS)this.go('on');
+    const conn=this.state==='connecting',on=this.state==='on';
+
+    // ---------- фон-эффекты под кнопкой ----------
+    if(this.v==='warp')this.drawWarp(c,t,conn,on);
+    if(this.v==='charge')this.drawCharge(c,t,conn,on,now);
+    if(this.v==='orbit')this.drawOrbit(c,t,conn,on,now);
+
+    // ударные волны
+    this.waves=this.waves.filter(w=>{w.r+=w.v;w.a-=0.022;if(w.a<=0||w.r<0)return false;
+      c.save();c.strokeStyle=GREEN;c.globalAlpha=w.a;c.lineWidth=w.w;c.shadowColor=GREEN;c.shadowBlur=18;
+      c.beginPath();c.arc(cx,cy,w.r,0,TAU);c.stroke();c.restore();return true});
+
+    // ---------- кнопка ----------
+    let sc=1;
+    if(conn)sc=1-0.035*(0.5+0.5*Math.sin(t*7));
+    if(this.bump>0){sc=1+0.08*Math.sin(this.bump*Math.PI);this.bump-=0.06}
+    const charge=this.v==='charge'&&conn;
+    c.save();c.translate(cx,cy);c.scale(sc,sc);
+    // свечение
+    if(on){const g=0.5+0.5*Math.sin(t*2.4);c.shadowColor='rgba(255,90,90,.55)';c.shadowBlur=24+12*g}
+    else if(conn){c.shadowColor='rgba(52,199,89,.7)';c.shadowBlur=26}
+    else {c.shadowColor='rgba(0,0,0,.5)';c.shadowBlur=18}
+    const gr=c.createLinearGradient(-R,-R,R,R);
+    if(on){gr.addColorStop(0,R1);gr.addColorStop(1,R2)}
+    else if(charge){gr.addColorStop(0,'#2a2f36');gr.addColorStop(1,'#1b1f24')}
+    else{gr.addColorStop(0,G1);gr.addColorStop(1,G2)}
+    c.beginPath();c.arc(0,0,R,0,TAU);c.fillStyle=gr;c.fill();c.shadowBlur=0;
+    if(charge){ // жидкая энергия с волной
+      const p=0.9*ease(Math.min(1,t/(CONNECT_MS/1000)));
+      const top=R-2*R*p;
+      c.save();c.beginPath();c.arc(0,0,R,0,TAU);c.clip();
+      const lg=c.createLinearGradient(0,top,0,R);lg.addColorStop(0,G1);lg.addColorStop(1,G2);
+      c.beginPath();c.moveTo(-R,R);
+      for(let x=-R;x<=R;x+=4)c.lineTo(x,top+Math.sin(x/14+t*6)*5+Math.sin(x/9-t*4)*2.5);
+      c.lineTo(R,R);c.closePath();c.fillStyle=lg;c.fill();
+      // пузырьки
+      for(let i=0;i<6;i++){const bx=Math.sin(i*2.1+t)*R*.6,by=R-((t*60+i*37)%(R-top+1));c.fillStyle='rgba(255,255,255,.25)';c.beginPath();c.arc(bx,by,2+i%2,0,TAU);c.fill()}
+      c.restore();
+    }
+    // блик
+    const hl=c.createRadialGradient(-R*.35,-R*.45,2,-R*.35,-R*.45,R*.9);hl.addColorStop(0,'rgba(255,255,255,.18)');hl.addColorStop(1,'rgba(255,255,255,0)');
+    c.beginPath();c.arc(0,0,R,0,TAU);c.fillStyle=hl;c.fill();
+    // надпись
+    if(conn){
+      const glow=0.6+0.4*Math.sin(t*7);
+      c.shadowColor='#fff';c.shadowBlur=14*glow;bolt(c,0,0,58,'#fff');c.shadowBlur=0;
+    }else{
+      c.fillStyle='#fff';c.font='800 17px Unbounded, Arial Black, sans-serif';c.textAlign='center';c.textBaseline='middle';
+      c.fillText(on?'ОТКЛЮЧИТЬ':'ПОДКЛЮЧИТЬ',0,1);
+    }
+    c.restore();
+
+    // поверх: молнии «Заряда», вспышка
+    if(this.v==='charge')this.drawStrikes(c,now);
+    if(this.flash>0){
+      const fg=c.createRadialGradient(cx,cy,R*.5,cx,cy,170);
+      fg.addColorStop(0,`rgba(255,255,255,${this.flash*.9})`);fg.addColorStop(.5,`rgba(140,255,180,${this.flash*.45})`);fg.addColorStop(1,'rgba(52,199,89,0)');
+      c.fillStyle=fg;c.fillRect(0,0,320,320);this.flash-=0.045;
+    }
+  }
+
+  drawWarp(c,t,conn,on){
+    const cx=160,cy=160,R=88;
+    if(conn){const n=2+Math.floor(t*5);for(let i=0;i<n;i++)this.parts.push({a:rnd(0,TAU),d:rnd(165,230),sp:2+t*5,dir:-1,len:6+t*16,col:Math.random()<.6?'#fff':GREEN})}
+    if(on&&Math.random()<.12)this.parts.push({a:rnd(0,TAU),d:R+4,sp:.6,dir:1,len:3,col:GREEN,slow:true});
+    c.save();c.lineCap='round';
+    this.parts=this.parts.filter(p=>{
+      if(p.dir<0){p.sp*=1.035;p.d-=p.sp}else{p.d+=p.sp;if(!p.slow)p.sp*=.97}
+      if(p.dir<0&&p.d<R+2)return false;if(p.d>240)return false;
+      const x=cx+Math.cos(p.a)*p.d,y=cy+Math.sin(p.a)*p.d,L=Math.min(p.len+p.sp*3,70)*(p.slow?0.4:1);
+      const x2=cx+Math.cos(p.a)*(p.d-p.dir*L),y2=cy+Math.sin(p.a)*(p.d-p.dir*L);
+      const fade=p.slow?Math.max(0,1-(p.d-R)/60):1;
+      c.strokeStyle=p.col;c.globalAlpha=fade*.9;c.lineWidth=p.slow?2:1.6;c.beginPath();c.moveTo(x,y);c.lineTo(x2,y2);c.stroke();
+      return !(p.dir>0&&!p.slow&&p.sp<.5)&&fade>0;
+    });
+    c.restore();
+    // мягкое кольцо-ореол при подключении
+    if(conn){c.save();c.globalAlpha=.25+.15*Math.sin(t*7);c.strokeStyle=GREEN;c.lineWidth=2;c.shadowColor=GREEN;c.shadowBlur=20;c.beginPath();c.arc(cx,cy,R+10,0,TAU);c.stroke();c.restore()}
+  }
+
+  drawCharge(c,t,conn,on,now){
+    const cx=160,cy=160,R=88;
+    if(conn){ // трескучие разряды по кругу
+      if(!this.arcs||now-this.lastArc>90){this.lastArc=now;this.arcs=[];const n=1+Math.floor(Math.random()*2+t);
+        for(let i=0;i<n;i++){const a=rnd(0,TAU),b=a+rnd(.4,1.1),r1=R+rnd(6,22),r2=R+rnd(6,22);this.arcs.push([cx+Math.cos(a)*r1,cy+Math.sin(a)*r1,cx+Math.cos(b)*r2,cy+Math.sin(b)*r2])}}
+      c.save();c.strokeStyle='#d6ffe3';c.lineWidth=1.6;c.shadowColor=GREEN;c.shadowBlur=14;c.globalAlpha=.85;
+      for(const a of this.arcs)jag(c,...a,9,7);
+      c.globalAlpha=.3;c.strokeStyle=GREEN;c.lineWidth=2;c.beginPath();c.arc(cx,cy,R+12,0,TAU);c.stroke();c.restore();
+    }
+    // искры
+    c.save();
+    this.parts=this.parts.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vx*=.95;p.vy*=.95;p.life-=p.dec;if(p.life<=0)return false;
+      c.globalAlpha=p.life;c.fillStyle=p.col;c.shadowColor=p.col;c.shadowBlur=8;c.beginPath();c.arc(p.x,p.y,1.2+p.life*1.8,0,TAU);c.fill();return true});
+    c.restore();
+    if(on){const g=.5+.5*Math.sin(t*2.4);c.save();c.globalAlpha=.12+.1*g;c.fillStyle='#ff6b6b';c.beginPath();c.arc(cx,cy,R+14+6*g,0,TAU);c.fill();c.restore()}
+  }
+  drawStrikes(c,now){
+    if(this.state!=='on'||!this.strikes)return;
+    const dt=now-this.t0,cx=160,cy=160;
+    c.save();c.strokeStyle='#fff';c.shadowColor=GREEN;c.shadowBlur=22;c.lineCap='round';
+    for(const s of this.strikes){const age=dt-s;if(age<0||age>140)continue;
+      const a=(s*2.39)%TAU;c.globalAlpha=1-age/140;c.lineWidth=3;
+      jag(c,cx+Math.cos(a)*175,cy+Math.sin(a)*175,cx+Math.cos(a)*84,cy+Math.sin(a)*84,14,8);}
+    c.restore();
+  }
+
+  drawOrbit(c,t,conn,on,now){
+    const cx=160,cy=160,R=88;
+    let rad=R+30,shrink=1;
+    if(this.state==='on'&&this.collapse){const a=(now-this.collapse)/260;if(a>=1){this.collapse=null;this.burstOrbit();for(const m of this.comets)m.trail=[]}else shrink=1-ease(a)}
+    const showComets=conn||(this.state==='on'&&this.collapse);
+    if(showComets){
+      const speed=conn?2.2+t*2.4:9;
+      for(const m of this.comets){
+        m.a+=speed/60;
+        const ex=rad*shrink,ey=rad*.42*shrink;
+        const lx=Math.cos(m.a)*ex,ly=Math.sin(m.a)*ey;
+        const x=cx+lx*Math.cos(m.tilt)-ly*Math.sin(m.tilt),y=cy+lx*Math.sin(m.tilt)+ly*Math.cos(m.tilt);
+        m.trail.push([x,y]);if(m.trail.length>22)m.trail.shift();
+        c.save();c.lineCap='round';
+        for(let i=1;i<m.trail.length;i++){const f=i/m.trail.length;c.strokeStyle=GREEN;c.globalAlpha=f*.8;c.lineWidth=f*5;
+          c.beginPath();c.moveTo(...m.trail[i-1]);c.lineTo(...m.trail[i]);c.stroke()}
+        c.globalAlpha=1;c.fillStyle='#fff';c.shadowColor=GREEN;c.shadowBlur=16;c.beginPath();c.arc(x,y,4.5,0,TAU);c.fill();c.restore();
+      }
+    }
+    c.save();
+    this.parts=this.parts.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vx*=.955;p.vy*=.955;p.life-=p.dec;if(p.life<=0)return false;
+      c.globalAlpha=p.life;c.fillStyle=p.col;c.shadowColor=p.col;c.shadowBlur=10;c.beginPath();c.arc(p.x,p.y,1+p.life*2.2,0,TAU);c.fill();return true});
+    c.restore();
+    if(this.state==='on'&&!this.collapse){ // спокойная орбита-пунктир, пока подключено
+      c.save();c.translate(cx,cy);c.rotate(t*.5);c.setLineDash([3,10]);c.strokeStyle='rgba(255,107,107,.45)';c.lineWidth=2;
+      c.beginPath();c.arc(0,0,R+16,0,TAU);c.stroke();c.restore();
+    }
+  }
+}
+
+const stages=[...document.querySelectorAll('.phone')].map(s=>new Stage(s));
+document.getElementById('runAll').onclick=()=>stages.forEach(s=>{s.reset();s.go('connecting')});
+document.getElementById('resetAll').onclick=()=>stages.forEach(s=>s.reset());
+(function loop(now){for(const s of stages)s.frame(now);requestAnimationFrame(loop)})(performance.now());
+</script>
+</body>
+</html>
