@@ -88,6 +88,17 @@ object Subscription {
     private fun file(ctx: Context) = File(ctx.filesDir, "subscription.txt")
     private fun infoFile(ctx: Context) = File(ctx.filesDir, "subscription-info.txt")
 
+    /** Перечитать всё с диска (после загрузки настроек из файла). */
+    fun reload(ctx: Context) {
+        nodes = emptyList()
+        info = null
+        favorites.clear()
+        hidden.clear()
+        marksLoaded = false
+        load(ctx)
+        loadMarks(ctx)
+    }
+
     fun load(ctx: Context) {
         val f = file(ctx)
         if (f.exists()) nodes = parseAll(f.readText())

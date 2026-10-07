@@ -30,6 +30,21 @@ class SettingsActivity : AppCompatActivity() {
         if (uri != null) importDatabase(uri)
     }
 
+    private val saveBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            Backup.saveTo(this, uri)
+            Toast.makeText(this, "Сохранено. Перекинь файл на новый телефон и загрузи его там", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            AppLog.err("сохранение настроек: ${e.message}")
+            Toast.makeText(this, "Не удалось сохранить: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val loadBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) confirmRestore(uri)
+    }
+
     private fun d(v: Float) = Ui.dp(this, v)
 
     private var appsRow: LinearLayout? = null
@@ -230,6 +245,33 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(apiCard)
         apiCard.visibility = if (AppSettings.mode == AppSettings.MODE_API) View.VISIBLE else View.GONE
 
+        // ---------- Перенос на другой телефон ----------
+        root.addView(section("Перенос на другой телефон"))
+        root.addView(Ui.card(this).apply {
+            addView(Ui.text(this@SettingsActivity,
+                "Все настройки, подписка, избранные и скрытые серверы — одним файлом. На новом телефоне поставь Fast VPN и нажми «Загрузить из файла».",
+                12f, Ui.MUTED))
+            addView(Ui.space(this@SettingsActivity, 10f))
+            val row = LinearLayout(this@SettingsActivity)
+            row.addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_download_w, "В файл", 18f)) {
+                saveBackup.launch(Backup.suggestedName())
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(8f) })
+            row.addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_share_w, "Отправить", 18f)) {
+                try { Backup.share(this@SettingsActivity) } catch (e: Exception) {
+                    Toast.makeText(this@SettingsActivity, "Не удалось: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(row, LinearLayout.LayoutParams(-1, -2))
+            addView(Ui.space(this@SettingsActivity, 8f))
+            addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_folder_w, "Загрузить из файла", 18f)) {
+                loadBackup.launch(arrayOf("*/*"))
+            })
+            addView(Ui.text(this@SettingsActivity,
+                "В файле ссылка на твою подписку — не отправляй его другим людям.", 11f, Ui.MUTED).apply {
+                setPadding(0, d(8f), 0, 0)
+            })
+        })
+
         // ---------- Помощь ----------
         root.addView(section("Помощь"))
         root.addView(Ui.card(this).apply {
@@ -247,6 +289,43 @@ class SettingsActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, -2))
 
         setContentView(ScrollView(this).apply { addView(root) })
+    }
+
+    /** Проверить файл настроек, показать что в нём и спросить, заменять ли текущие. */
+    private fun confirmRestore(uri: Uri) {
+        val b = try { Backup.read(this, uri) } catch (e: Exception) {
+            AppLog.err("загрузка настроек: ${e.message}")
+            android.app.AlertDialog.Builder(this).setTitle("Не получилось")
+                .setMessage(e.message ?: "Файл не читается").setPositiveButton("Ок", null).show()
+            return
+        }
+        val info = buildString {
+            if (b.created.isNotBlank()) append("Сохранены: ${b.created}\n")
+            if (b.app.isNotBlank()) append("Версия: ${b.app}\n")
+            append(if (b.servers > 0) "Серверов в подписке: ${b.servers}" else "Подписки в файле нет")
+            append("\n\nТекущие настройки и подписка заменятся")
+            if (BoxVpnService.isRunning) append(", VPN отключится")
+            append(".")
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Загрузить настройки?")
+            .setMessage(info)
+            .setPositiveButton("Загрузить") { _, _ ->
+                try {
+                    Backup.apply(applicationContext, b)
+                } catch (e: Exception) {
+                    AppLog.err("применение настроек: ${e.message}")
+                    Toast.makeText(this, "Не удалось загрузить: ${e.message}", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                Toast.makeText(this, "Настройки перенесены", Toast.LENGTH_LONG).show()
+                // Главный экран заново — с новой темой, режимом и подпиской
+                startActivity(android.content.Intent(this, MainActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                finish()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())

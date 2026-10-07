@@ -41,6 +41,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var battleSub: TextView
     private lateinit var battlePing: TextView
     private lateinit var playButton: TextView
+    private lateinit var ring: ConnectRing
+    /** Что сейчас нарисовано на кнопке — чтобы не перерисовывать каждую секунду */
+    private var playKey = ""
+    /** Было ли подключено на прошлом обновлении — для вспышки и вибрации на переходе */
+    private var wasRunning: Boolean? = null
+    private var pulse: android.animation.ObjectAnimator? = null
     private lateinit var stopButton: TextView
     private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var launchRow: LinearLayout
@@ -264,8 +270,13 @@ class MainActivity : AppCompatActivity() {
             elevation = d(8f).toFloat()
             setOnClickListener { play() }
         }
-        val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, d(22f), 0, d(18f)) }
-        playWrap.addView(playButton, LinearLayout.LayoutParams(d(200f), d(200f)))
+        // Кнопка в кольце: при подключении по кольцу бежит светящаяся дуга, при успехе — вспышка
+        ring = ConnectRing(this)
+        val playBox = android.widget.FrameLayout(this)
+        playBox.addView(ring, android.widget.FrameLayout.LayoutParams(d(260f), d(260f), Gravity.CENTER))
+        playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(200f), d(200f), Gravity.CENTER))
+        val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, d(0f), 0, d(0f)) }
+        playWrap.addView(playBox, LinearLayout.LayoutParams(d(260f), d(260f)))
         root.addView(playWrap)
         playHint = Ui.text(this, "", 13f, Ui.MUTED).apply {
             gravity = Gravity.CENTER
@@ -429,21 +440,62 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Подключение идёт: VPN поднимается или подбирается сервер, а интернета ещё нет
+        val connecting = BoxVpnService.isStarting || (busy && !running)
         val label = when {
+            connecting -> "~connecting"
             running -> "ОТКЛЮЧИТЬ"
             AppSettings.gameMode && AppSettings.autoLaunch -> "ИГРАТЬ"
             else -> "ПОДКЛЮЧИТЬ"
         }
-        if (playButton.text != label) {
-            playButton.text = label
-            // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
-            playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (label == "ИГРАТЬ") 28f else 22f)
+        if (playKey != label) {
+            playKey = label
+            if (connecting) {
+                // Молния в кнопке «заряжается»: кнопка дышит, по кольцу бежит дуга
+                playButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", 54f, tint = 0xFFFFFFFF.toInt())
+            } else {
+                playButton.text = label
+                // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
+                playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (label == "ИГРАТЬ") 28f else 22f)
+            }
             // Подключено — кнопка красная (отключить), иначе зелёная
             val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
             else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
             playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                 .apply { shape = GradientDrawable.OVAL }
+            ring.spin(connecting)
+            if (connecting) {
+                if (pulse == null) pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    playButton,
+                    android.animation.PropertyValuesHolder.ofFloat(android.view.View.SCALE_X, 1f, 0.95f),
+                    android.animation.PropertyValuesHolder.ofFloat(android.view.View.SCALE_Y, 1f, 0.95f),
+                ).apply {
+                    duration = 650
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    start()
+                }
+            } else {
+                pulse?.cancel()
+                pulse = null
+                playButton.scaleX = 1f
+                playButton.scaleY = 1f
+            }
         }
+        // Переходы: подключилось — вспышка и вибрация, отключилось — лёгкий щелчок
+        val prev = wasRunning
+        if (prev != null && prev != running) {
+            if (running) {
+                ring.flash()
+                playButton.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction {
+                    playButton.animate().scaleX(1f).scaleY(1f).setDuration(220).start()
+                }.start()
+                ConnectRing.buzz(playButton, strong = true)
+            } else {
+                ConnectRing.buzz(playButton, strong = false)
+            }
+        }
+        wasRunning = running
         stopButton.visibility = if (running && AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
         launchRow.visibility = if (AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
 

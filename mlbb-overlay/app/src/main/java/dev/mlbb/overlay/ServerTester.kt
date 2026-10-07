@@ -240,6 +240,15 @@ object ServerTester {
         }
     }
 
+    /** Сбросить замеры и перечитать страны выхода (после загрузки настроек из файла). */
+    fun reload(ctx: Context) {
+        results.clear()
+        speed.clear()
+        exitCountry.clear()
+        exitsLoaded = false
+        loadExits(ctx)
+    }
+
     private fun saveExits(ctx: Context) {
         val o = org.json.JSONObject()
         for ((k, v) in exitCountry) o.put(k, v)

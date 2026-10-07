@@ -177,7 +177,7 @@ object Ui {
     /** Белые контурные значки навигации — цвета текста. */
     private val OUTLINE = setOf(
         R.drawable.ic_back_w, R.drawable.ic_refresh_w, R.drawable.ic_settings_w, R.drawable.ic_paste_w,
-        R.drawable.ic_link_w, R.drawable.ic_download_w, R.drawable.ic_folder_w, R.drawable.ic_csv_w,
+        R.drawable.ic_link_w, R.drawable.ic_download_w, R.drawable.ic_folder_w, R.drawable.ic_csv_w, R.drawable.ic_share_w,
     )
 
     /**
