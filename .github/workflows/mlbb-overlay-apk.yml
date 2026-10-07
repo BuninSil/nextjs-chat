@@ -45,7 +45,9 @@ jobs:
 
       # Релиз — источник автообновления в приложении (versionCode = номер запуска).
       # Префикс тега mlbb-v не меняем: по нему уже установленные версии находят обновления.
+      # Только из main: рабочая ветка собирает APK для проверки, но обновление пользователям не выпускает
       - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
