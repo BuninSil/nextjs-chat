@@ -26,6 +26,9 @@ button.all.ghost{background:var(--card);color:var(--text);border:1px solid var(-
 button.all:focus-visible,canvas:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
 .phone{background:var(--phone);border:1px solid var(--line);border-radius:30px;padding:18px 16px 20px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.phone.full{position:relative;overflow:hidden;background:#05070a;min-height:560px;justify-content:flex-start}
+.phone.full>*{position:relative;z-index:1}
+.phone.full>canvas.bg{position:absolute;inset:0;width:100%;height:100%;max-width:none;aspect-ratio:auto;border-radius:0;z-index:0;pointer-events:none}
 .phone.shake{animation:shake .32s linear}
 @keyframes shake{0%,100%{transform:translate(0,0)}15%{transform:translate(-3px,1px)}30%{transform:translate(3px,-1px)}45%{transform:translate(-2px,1px)}60%{transform:translate(2px,0)}80%{transform:translate(-1px,0)}}
 .tag{font:600 11px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);align-self:flex-start}
@@ -42,18 +45,19 @@ canvas{width:100%;max-width:300px;aspect-ratio:1;cursor:pointer;border-radius:50
 <body>
 
 <div class="wrap">
-  <h1>Анимация подключения: <b>три варианта</b></h1>
+  <h1>Анимация подключения: <b>шесть вариантов</b></h1>
   <p class="lead">Тапни по кнопке в любом телефоне: пойдёт подключение (2,5 секунды, как в среднем в жизни), потом момент «подключено». Тап ещё раз — отключение. Встряска телефона — это где сработает вибрация.</p>
   <div class="bar">
-    <button class="all" id="runAll">Запустить все три</button>
+    <button class="all" id="runAll">Запустить все</button>
     <button class="all ghost" id="resetAll">Сбросить</button>
   </div>
 
   <div class="grid">
-    <section class="phone" data-v="warp">
+    <section class="phone full" data-v="warp">
+      <canvas class="bg" aria-hidden="true"></canvas>
       <span class="tag">Вариант 1</span>
       <h2 class="name">Гиперпрыжок</h2>
-      <p class="desc">Звёзды на световой скорости летят в кнопку и разгоняются. Подключилось — белая вспышка, ударная волна, звёзды разлетаются наружу. Прямо про «быстрее нас — только свет».</p>
+      <p class="desc">Во весь экран: звёзды висят на фоне, при подключении срываются в прыжок на световой скорости и растягиваются в лучи. Подключилось — белая вспышка, и дальше спокойный полёт среди звёзд, пока VPN включён. Прямо про «быстрее нас — только свет».</p>
       <canvas tabindex="0" aria-label="Кнопка, вариант Гиперпрыжок"></canvas>
       <div class="status">Отключено</div><div class="buzz">вибрация</div>
     </section>
@@ -69,6 +73,27 @@ canvas{width:100%;max-width:300px;aspect-ratio:1;cursor:pointer;border-radius:50
       <h2 class="name">Орбиты</h2>
       <p class="desc">Три кометы с хвостами носятся вокруг кнопки как в атоме, всё быстрее. Подключилось — схлопываются в центр и взрываются частицами с двойной волной.</p>
       <canvas tabindex="0" aria-label="Кнопка, вариант Орбиты"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+    <section class="phone" data-v="gauge">
+      <span class="tag">Вариант 4</span>
+      <h2 class="name">Спидометр</h2>
+      <p class="desc">Вокруг кнопки шкала как у тахометра, стрелка-заливка ползёт вверх, внизу растут цифры скорости. Подключилось — стрелка улетает в красную зону, отскакивает, искры.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Спидометр"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+    <section class="phone" data-v="radar">
+      <span class="tag">Вариант 5</span>
+      <h2 class="name">Радар</h2>
+      <p class="desc">По кругу крутится луч радара и находит серверы — вспыхивают точки. Подключилось — лучший сервер захватывается, к кнопке бьёт луч связи, расходятся круги.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Радар"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
+    <section class="phone" data-v="race">
+      <span class="tag">Вариант 6</span>
+      <h2 class="name">Гонка</h2>
+      <p class="desc">По кольцу нарезает круги огонёк со световым шлейфом, с каждым кругом быстрее, сыпет искрами. Подключилось — шлейф замыкается в сплошное кольцо, оно вспыхивает и расходится тремя волнами.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Гонка"></canvas>
       <div class="status">Отключено</div><div class="buzz">вибрация</div>
     </section>
   </div>
@@ -95,13 +120,45 @@ function jag(c,x1,y1,x2,y2,amp,segs){
 
 class Stage{
   constructor(sec){
-    this.sec=sec;this.v=sec.dataset.v;this.cv=sec.querySelector('canvas');this.c=this.cv.getContext('2d');
+    this.sec=sec;this.v=sec.dataset.v;this.cv=sec.querySelector('canvas:not(.bg)');this.bg=sec.querySelector('canvas.bg');
+    if(this.bg){this.bc=this.bg.getContext('2d');this.stars=[];for(let i=0;i<260;i++)this.stars.push(this.newStar(true));this.speed=0}this.c=this.cv.getContext('2d');
     this.st=sec.querySelector('.status');this.bz=sec.querySelector('.buzz');
     this.state='idle';this.t0=performance.now();this.parts=[];this.waves=[];this.flash=0;this.scale=1;this.bump=0;
     this.comets=[0,1,2].map(i=>({a:i*TAU/3,tilt:i*TAU/3+0.3,trail:[]}));
     this.cv.addEventListener('click',()=>this.tap());
     this.cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.tap()}});
     this.resize();addEventListener('resize',()=>this.resize());
+  }
+  newStar(any){return{x:rnd(-1,1),y:rnd(-1,1),z:any?rnd(.05,1):1,pz:0,g:Math.random()<.22}}
+  drawSky(now){
+    const b=this.bg,d=devicePixelRatio||1,W=b.clientWidth,H=b.clientHeight;
+    if(b.width!==Math.round(W*d)||b.height!==Math.round(H*d)){b.width=Math.round(W*d);b.height=Math.round(H*d)}
+    const c=this.bc;c.setTransform(d,0,0,d,0,0);
+    // точка схода — центр кнопки
+    const sr=this.sec.getBoundingClientRect(),cr=this.cv.getBoundingClientRect();
+    const cx=cr.left-sr.left+cr.width/2,cy=cr.top-sr.top+cr.height/2,F=Math.max(W,H)*.55;
+    const t=(now-this.t0)/1000;
+    let target=0;
+    if(this.state==='connecting')target=.0025+Math.pow(Math.max(0,Math.min(1,t/(CONNECT_MS/1000))),2.2)*.06;
+    if(this.state==='on')target=t<.25?.09:.0028;
+    this.speed+=(target-this.speed)*(this.state==='on'&&t>=.25?.04:.12);
+    // шлейф: при скорости фон чуть «смазывается»
+    c.fillStyle=`rgba(5,7,10,${this.speed>.02?.35:1})`;c.fillRect(0,0,W,H);
+    // туманность у кнопки
+    const neb=c.createRadialGradient(cx,cy,10,cx,cy,F*1.1);neb.addColorStop(0,`rgba(52,199,89,${.05+this.speed*2})`);neb.addColorStop(1,'rgba(52,199,89,0)');
+    c.fillStyle=neb;c.fillRect(0,0,W,H);
+    c.lineCap='round';
+    for(const s of this.stars){
+      s.pz=s.z;s.z-=this.speed;
+      if(s.z<=.02){Object.assign(s,this.newStar(false));s.pz=s.z;continue}
+      const x=cx+s.x/s.z*F,y=cy+s.y/s.z*F;
+      if(x<-50||x>W+50||y<-50||y>H+50){Object.assign(s,this.newStar(false));s.pz=s.z;continue}
+      const px=cx+s.x/s.pz*F,py=cy+s.y/s.pz*F,a=Math.min(1,(1-s.z)*1.4);
+      c.strokeStyle=s.g?`rgba(110,240,150,${a})`:`rgba(255,255,255,${a})`;
+      c.lineWidth=Math.max(.6,(1-s.z)*2.6);
+      c.beginPath();c.moveTo(px,py);c.lineTo(x+.01,y);c.stroke();
+    }
+    if(this.skyFlash>0){c.fillStyle=`rgba(230,255,240,${this.skyFlash})`;c.fillRect(0,0,W,H);this.skyFlash-=.05}
   }
   resize(){const d=devicePixelRatio||1,w=this.cv.clientWidth||300;this.cv.width=w*d;this.cv.height=w*d;this.k=w*d/320;}
   tap(){ if(this.state==='idle'||this.state==='off') this.go('connecting'); else if(this.state==='on') this.go('off'); }
@@ -121,19 +178,110 @@ class Stage{
   onConnect(){
     const v=this.v;
     if(v==='warp'){
-      this.flash=1;
+      this.flash=.8;this.skyFlash=.85;
       this.waves.push({r:88,v:7,a:1,w:6},{r:88,v:4.5,a:.7,w:3});
-      for(const p of this.parts){p.dir=1;p.sp=rnd(8,16)}
-      for(let i=0;i<40;i++){const a=rnd(0,TAU);this.parts.push({a,d:rnd(80,100),sp:rnd(6,14),dir:1,len:rnd(10,30),col:Math.random()<.5?'#fff':GREEN})}
     }
     if(v==='charge'){
       this.flash=.6;this.strikes=[0,60,130,210];
       this.waves.push({r:88,v:5,a:.9,w:4});
       for(let i=0;i<70;i++){const a=rnd(0,TAU),s=rnd(2,7);this.parts.push({x:160+Math.cos(a)*88,y:160+Math.sin(a)*88,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.012,.03),col:Math.random()<.3?'#fff':(Math.random()<.5?GREEN:'#b6ffcf')})}
     }
+    if(v==='gauge'){
+      this.flash=.5;this.waves.push({r:110,v:5,a:.9,w:4});
+      for(let i=0;i<50;i++){const a=rnd(0,TAU),s=rnd(2,6);const ax=Math.PI*0.75+Math.PI*1.5;
+        this.parts.push({x:160+Math.cos(ax)*110,y:160+Math.sin(ax)*110,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.015,.035),col:Math.random()<.4?'#fff':'#ffd27a'})}
+    }
+    if(v==='radar'){
+      this.flash=.45;const b=this.blips&&this.blips.length?this.blips.reduce((m,x)=>x.r<m.r?x:m):{a:-0.6,r:130};
+      this.lock={a:b.a,r:b.r};this.waves.push({r:88,v:4,a:.9,w:3},{r:60,v:3,a:.6,w:2});
+    }
+    if(v==='race'){
+      this.flash=.6;this.waves.push({r:104,v:6,a:1,w:5},{r:104,v:4.5,a:.8,w:3},{r:104,v:3,a:.6,w:2});
+    }
     if(v==='orbit'){
       this.collapse=performance.now();
     }
+  }
+  sparks(c){
+    c.save();
+    this.parts=this.parts.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vx*=.95;p.vy*=.95;p.life-=p.dec;if(p.life<=0)return false;
+      c.globalAlpha=p.life;c.fillStyle=p.col;c.shadowColor=p.col;c.shadowBlur=8;c.beginPath();c.arc(p.x,p.y,1+p.life*2,0,TAU);c.fill();return true});
+    c.restore();
+  }
+  drawGauge(c,t,conn,on,now){
+    const cx=160,cy=160,RR=110,a0=Math.PI*.75,span=Math.PI*1.5;
+    let p=0;
+    if(conn)p=Math.min(.82,ease(t/(CONNECT_MS/1000))*.82+Math.sin(t*13)*.02);
+    if(on){const a=(now-this.t0)/1000;p=a<.18?.82+.18*(a/.18):.86+.14*Math.exp(-a*4)*Math.cos(a*18)}
+    if(this.state==='off'||this.state==='idle')p=Math.max(0,(this.gp||0)-.05);
+    this.gp=p;
+    // деления
+    c.save();
+    for(let i=0;i<=30;i++){const a=a0+span*i/30,big=i%5===0,lit=i/30<=p+1e-6,red=i>=25;
+      c.strokeStyle=lit?(red?'#ff5a5a':GREEN):'rgba(255,255,255,.14)';c.lineWidth=big?3:1.5;
+      if(lit){c.shadowColor=c.strokeStyle;c.shadowBlur=8}else c.shadowBlur=0;
+      const r1=RR+(big?10:6),r2=RR+18;c.beginPath();c.moveTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);c.lineTo(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2);c.stroke()}
+    // заливка дуги
+    c.lineCap='round';c.lineWidth=5;c.strokeStyle='rgba(255,255,255,.08)';c.shadowBlur=0;
+    c.beginPath();c.arc(cx,cy,RR,a0,a0+span);c.stroke();
+    if(p>0.003){const g=c.createLinearGradient(40,280,280,40);g.addColorStop(0,G2);g.addColorStop(.7,G1);g.addColorStop(1,'#ff5a5a');
+      c.strokeStyle=g;c.shadowColor=GREEN;c.shadowBlur=16;c.beginPath();c.arc(cx,cy,RR,a0,a0+span*Math.min(p,1));c.stroke();
+      const ha=a0+span*Math.min(p,1);c.fillStyle='#fff';c.shadowColor='#fff';c.shadowBlur=14;c.beginPath();c.arc(cx+Math.cos(ha)*RR,cy+Math.sin(ha)*RR,5,0,TAU);c.fill()}
+    c.restore();
+    // цифры
+    if(conn||on){c.save();c.fillStyle=on?'#fff':GREEN;c.font='800 20px Unbounded, Arial Black, sans-serif';c.textAlign='center';
+      c.fillText(String(Math.round(p*940)),cx,cy+RR+34);c.font='600 10px Manrope, sans-serif';c.fillStyle='#8b9098';c.fillText('Мбит/с',cx,cy+RR+48);c.restore()}
+    this.sparks(c);
+  }
+  drawRadar(c,t,conn,on,now){
+    const cx=160,cy=160,R=88,RO=152;
+    c.save();c.strokeStyle='rgba(52,199,89,.13)';c.lineWidth=1;
+    for(const r of [108,130,RO]){c.beginPath();c.arc(cx,cy,r,0,TAU);c.stroke()}
+    c.restore();
+    if(conn){
+      if(!this.blips||this.state!==this.bs){this.blips=[];this.bs=this.state}
+      const sw=(t*3.2)%TAU;this.sw=sw;
+      for(let i=0;i<26;i++){const a=sw-i*0.045;c.save();c.globalAlpha=.22*(1-i/26);c.strokeStyle=GREEN;c.lineWidth=RO-R-6;
+        c.beginPath();c.arc(cx,cy,(RO+R+6)/2,a-0.05,a);c.stroke();c.restore()}
+      c.save();c.strokeStyle='#b6ffcf';c.lineWidth=2;c.shadowColor=GREEN;c.shadowBlur=12;
+      c.beginPath();c.moveTo(cx+Math.cos(sw)*(R+4),cy+Math.sin(sw)*(R+4));c.lineTo(cx+Math.cos(sw)*RO,cy+Math.sin(sw)*RO);c.stroke();c.restore();
+      if(Math.random()<.09)this.blips.push({a:sw,r:rnd(R+14,RO-6),born:now});
+    }
+    if(this.blips)this.blips=this.blips.filter(b=>{const age=(now-b.born)/1000,al=Math.max(0,1-age/1.6);if(al<=0&&!on)return false;
+      if(on)return false;
+      c.save();c.globalAlpha=al;c.fillStyle=GREEN;c.shadowColor=GREEN;c.shadowBlur=10;c.beginPath();c.arc(cx+Math.cos(b.a)*b.r,cy+Math.sin(b.a)*b.r,3.5,0,TAU);c.fill();c.restore();return true});
+    if(on&&this.lock){
+      const a=(now-this.t0)/1000,L=this.lock,bx=cx+Math.cos(L.a)*L.r,by=cy+Math.sin(L.a)*L.r;
+      const k=Math.min(1,a/.25);
+      c.save();c.strokeStyle='#fff';c.lineWidth=2.5;c.shadowColor=GREEN;c.shadowBlur=16;c.globalAlpha=Math.max(.35,1-a*.6);
+      c.beginPath();c.moveTo(bx,by);c.lineTo(bx+(cx+Math.cos(L.a)*R-bx)*k,by+(cy+Math.sin(L.a)*R-by)*k);c.stroke();
+      c.globalAlpha=1;c.fillStyle='#fff';c.beginPath();c.arc(bx,by,5,0,TAU);c.fill();
+      // прицел вокруг найденного сервера
+      c.strokeStyle=GREEN;c.lineWidth=1.5;const pr=10+4*Math.sin(t*5);c.beginPath();c.arc(bx,by,pr,0,TAU);c.stroke();
+      if(a<1.2){c.globalAlpha=1-a/1.2;c.beginPath();c.arc(bx,by,8+a*40,0,TAU);c.stroke()}
+      c.restore();
+    }
+  }
+  drawRace(c,t,conn,on,now){
+    const cx=160,cy=160,RR=104;
+    c.save();c.strokeStyle='rgba(255,255,255,.07)';c.lineWidth=6;c.beginPath();c.arc(cx,cy,RR,0,TAU);c.stroke();c.restore();
+    if(conn){
+      this.rh=(this.rh||0)+(0.05+t*0.09);
+      const head=this.rh-Math.PI/2,len=Math.min(TAU*.85,0.6+t*1.1);
+      c.save();c.lineCap='round';
+      for(let i=0;i<24;i++){const f=i/24,a1=head-len*(1-f),a2=head-len*(1-(i+1)/24);
+        c.strokeStyle=GREEN;c.globalAlpha=f*f;c.lineWidth=1+f*6;c.shadowColor=GREEN;c.shadowBlur=f*14;
+        c.beginPath();c.arc(cx,cy,RR,a1,a2+0.01);c.stroke()}
+      c.globalAlpha=1;c.fillStyle='#fff';c.shadowColor='#fff';c.shadowBlur=18;c.beginPath();c.arc(cx+Math.cos(head)*RR,cy+Math.sin(head)*RR,5.5,0,TAU);c.fill();
+      c.restore();
+      if(Math.random()<.5){const hx=cx+Math.cos(head)*RR,hy=cy+Math.sin(head)*RR,ta=head+Math.PI/2+Math.PI+rnd(-.5,.5),s=rnd(1,3);
+        this.parts.push({x:hx,y:hy,vx:Math.cos(ta)*s,vy:Math.sin(ta)*s,life:1,dec:rnd(.04,.08),col:Math.random()<.5?'#fff':GREEN})}
+      this.lastLen=len;
+    }else this.rh=0;
+    if(on){const a=(now-this.t0)/1000,glow=a<.4?1-a/.4:0;
+      c.save();c.strokeStyle=GREEN;c.lineWidth=4+glow*6;c.shadowColor=GREEN;c.shadowBlur=10+glow*24;c.globalAlpha=.35+glow*.65;
+      c.beginPath();c.arc(cx,cy,RR,0,TAU);c.stroke();c.restore()}
+    this.sparks(c);
   }
   burstOrbit(){
     this.flash=.9;
@@ -142,13 +290,16 @@ class Stage{
   }
 
   frame(now){
-    const c=this.c,k=this.k,t=(now-this.t0)/1000,cx=160,cy=160,R=88;
+    const c=this.c,k=this.k,t=Math.max(0,(now-this.t0)/1000),cx=160,cy=160,R=88;
     c.setTransform(k,0,0,k,0,0);c.clearRect(0,0,320,320);
     if(this.state==='connecting'&&now-this.t0>CONNECT_MS)this.go('on');
     const conn=this.state==='connecting',on=this.state==='on';
 
     // ---------- фон-эффекты под кнопкой ----------
     if(this.v==='warp')this.drawWarp(c,t,conn,on);
+    if(this.v==='gauge')this.drawGauge(c,t,conn,on,now);
+    if(this.v==='radar')this.drawRadar(c,t,conn,on,now);
+    if(this.v==='race')this.drawRace(c,t,conn,on,now);
     if(this.v==='charge')this.drawCharge(c,t,conn,on,now);
     if(this.v==='orbit')this.drawOrbit(c,t,conn,on,now);
 
@@ -208,8 +359,8 @@ class Stage{
 
   drawWarp(c,t,conn,on){
     const cx=160,cy=160,R=88;
-    if(conn){const n=2+Math.floor(t*5);for(let i=0;i<n;i++)this.parts.push({a:rnd(0,TAU),d:rnd(165,230),sp:2+t*5,dir:-1,len:6+t*16,col:Math.random()<.6?'#fff':GREEN})}
-    if(on&&Math.random()<.12)this.parts.push({a:rnd(0,TAU),d:R+4,sp:.6,dir:1,len:3,col:GREEN,slow:true});
+    if(false){const n=0;for(let i=0;i<n;i++)this.parts.push({a:rnd(0,TAU),d:rnd(165,230),sp:2+t*5,dir:-1,len:6+t*16,col:Math.random()<.6?'#fff':GREEN})}
+    if(false)this.parts.push({a:rnd(0,TAU),d:R+4,sp:.6,dir:1,len:3,col:GREEN,slow:true});
     c.save();c.lineCap='round';
     this.parts=this.parts.filter(p=>{
       if(p.dir<0){p.sp*=1.035;p.d-=p.sp}else{p.d+=p.sp;if(!p.slow)p.sp*=.97}
@@ -284,7 +435,7 @@ class Stage{
 const stages=[...document.querySelectorAll('.phone')].map(s=>new Stage(s));
 document.getElementById('runAll').onclick=()=>stages.forEach(s=>{s.reset();s.go('connecting')});
 document.getElementById('resetAll').onclick=()=>stages.forEach(s=>s.reset());
-(function loop(now){for(const s of stages)s.frame(now);requestAnimationFrame(loop)})(performance.now());
+(function loop(now){for(const s of stages){if(s.bg)s.drawSky(now);s.frame(now)}requestAnimationFrame(loop)})(performance.now());
 </script>
 </body>
 </html>
