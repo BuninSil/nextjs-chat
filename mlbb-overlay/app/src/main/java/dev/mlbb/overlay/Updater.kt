@@ -62,10 +62,10 @@ object Updater {
         // Один коммит часто собирается дважды (ветка и main) — оставляем по одному релизу на коммит
         val versions = newer.sortedByDescending { it.code }.distinctBy { it.sha.ifEmpty { it.tag } }
         val latest = versions.first()
-        val notes = if (versions.size == 1) cleanNotes(latest.body)
-        else versions.joinToString("\n\n") { v ->
-            "Версия ${v.tag.removePrefix("mlbb-v")}\n" + cleanNotes(v.body).ifBlank { "Исправления и улучшения." }
-        }
+        // Коротко: по строчке на версию — только заголовок, подробности остаются на GitHub
+        val notes = versions.map { shortNote(it.body) }.filter { it.isNotBlank() }.distinct()
+            .ifEmpty { listOf("Исправления и улучшения") }
+            .joinToString("\n") { "• $it" }
         return Release(latest.code, latest.tag, notes, latest.apk, latest.size)
     }
 
@@ -73,6 +73,11 @@ object Updater {
      * Приводит описание релиза (текст коммита) к читаемому виду: убирает служебные строки
      * и склеивает строки, перенесённые посреди фразы; пункты «- …» превращает в «• …».
      */
+    /** Заголовок релиза одной строкой: «Перенос настроек, анимация подключения». */
+    private fun shortNote(body: String): String =
+        cleanNotes(body).lineSequence().map { it.trim().removePrefix("• ") }.firstOrNull { it.isNotBlank() }
+            ?.trimEnd('.') ?: ""
+
     private fun cleanNotes(body: String): String {
         val out = ArrayList<StringBuilder>()
         var paragraphBreak = true
