@@ -30,10 +30,34 @@ import kotlin.random.Random
  *  - gauge — спидометр: шкала вокруг кнопки, при подключении стрелка улетает в красную зону,
  *    дальше показывает реальную скорость загрузки;
  *  - radar — луч радара ищет серверы, при подключении лучший берётся в прицел.
+ *
+ * Вид растянут на весь экран и лежит под содержимым: рисует вокруг [anchor] (большой кнопки),
+ * волны уходят под карточки и не обрезаются.
  */
 class ConnectRing(ctx: Context) : View(ctx) {
     var style = AppSettings.ANIM_WARP
         set(v) { field = v; invalidate() }
+    var anchor: View? = null
+
+    // Центр и радиус кнопки в координатах этого вида
+    private var cx = 0f
+    private var cy = 0f
+    private var rb = 0f
+    private val loc = IntArray(2)
+    private val myLoc = IntArray(2)
+
+    private fun locate() {
+        val a = anchor
+        if (a == null || a.width == 0) {
+            cx = width / 2f; cy = height / 2f; rb = min(width, height) / 2f * (100f / 130f)
+            return
+        }
+        a.getLocationInWindow(loc); getLocationInWindow(myLoc)
+        // Без учёта «дыхания» кнопки (scale) — кольца стоят на месте
+        cx = loc[0] - myLoc[0] + a.width * a.scaleX / 2f
+        cy = loc[1] - myLoc[1] + a.height * a.scaleY / 2f
+        rb = a.width / 2f
+    }
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
 
@@ -66,8 +90,8 @@ class ConnectRing(ctx: Context) : View(ctx) {
     private var mbit = 0.0
 
     init {
-        // Свечение рисуется тенью — нужна программная отрисовка слоя
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
+        // Свечение рисуется тенью: до Android 9 тени у фигур есть только в программной отрисовке
+        if (Build.VERSION.SDK_INT < 28) setLayerType(LAYER_TYPE_SOFTWARE, null)
     }
 
     private val now get() = SystemClock.uptimeMillis()
@@ -101,12 +125,12 @@ class ConnectRing(ctx: Context) : View(ctx) {
     /** Момент «подключено»: у каждого стиля свой. */
     fun connected() {
         connectedAt = now
-        val rb = buttonR()
+        locate()
         when (style) {
             AppSettings.ANIM_GAUGE -> {
                 waves += Wave(rb + dp(13f), dp(2.4f), 0.9f, dp(3f))
                 val a = (PI * 0.75 + PI * 1.5).toFloat()
-                burst(width / 2f + cos(a) * (rb + dp(13f)), height / 2f + sin(a) * (rb + dp(13f)), 40, 0xFFFFD27A.toInt())
+                burst(cx + cos(a) * (rb + dp(13f)), cy + sin(a) * (rb + dp(13f)), 40, 0xFFFFD27A.toInt())
             }
             AppSettings.ANIM_RADAR -> {
                 val b = blips.minByOrNull { it.r } ?: Blip(-0.9f, rb + dp(18f), now)
@@ -121,7 +145,6 @@ class ConnectRing(ctx: Context) : View(ctx) {
         invalidate()
     }
 
-    private fun buttonR() = min(width, height) / 2f * (100f / 130f)
 
     private fun burst(x: Float, y: Float, n: Int, alt: Int) {
         repeat(n) {
@@ -141,6 +164,7 @@ class ConnectRing(ctx: Context) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         val t = (now - stateAt) / 1000f
+        locate()
         var animate = connecting
         when (style) {
             AppSettings.ANIM_GAUGE -> animate = drawGauge(c, t) || animate
@@ -153,7 +177,6 @@ class ConnectRing(ctx: Context) : View(ctx) {
 
     private fun drawWarp(c: Canvas, t: Float) {
         if (!connecting) return
-        val cx = width / 2f; val cy = height / 2f; val rb = buttonR()
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = dp(2f)
         paint.color = withAlpha(Ui.GREEN, 0.3f + 0.18f * sin(t * 7f))
@@ -164,7 +187,6 @@ class ConnectRing(ctx: Context) : View(ctx) {
 
     /** Шкала спидометра. true — ещё двигается. */
     private fun drawGauge(c: Canvas, t: Float): Boolean {
-        val cx = width / 2f; val cy = height / 2f; val rb = buttonR()
         val rg = rb + dp(13f)
         val a0 = 135f; val span = 270f
         val sinceConn = (now - connectedAt) / 1000f
@@ -231,7 +253,6 @@ class ConnectRing(ctx: Context) : View(ctx) {
 
     /** Радар. true — ещё двигается. */
     private fun drawRadar(c: Canvas, t: Float): Boolean {
-        val cx = width / 2f; val cy = height / 2f; val rb = buttonR()
         val rIn = rb + dp(5f); val rOut = rb + dp(28f)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = dp(1f)
@@ -292,8 +313,7 @@ class ConnectRing(ctx: Context) : View(ctx) {
 
     /** Ударные волны и искры. true — ещё есть что рисовать. */
     private fun drawEffects(c: Canvas): Boolean {
-        val cx = width / 2f; val cy = height / 2f
-        val maxR = hypot(width / 2f, height / 2f)
+        val maxR = hypot(width.toFloat(), height.toFloat())
         paint.style = Paint.Style.STROKE
         val wi = waves.iterator()
         while (wi.hasNext()) {

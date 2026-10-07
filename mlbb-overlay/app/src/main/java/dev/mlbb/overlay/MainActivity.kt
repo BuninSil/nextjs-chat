@@ -50,6 +50,11 @@ class MainActivity : AppCompatActivity() {
     /** Было ли подключено на прошлом обновлении — для вспышки и вибрации на переходе */
     private var wasRunning: Boolean? = null
     private var pulse: android.animation.ObjectAnimator? = null
+    /** Когда нажали «подключить»: анимация подключения идёт минимум [MIN_ANIM_MS], даже если VPN поднялся мгновенно */
+    private var connectTapAt = 0L
+    /** VPN выключили, а фоновый подбор ещё доделывается — это не «подключение» */
+    private var afterStop = false
+    private val MIN_ANIM_MS = 1800L
     private lateinit var stopButton: TextView
     private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var launchRow: LinearLayout
@@ -88,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             refresh()
             // Пока подключается — чаще, чтобы вспышка «подключено» была точно в момент
-            handler.postDelayed(this, if (BoxVpnService.isStarting || busy) 250 else 1000)
+            handler.postDelayed(this, if (BoxVpnService.isStarting || busy || connectTapAt > 0) 120 else 1000)
         }
     }
 
@@ -276,10 +281,9 @@ class MainActivity : AppCompatActivity() {
             elevation = d(8f).toFloat()
             setOnClickListener { play() }
         }
-        // Кнопка в кольце: при подключении по кольцу бежит светящаяся дуга, при успехе — вспышка
-        ring = ConnectRing(this).apply { style = AppSettings.anim }
+        // Анимация вокруг кнопки рисуется отдельным слоем под всем экраном (см. ниже)
+        ring = ConnectRing(this).apply { style = AppSettings.anim; anchor = playButton }
         val playBox = android.widget.FrameLayout(this)
-        playBox.addView(ring, android.widget.FrameLayout.LayoutParams(d(260f), d(260f), Gravity.CENTER))
         playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(200f), d(200f), Gravity.CENTER))
         val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, d(0f), 0, d(0f)) }
         playWrap.addView(playBox, LinearLayout.LayoutParams(d(260f), d(260f)))
@@ -403,7 +407,12 @@ class MainActivity : AppCompatActivity() {
             it.anchor = playButton
             frame.addView(it, android.widget.FrameLayout.LayoutParams(-1, -1))
         } else null
-        frame.addView(ScrollView(this).apply { addView(root) }, android.widget.FrameLayout.LayoutParams(-1, -1))
+        frame.addView(ring, android.widget.FrameLayout.LayoutParams(-1, -1))
+        frame.addView(ScrollView(this).apply {
+            addView(root)
+            // Кнопка уехала при прокрутке — анимация за ней
+            setOnScrollChangeListener { _, _, _, _, _ -> ring.invalidate(); stars?.invalidate() }
+        }, android.widget.FrameLayout.LayoutParams(-1, -1))
         flashView = android.view.View(this).apply {
             setBackgroundColor(0xFFE8FFF0.toInt())
             visibility = android.view.View.GONE
@@ -417,11 +426,17 @@ class MainActivity : AppCompatActivity() {
     private fun anyRunning() = BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning
 
     private fun refresh() {
-        val running = anyRunning()
+        val realRunning = anyRunning()
+        val sinceTap = android.os.SystemClock.uptimeMillis() - connectTapAt
+        // Минимальное время анимации подключения — иначе при быстром подключении её не видно
+        val holding = connectTapAt > 0 && sinceTap < MIN_ANIM_MS
+        if (connectTapAt > 0 && !holding && (realRunning || (!busy && !BoxVpnService.isStarting))) connectTapAt = 0L
+        if (afterStop && !busy && !BoxVpnService.isStarting) afterStop = false
+        val running = realRunning && !holding
         val err = BoxVpnService.lastError ?: CaptureVpnService.lastError ?: MonitorService.lastError
 
         statusLine.text = when {
-            BoxVpnService.isStarting -> "◌  Подключаюсь…"
+            holding || BoxVpnService.isStarting -> "◌  Подключаюсь…"
             busy && running -> "●  VPN подключён · $busyText"
             busy -> "◌  $busyText"
             running && AppSettings.mode == AppSettings.MODE_BOX -> "●  VPN подключён"
@@ -459,7 +474,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Подключение идёт: VPN поднимается или подбирается сервер, а интернета ещё нет
-        val connecting = BoxVpnService.isStarting || (busy && !running)
+        val connecting = holding || (!afterStop && (BoxVpnService.isStarting || (busy && !realRunning)))
         val label = when {
             connecting -> "~connecting"
             running -> "ОТКЛЮЧИТЬ"
@@ -731,6 +746,10 @@ class MainActivity : AppCompatActivity() {
     /** Подключение — общее с плиткой в шторке и виджетом (см. [Connector]). */
     private fun playBox() {
         val game = AppSettings.gameMode
+        connectTapAt = android.os.SystemClock.uptimeMillis()
+        afterStop = false
+        handler.removeCallbacks(refresher)
+        handler.post(refresher)
         Connector.connect(applicationContext) { msg ->
             runOnUiThread {
                 if (msg != null) toast(msg)
@@ -741,6 +760,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopAll() {
         AppLog.vpn("выключаю VPN (кнопка в приложении)")
+        connectTapAt = 0L
+        afterStop = true
         BoxVpnService.stop(this)
         CaptureVpnService.stop(this)
         MonitorService.stop(this)

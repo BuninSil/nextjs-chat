@@ -104,7 +104,8 @@ class AppearanceActivity : AppCompatActivity() {
                 box.addView(it, FrameLayout.LayoutParams(-1, -1))
             }
         }
-        box.addView(ring, FrameLayout.LayoutParams(d(234f), d(234f), Gravity.CENTER))
+        ring.anchor = demoButton
+        box.addView(ring, FrameLayout.LayoutParams(-1, -1))
         box.addView(demoButton, FrameLayout.LayoutParams(d(180f), d(180f), Gravity.CENTER))
         flash = View(this).apply {
             setBackgroundColor(0xFFE8FFF0.toInt())
