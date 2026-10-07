@@ -62,6 +62,10 @@
             android:name=".AppsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".AppearanceActivity"
+            android:exported="false" />
+
         <service
             android:name=".BoxVpnService"
             android:exported="true"

@@ -53,6 +53,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         @Volatile var isStarting = false
             private set
         @Volatile var lastError: String? = null
+        /** Скорость загрузки сейчас, байт/с (обновляется раз в 2 секунды) — для спидометра на главном. */
+        @Volatile var downBps = 0.0
         @Volatile var ports: BoxConfig.Ports? = null
             private set
 
@@ -168,6 +170,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
                 val dayBytes = (if (prefs.getString("trafDay", "") == today) prefs.getLong("trafBytes", 0) else 0L) + dDown + dUp
                 prefs.edit().putString("trafDay", today).putLong("trafBytes", dayBytes).apply()
+                downBps = dDown / sec
                 val text = "↓ ${fmtBytes(dDown / sec)}/с · ↑ ${fmtBytes(dUp / sec)}/с"
                 val sub = "за сессию ${fmtBytes(session.toDouble())} · сегодня ${fmtBytes(dayBytes.toDouble())}"
                 if (isRunning) nm.notify(NOTIF_ID, buildNotification(text, sub))
@@ -257,6 +260,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
 
     private fun stopBox() {
         isRunning = false
+        downBps = 0.0
         try { Widget.update(this) } catch (_: Exception) {}
         ports = null
         XrayCore.stop()

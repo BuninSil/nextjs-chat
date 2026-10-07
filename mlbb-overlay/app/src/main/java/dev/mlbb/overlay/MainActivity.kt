@@ -42,6 +42,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var battlePing: TextView
     private lateinit var playButton: TextView
     private lateinit var ring: ConnectRing
+    /** Звёзды на весь экран (анимация «Гиперпрыжок») и белая вспышка поверх всего */
+    private var stars: StarField? = null
+    private lateinit var flashView: android.view.View
     /** Что сейчас нарисовано на кнопке — чтобы не перерисовывать каждую секунду */
     private var playKey = ""
     /** Было ли подключено на прошлом обновлении — для вспышки и вибрации на переходе */
@@ -84,7 +87,8 @@ class MainActivity : AppCompatActivity() {
     private val refresher = object : Runnable {
         override fun run() {
             refresh()
-            handler.postDelayed(this, 1000)
+            // Пока подключается — чаще, чтобы вспышка «подключено» была точно в момент
+            handler.postDelayed(this, if (BoxVpnService.isStarting || busy) 250 else 1000)
         }
     }
 
@@ -169,12 +173,13 @@ class MainActivity : AppCompatActivity() {
     /** Для какого режима построен экран — если в Настройках поменяли, перестраиваем. */
     private var builtProfile = ""
     private var builtTheme = ""
+    private var builtAnim = ""
 
     override fun onResume() {
         super.onResume()
         AppSettings.load(this)
         AutoUpdate.uiVisible = true
-        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme) {
+        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme || AppSettings.anim != builtAnim) {
             recreate()
             return
         }
@@ -198,9 +203,10 @@ class MainActivity : AppCompatActivity() {
 
     // ------------------------------- UI -------------------------------
 
-    private fun buildUi(): ScrollView {
+    private fun buildUi(): android.view.View {
         builtProfile = AppSettings.profile
         builtTheme = AppSettings.theme
+        builtAnim = AppSettings.anim
         val d = { v: Float -> Ui.dp(this, v) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -271,7 +277,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { play() }
         }
         // Кнопка в кольце: при подключении по кольцу бежит светящаяся дуга, при успехе — вспышка
-        ring = ConnectRing(this)
+        ring = ConnectRing(this).apply { style = AppSettings.anim }
         val playBox = android.widget.FrameLayout(this)
         playBox.addView(ring, android.widget.FrameLayout.LayoutParams(d(260f), d(260f), Gravity.CENTER))
         playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(200f), d(200f), Gravity.CENTER))
@@ -391,7 +397,19 @@ class MainActivity : AppCompatActivity() {
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
 
-        return ScrollView(this).apply { addView(root) }
+        // Экран: звёзды (для «Гиперпрыжка») — фоном, поверх содержимого — вспышка
+        val frame = android.widget.FrameLayout(this)
+        stars = if (AppSettings.anim == AppSettings.ANIM_WARP) StarField(this).also {
+            it.anchor = playButton
+            frame.addView(it, android.widget.FrameLayout.LayoutParams(-1, -1))
+        } else null
+        frame.addView(ScrollView(this).apply { addView(root) }, android.widget.FrameLayout.LayoutParams(-1, -1))
+        flashView = android.view.View(this).apply {
+            setBackgroundColor(0xFFE8FFF0.toInt())
+            visibility = android.view.View.GONE
+        }
+        frame.addView(flashView, android.widget.FrameLayout.LayoutParams(-1, -1))
+        return frame
     }
 
     private fun nodeByTag(tag: String) = Subscription.usable(this).firstOrNull { it.tag == tag }
@@ -463,7 +481,6 @@ class MainActivity : AppCompatActivity() {
             else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
             playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                 .apply { shape = GradientDrawable.OVAL }
-            ring.spin(connecting)
             if (connecting) {
                 if (pulse == null) pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
                     playButton,
@@ -482,11 +499,16 @@ class MainActivity : AppCompatActivity() {
                 playButton.scaleY = 1f
             }
         }
+        ring.setConnecting(connecting)
+        ring.setRunning(running)
+        ring.setSpeed(BoxVpnService.downBps)
+        stars?.setState(connecting, running)
         // Переходы: подключилось — вспышка и вибрация, отключилось — лёгкий щелчок
         val prev = wasRunning
         if (prev != null && prev != running) {
             if (running) {
-                ring.flash()
+                ring.connected()
+                if (stars != null) StarField.flash(flashView)
                 playButton.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction {
                     playButton.animate().scaleX(1f).scaleY(1f).setDuration(220).start()
                 }.start()

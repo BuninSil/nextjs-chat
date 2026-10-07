@@ -43,6 +43,7 @@ object Report {
         line("Автоподключение", "мобильный ${AppSettings.autoOnMobile}, выкл. на Wi-Fi ${AppSettings.autoOffWifi}")
         line("Ускорение Wi-Fi", AppSettings.wifiBoost)
         line("Тема", AppSettings.theme)
+        line("Анимация", AppSettings.anim)
 
         sb.append("\n--- VPN ---\n")
         line("Подключён", BoxVpnService.isRunning)

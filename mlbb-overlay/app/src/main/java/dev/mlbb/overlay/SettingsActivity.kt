@@ -49,6 +49,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private var appsRow: LinearLayout? = null
     private var appsSub: TextView? = null
+    private var lookSub: TextView? = null
+    private var builtTheme = ""
+
+    private fun appearanceSummary() =
+        "${Ui.theme.title} · ${AppearanceActivity.animTitle(AppSettings.anim)}"
 
     private fun appsSummary() = when (AppSettings.appsMode) {
         AppSettings.APPS_ONLY -> "Только выбранные (${AppSettings.appsList.size})"
@@ -57,12 +62,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /** Строка-ссылка на отдельный экран: заголовок, текущее значение и стрелка. */
-    private fun linkRow(title: String, sub: String, onClick: () -> Unit): LinearLayout {
+    private fun linkRow(title: String, sub: String, onSub: (TextView) -> Unit = {}, onClick: () -> Unit): LinearLayout {
         val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(Ui.text(this, title, 15f))
         val s = Ui.text(this, sub, 12f, Ui.GREEN).apply { setPadding(0, d(2f), d(12f), 0) }
-        appsSub = s
+        onSub(s)
         col.addView(s)
         row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(Ui.text(this, "›", 22f, Ui.MUTED))
@@ -78,6 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         supportActionBar?.hide()
         Ui.applyWindow(this)
         AppSettings.load(this)
+        builtTheme = AppSettings.theme
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -98,20 +104,13 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(profileCard(AppSettings.PROFILE_SIMPLE, R.drawable.ic_bolt, "Fast VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
 
-        // ---------- Тема ----------
-        root.addView(section("Тема"))
-        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        Ui.THEMES.chunked(2).forEach { pair ->
-            val row = LinearLayout(this)
-            pair.forEachIndexed { i, t ->
-                row.addView(themeCard(t), LinearLayout.LayoutParams(0, -2, 1f).apply {
-                    if (i == 0) marginEnd = d(5f) else marginStart = d(5f)
-                })
-            }
-            if (pair.size == 1) row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = d(5f) })
-            grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = d(10f) })
-        }
-        root.addView(grid)
+        // ---------- Оформление ----------
+        root.addView(section("Оформление"))
+        root.addView(Ui.card(this).apply {
+            addView(linkRow("Тема и анимация", appearanceSummary(), { lookSub = it }) {
+                startActivity(android.content.Intent(this@SettingsActivity, AppearanceActivity::class.java))
+            })
+        })
 
         // ---------- Режим (только для игры) ----------
         if (!simple) {
@@ -144,7 +143,7 @@ class SettingsActivity : AppCompatActivity() {
                 AppSettings.adBlock = it; vpnChanged = true
             })
             addView(divider())
-            appsRow = linkRow("Приложения через VPN", appsSummary()) {
+            appsRow = linkRow("Приложения через VPN", appsSummary(), { appsSub = it }) {
                 vpnChanged = true
                 startActivity(android.content.Intent(this@SettingsActivity, AppsActivity::class.java))
             }
@@ -341,6 +340,9 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         appsSub?.text = appsSummary()
+        lookSub?.text = appearanceSummary()
+        // Тему поменяли на экране «Оформление» — перекрашиваемся
+        if (builtTheme.isNotEmpty() && builtTheme != AppSettings.theme) { recreate(); return }
         handler.post(updRefresher)
     }
 
@@ -426,42 +428,6 @@ class SettingsActivity : AppCompatActivity() {
         background = Ui.rounded(Ui.CARD2, d(14f).toFloat())
         setPadding(d(14f), d(12f), d(14f), d(12f))
         setOnClickListener { AppLog.ui("нажал «$label»"); onClick() }
-    }
-
-    /** Карточка темы: превью цветов и название; выбор сразу перекрашивает приложение. */
-    private fun themeCard(t: Theme): LinearLayout {
-        val selected = AppSettings.theme == t.id
-        val c = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(d(12f), d(12f), d(12f), d(12f))
-            background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
-                if (selected) setStroke(d(2f), Ui.GREEN)
-            }
-        }
-        // Мини-превью: фон темы, карточка и кнопка акцентного цвета
-        val preview = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(d(8f), d(8f), d(8f), d(8f))
-            background = Ui.rounded(t.bg.toInt(), d(10f).toFloat()).apply { setStroke(d(1f), Ui.DIVIDER) }
-        }
-        preview.addView(View(this).apply { background = Ui.rounded(t.card.toInt(), d(5f).toFloat()) },
-            LinearLayout.LayoutParams(0, d(16f), 1f).apply { marginEnd = d(6f) })
-        preview.addView(View(this).apply {
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                intArrayOf(t.accentTop.toInt(), t.accentBottom.toInt())
-            ).apply { shape = android.graphics.drawable.GradientDrawable.OVAL }
-        }, LinearLayout.LayoutParams(d(18f), d(18f)))
-        c.addView(preview, LinearLayout.LayoutParams(-1, -2))
-        c.addView(Ui.text(this, t.title, 14f, bold = selected).apply { setPadding(0, d(8f), 0, 0) })
-        c.setOnClickListener {
-            if (AppSettings.theme == t.id) return@setOnClickListener
-            AppSettings.theme = t.id
-            AppLog.set("Тема", t.title)
-            AppSettings.save(this)
-            recreate()
-        }
-        return c
     }
 
     /** Карточка «для чего приложение»; выбор сразу перестраивает приложение. */
