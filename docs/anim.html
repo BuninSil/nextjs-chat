@@ -45,7 +45,7 @@ canvas{width:100%;max-width:300px;aspect-ratio:1;cursor:pointer;border-radius:50
 <body>
 
 <div class="wrap">
-  <h1>Анимация подключения: <b>шесть вариантов</b></h1>
+  <h1>Анимация подключения: <b>комбо и шесть вариантов</b></h1>
   <p class="lead">Тапни по кнопке в любом телефоне: пойдёт подключение (2,5 секунды, как в среднем в жизни), потом момент «подключено». Тап ещё раз — отключение. Встряска телефона — это где сработает вибрация.</p>
   <div class="bar">
     <button class="all" id="runAll">Запустить все</button>
@@ -53,6 +53,14 @@ canvas{width:100%;max-width:300px;aspect-ratio:1;cursor:pointer;border-radius:50
   </div>
 
   <div class="grid">
+    <section class="phone full" data-v="combo">
+      <canvas class="bg" aria-hidden="true"></canvas>
+      <span class="tag">Комбо: 1 + 4 + 5</span>
+      <h2 class="name">Прыжок</h2>
+      <p class="desc">Звёзды на весь экран срываются в лучи, вокруг кнопки шкала спидометра с растущими цифрами, по ней бежит луч радара и находит серверы. Подключилось — вспышка, стрелка в красную зону, лучший сервер в прицеле.</p>
+      <canvas tabindex="0" aria-label="Кнопка, вариант Комбо"></canvas>
+      <div class="status">Отключено</div><div class="buzz">вибрация</div>
+    </section>
     <section class="phone full" data-v="warp">
       <canvas class="bg" aria-hidden="true"></canvas>
       <span class="tag">Вариант 1</span>
@@ -186,12 +194,13 @@ class Stage{
       this.waves.push({r:88,v:5,a:.9,w:4});
       for(let i=0;i<70;i++){const a=rnd(0,TAU),s=rnd(2,7);this.parts.push({x:160+Math.cos(a)*88,y:160+Math.sin(a)*88,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.012,.03),col:Math.random()<.3?'#fff':(Math.random()<.5?GREEN:'#b6ffcf')})}
     }
-    if(v==='gauge'){
+    if(v==='combo'){this.skyFlash=.85}
+    if(v==='gauge'||v==='combo'){
       this.flash=.5;this.waves.push({r:110,v:5,a:.9,w:4});
       for(let i=0;i<50;i++){const a=rnd(0,TAU),s=rnd(2,6);const ax=Math.PI*0.75+Math.PI*1.5;
         this.parts.push({x:160+Math.cos(ax)*110,y:160+Math.sin(ax)*110,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,dec:rnd(.015,.035),col:Math.random()<.4?'#fff':'#ffd27a'})}
     }
-    if(v==='radar'){
+    if(v==='radar'||v==='combo'){
       this.flash=.45;const b=this.blips&&this.blips.length?this.blips.reduce((m,x)=>x.r<m.r?x:m):{a:-0.6,r:130};
       this.lock={a:b.a,r:b.r};this.waves.push({r:88,v:4,a:.9,w:3},{r:60,v:3,a:.6,w:2});
     }
@@ -236,16 +245,17 @@ class Stage{
   drawRadar(c,t,conn,on,now){
     const cx=160,cy=160,R=88,RO=152;
     c.save();c.strokeStyle='rgba(52,199,89,.13)';c.lineWidth=1;
-    for(const r of [108,130,RO]){c.beginPath();c.arc(cx,cy,r,0,TAU);c.stroke()}
+    const combo=this.v==='combo';
+    if(!combo)for(const r of [108,130,RO]){c.beginPath();c.arc(cx,cy,r,0,TAU);c.stroke()}
     c.restore();
     if(conn){
       if(!this.blips||this.state!==this.bs){this.blips=[];this.bs=this.state}
       const sw=(t*3.2)%TAU;this.sw=sw;
-      for(let i=0;i<26;i++){const a=sw-i*0.045;c.save();c.globalAlpha=.22*(1-i/26);c.strokeStyle=GREEN;c.lineWidth=RO-R-6;
+      for(let i=0;i<26;i++){const a=sw-i*0.045;c.save();c.globalAlpha=(combo?.15:.22)*(1-i/26);c.strokeStyle=GREEN;c.lineWidth=RO-R-6;
         c.beginPath();c.arc(cx,cy,(RO+R+6)/2,a-0.05,a);c.stroke();c.restore()}
       c.save();c.strokeStyle='#b6ffcf';c.lineWidth=2;c.shadowColor=GREEN;c.shadowBlur=12;
       c.beginPath();c.moveTo(cx+Math.cos(sw)*(R+4),cy+Math.sin(sw)*(R+4));c.lineTo(cx+Math.cos(sw)*RO,cy+Math.sin(sw)*RO);c.stroke();c.restore();
-      if(Math.random()<.09)this.blips.push({a:sw,r:rnd(R+14,RO-6),born:now});
+      if(Math.random()<.09)this.blips.push({a:sw,r:combo?rnd(136,150):rnd(R+14,RO-6),born:now});
     }
     if(this.blips)this.blips=this.blips.filter(b=>{const age=(now-b.born)/1000,al=Math.max(0,1-age/1.6);if(al<=0&&!on)return false;
       if(on)return false;
@@ -297,7 +307,8 @@ class Stage{
 
     // ---------- фон-эффекты под кнопкой ----------
     if(this.v==='warp')this.drawWarp(c,t,conn,on);
-    if(this.v==='gauge')this.drawGauge(c,t,conn,on,now);
+    if(this.v==='combo')this.drawRadar(c,t,conn,on,now);
+    if(this.v==='gauge'||this.v==='combo')this.drawGauge(c,t,conn,on,now);
     if(this.v==='radar')this.drawRadar(c,t,conn,on,now);
     if(this.v==='race')this.drawRace(c,t,conn,on,now);
     if(this.v==='charge')this.drawCharge(c,t,conn,on,now);
