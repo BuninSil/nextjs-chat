@@ -47,6 +47,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         private const val ACTION_STOP = "dev.mlbb.overlay.BOX_STOP"
         /** Включение из уведомления автоподключения */
         const val ACTION_AUTO = "dev.mlbb.overlay.BOX_AUTO"
+        /** «Сменить сервер» из уведомления */
+        private const val ACTION_NEXT = "dev.mlbb.overlay.BOX_NEXT"
 
         @Volatile var isRunning = false
             private set
@@ -86,6 +88,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
             }.start()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_NEXT) {
+            if (isRunning) switchServer()
+            else if (!isStarting) stopSelf() // уведомление осталось от прошлого запуска
+            return START_STICKY
+        }
         if (intent?.action == ACTION_AUTO) AutoConnect.onNotificationStart(applicationContext)
         startForegroundCompat()
         if (intent == null) AppLog.vpn("сервис перезапущен системой (постоянный VPN или после выгрузки)")
@@ -105,19 +112,56 @@ class BoxVpnService : VpnService(), PlatformInterface {
         else startForeground(NOTIF_ID, n)
     }
 
+    @Volatile private var switching = false
+    /** Последние строки уведомления — чтобы перерисовать его с новым сервером, не дожидаясь тикера */
+    @Volatile private var lastText = "Подключено"
+    @Volatile private var lastSub: String? = null
+
+    /** Кнопка «Сменить сервер» в уведомлении: следующий рабочий сервер. */
+    private fun switchServer() {
+        if (switching) return
+        switching = true
+        AppLog.vpn("нажали «Сменить сервер» в уведомлении")
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(NOTIF_ID, buildNotification("Переключаю сервер…", lastSub))
+        Thread {
+            val n = try { ServerTester.switchNext(applicationContext) } catch (e: Exception) { AppLog.err("смена сервера", e); null }
+            if (n != null) {
+                // Выбрал руками — автовыбор не будет возвращать прежний
+                AppSettings.autoSelect = false
+                AppSettings.save(applicationContext)
+            }
+            if (isRunning) nm.notify(NOTIF_ID, buildNotification(
+                if (n != null) "Сервер сменён" else "Других рабочих серверов нет", lastSub))
+            try { Widget.update(applicationContext) } catch (_: Exception) {}
+            switching = false
+        }.start()
+    }
+
+    /** Название выбранного сервера для заголовка уведомления. */
+    private fun serverTitle(): String {
+        val n = try { Subscription.usable(this).firstOrNull { it.tag == AppSettings.selectedTag } } catch (_: Exception) { null }
+        return if (n != null) "Fast VPN · ${Ui.cleanName(n)}" else "Fast VPN"
+    }
+
     private fun buildNotification(text: String, sub: String?): Notification {
+        if (text != "Переключаю сервер…") { lastText = text; lastSub = sub }
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "VPN", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(
             this, 3, Intent(this, BoxVpnService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE
         )
+        val next = PendingIntent.getService(
+            this, 4, Intent(this, BoxVpnService::class.java).setAction(ACTION_NEXT), PendingIntent.FLAG_IMMUTABLE
+        )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_mono)
-            .setContentTitle("Fast VPN")
+            .setContentTitle(if (isRunning) serverTitle() else "Fast VPN")
             .setContentText(text)
             .apply { if (sub != null) setSubText(sub) }
             .setContentIntent(open)
+            .apply { if (isRunning) addAction(Notification.Action.Builder(null, "Сменить сервер", next).build()) }
             .addAction(Notification.Action.Builder(null, "Стоп", stop).build())
             .setOngoing(true)
             .setOnlyAlertOnce(true)

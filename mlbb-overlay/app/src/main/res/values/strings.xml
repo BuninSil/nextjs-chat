@@ -2,4 +2,8 @@
     <string name="app_name">Fast VPN</string>
     <string name="widget_desc">Статус VPN, сервер и кнопка подключения</string>
     <string name="tile_label">Fast VPN</string>
+    <string name="sc_toggle">Вкл/выкл VPN</string>
+    <string name="sc_toggle_long">Включить или выключить VPN</string>
+    <string name="sc_servers">Серверы</string>
+    <string name="sc_speed">Тест скорости</string>
 </resources>

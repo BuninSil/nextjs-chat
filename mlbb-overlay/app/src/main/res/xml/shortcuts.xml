@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ярлыки: долгое нажатие на значок Fast VPN на рабочем столе -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="toggle"
+        android:enabled="true"
+        android:icon="@drawable/sc_toggle"
+        android:shortcutShortLabel="@string/sc_toggle"
+        android:shortcutLongLabel="@string/sc_toggle_long">
+        <intent
+            android:action="dev.mlbb.overlay.SHORTCUT_TOGGLE"
+            android:targetPackage="dev.mlbb.overlay"
+            android:targetClass="dev.mlbb.overlay.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="servers"
+        android:enabled="true"
+        android:icon="@drawable/sc_servers"
+        android:shortcutShortLabel="@string/sc_servers"
+        android:shortcutLongLabel="@string/sc_servers">
+        <intent
+            android:action="dev.mlbb.overlay.SHORTCUT_SERVERS"
+            android:targetPackage="dev.mlbb.overlay"
+            android:targetClass="dev.mlbb.overlay.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="speed"
+        android:enabled="true"
+        android:icon="@drawable/sc_speed"
+        android:shortcutShortLabel="@string/sc_speed"
+        android:shortcutLongLabel="@string/sc_speed">
+        <intent
+            android:action="dev.mlbb.overlay.SHORTCUT_SPEED"
+            android:targetPackage="dev.mlbb.overlay"
+            android:targetClass="dev.mlbb.overlay.MainActivity" />
+    </shortcut>
+</shortcuts>

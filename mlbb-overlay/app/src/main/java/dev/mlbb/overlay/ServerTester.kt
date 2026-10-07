@@ -314,29 +314,43 @@ object ServerTester {
      */
     private fun traceExit(mixedPort: Int): String? {
         for (url in TRACE_URLS) {
-            val fields = try {
-                val c = java.net.URL(url).openConnection(
-                    java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
-                ) as java.net.HttpURLConnection
-                c.connectTimeout = 3000
-                c.readTimeout = 3000
-                c.instanceFollowRedirects = true
-                // Новое соединение на каждую проверку: иначе Android переиспользует открытое
-                // через предыдущий сервер, и у всех серверов «выход» оказывается одинаковым
-                c.setRequestProperty("Connection", "close")
-                c.inputStream.bufferedReader().use { r ->
-                    r.readLines().mapNotNull { line ->
-                        val i = line.indexOf('=')
-                        if (i > 0) line.substring(0, i) to line.substring(i + 1).trim() else null
-                    }.toMap()
-                }
-            } catch (_: Exception) {
-                null
-            } ?: continue
+            val fields = trace(url, mixedPort) ?: continue
             fields["loc"]?.uppercase()?.takeIf { it.length == 2 && it != "XX" }?.let { return it }
             fields["ip"]?.let { ip -> GeoDb.lookup(ip)?.countryCode?.uppercase()?.let { return it } }
         }
         return null
+    }
+
+    /** Внешний IP и страна (ip, код страны): через VPN (mixedPort) или напрямую (null). */
+    fun whoAmI(mixedPort: Int?): Pair<String, String?>? {
+        for (url in TRACE_URLS) {
+            val f = trace(url, mixedPort) ?: continue
+            val ip = f["ip"] ?: continue
+            val cc = f["loc"]?.uppercase()?.takeIf { it.length == 2 && it != "XX" } ?: GeoDb.lookup(ip)?.countryCode?.uppercase()
+            return ip to cc
+        }
+        return null
+    }
+
+    /** Ответ Cloudflare /cdn-cgi/trace полями (ip, loc…). mixedPort — через VPN, null — напрямую. */
+    private fun trace(url: String, mixedPort: Int?): Map<String, String>? = try {
+        val proxy = if (mixedPort != null) java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", mixedPort))
+        else java.net.Proxy.NO_PROXY
+        val c = java.net.URL(url).openConnection(proxy) as java.net.HttpURLConnection
+        c.connectTimeout = 3000
+        c.readTimeout = 3000
+        c.instanceFollowRedirects = true
+        // Новое соединение на каждую проверку: иначе Android переиспользует открытое
+        // через предыдущий сервер, и у всех серверов «выход» оказывается одинаковым
+        c.setRequestProperty("Connection", "close")
+        c.inputStream.bufferedReader().use { r ->
+            r.readLines().mapNotNull { line ->
+                val i = line.indexOf('=')
+                if (i > 0) line.substring(0, i) to line.substring(i + 1).trim() else null
+            }.toMap()
+        }
+    } catch (_: Exception) {
+        null
     }
 
     // ------------------- нужен ли полный подбор при подключении -------------------
@@ -393,6 +407,33 @@ object ServerTester {
         exitCountry[tag] = loc
         saveExits(ctx)
         return loc == "RU"
+    }
+
+    /**
+     * «Сменить сервер» (кнопка в уведомлении): следующий по рейтингу рабочий сервер после текущего.
+     * Избранные — первыми; в игровом режиме — только с выходом в России (если страна уже известна).
+     * Возвращает новый сервер или null, если переключиться не на что.
+     */
+    fun switchNext(ctx: Context): Subscription.Node? {
+        loadExits(ctx)
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
+        if (nodes.size < 2) return null
+        val rank = results.ranked().withIndex().associate { it.value to it.index }
+        val ordered = nodes
+            .filterNot { results.containsKey(it.tag) && results[it.tag] == null } // не ответили при замере
+            .filter { !AppSettings.gameMode || (exitCountry[it.tag] ?: "RU") == "RU" }
+            .sortedWith(compareBy({ !Subscription.isFavorite(it) }, { rank[it.tag] ?: Int.MAX_VALUE }))
+        if (ordered.isEmpty()) return null
+        val cur = ordered.indexOfFirst { it.tag == AppSettings.selectedTag }
+        // По кругу от текущего; до 5 попыток — пропускаем те, что сейчас не отвечают
+        for (step in 1..minOf(5, ordered.size)) {
+            val n = ordered[(cur + step).mod(ordered.size)]
+            if (n.tag == AppSettings.selectedTag) continue
+            if (!use(ctx, n.tag)) continue
+            if (BoxVpnService.ports == null || alive(n.tag)) return n
+            AppLog.srv("«${AppLog.name(ctx, n.tag)}» не отвечает — следующий")
+        }
+        return null
     }
 
     /** Переключает ядро на сервер и запоминает выбор. */

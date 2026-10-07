@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverName: TextView
     private lateinit var serverSub: TextView
     private lateinit var serverPing: TextView
+    /** «Твой IP: … · страна» в карточке сервера */
+    private lateinit var ipLine: TextView
     private lateinit var battleCard: LinearLayout
     private lateinit var battleName: TextView
     private lateinit var battleSub: TextView
@@ -117,6 +119,7 @@ class MainActivity : AppCompatActivity() {
             AutoUpdate.schedule(applicationContext)
             AutoConnect.arm(applicationContext)
             if (AppSettings.profile.isEmpty()) askProfile()
+            else handleShortcut(intent)
         }
     }
 
@@ -264,6 +267,15 @@ class MainActivity : AppCompatActivity() {
         serverPing = Ui.text(this, "", 16f, Ui.GREEN, bold = true)
         srv.addView(serverPing)
         status.addView(srv)
+        ipLine = Ui.text(this, "", 12f, Ui.SUB).apply {
+            setPadding(0, d(10f), 0, 0)
+            setOnClickListener {
+                AppLog.ui("нажал на строку IP — проверяю заново")
+                text = "Узнаю IP…"
+                MyIp.refresh(force = true) { runOnUiThread { text = MyIp.line() } }
+            }
+        }
+        status.addView(ipLine)
         // Подписка скоро кончится (срок или трафик)
         subWarn = Ui.text(this, "", 12f, Ui.YELLOW).apply { setPadding(0, d(10f), 0, 0); visibility = android.view.View.GONE }
         status.addView(subWarn)
@@ -533,6 +545,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         wasRunning = running
+        // Мой IP: пока подключается или подбирается сервер — не меряем (выход ещё скачет)
+        if (connecting) ipLine.text = "Твой IP: подключаюсь…"
+        else if (!busy) {
+            if (MyIp.stale()) MyIp.refresh { runOnUiThread { ipLine.text = MyIp.line() } }
+            ipLine.text = MyIp.line()
+        }
         stopButton.visibility = if (running && AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
         launchRow.visibility = if (AppSettings.gameMode) android.view.View.VISIBLE else android.view.View.GONE
 
@@ -962,6 +980,27 @@ class MainActivity : AppCompatActivity() {
     // ----------------------------- Тест скорости -----------------------------
 
     @Volatile private var speedRunning = false
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleShortcut(intent)
+    }
+
+    /** Ярлыки с иконки приложения (долгое нажатие на значок). */
+    private fun handleShortcut(i: android.content.Intent?) {
+        val action = i?.action ?: return
+        if (!action.startsWith("dev.mlbb.overlay.SHORTCUT_")) return
+        AppLog.ui("ярлык с иконки: ${action.removePrefix("dev.mlbb.overlay.SHORTCUT_")}")
+        i.action = null // повторно при пересоздании экрана не срабатываем
+        // Даём экрану открыться, потом действие
+        handler.postDelayed({
+            when (action) {
+                "dev.mlbb.overlay.SHORTCUT_TOGGLE" -> play()
+                "dev.mlbb.overlay.SHORTCUT_SERVERS" -> startActivity(android.content.Intent(this, ServersActivity::class.java))
+                "dev.mlbb.overlay.SHORTCUT_SPEED" -> speedTest()
+            }
+        }, 300)
+    }
 
     private fun speedTest() {
         if (speedRunning) return

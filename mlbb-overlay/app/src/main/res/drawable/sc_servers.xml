@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Значок ярлыка на иконке приложения (долгое нажатие): зелёный круг и белый символ -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:pathData="M24,0a24,24 0 1,0 0.01,0z"
+        android:fillColor="#FF2FB565" />
+    <group android:translateX="12" android:translateY="12">
+        <path android:pathData="M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M2,12h20" android:strokeColor="#FF2FB565" android:strokeWidth="1.8" android:strokeLineCap="round" />
+        <path android:pathData="M12,2a15.3,15.3 0 0,1 4,10 15.3,15.3 0 0,1 -4,10 15.3,15.3 0 0,1 -4,-10 15.3,15.3 0 0,1 4,-10z" android:strokeColor="#FF2FB565" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>
