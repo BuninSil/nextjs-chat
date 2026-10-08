@@ -1,0 +1,99 @@
+name: Fast VPN PC
+
+# Windows-версия: Wails (Go + веб-интерфейс), ядра sing-box и Xray вшиты в exe.
+# Рабочая ветка — только проверочная сборка (артефакт + ветка pc-builds),
+# релиз pc-v1.0.N (источник автообновления ПК-версии) — только из main.
+on:
+  push:
+    paths:
+      - "fastvpn-pc/**"
+      - ".github/workflows/fastvpn-pc.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SING_BOX: "1.11.4"
+  XRAY: "v26.9.30"
+  WAILS: "v2.10.2"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: fastvpn-pc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: fastvpn-pc/go.sum
+
+      - name: Tests
+        run: go test ./...
+
+      - name: Wails CLI and NSIS
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS }}
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: VPN cores (sing-box, Xray)
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Invoke-WebRequest "https://github.com/SagerNet/sing-box/releases/download/v$env:SING_BOX/sing-box-$env:SING_BOX-windows-amd64.zip" -OutFile sb.zip
+          Expand-Archive sb.zip -DestinationPath sb
+          Copy-Item "sb/sing-box-$env:SING_BOX-windows-amd64/sing-box.exe" bin/fastvpn-core.exe
+          Invoke-WebRequest "https://github.com/XTLS/Xray-core/releases/download/$env:XRAY/Xray-windows-64.zip" -OutFile xr.zip
+          Expand-Archive xr.zip -DestinationPath xr
+          Copy-Item xr/xray.exe bin/fastvpn-xray.exe
+          Get-ChildItem bin
+
+      - name: Build
+        run: |
+          $ver = "1.0.${{ github.run_number }}"
+          $j = Get-Content wails.json -Raw | ConvertFrom-Json
+          $j.info.productVersion = $ver
+          $j | ConvertTo-Json -Depth 5 | Set-Content wails.json -Encoding utf8
+          wails build -s -clean -nsis -trimpath -webview2 embed -ldflags "-X main.appVersion=$ver"
+          Get-ChildItem build/bin
+          Copy-Item build/bin/FastVPN.exe ../FastVPN.exe
+          Copy-Item (Get-ChildItem build/bin/*installer*.exe | Select-Object -First 1).FullName ../FastVPN-setup.exe
+          "$ver" | Out-File ../VERSION -NoNewline
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fast-vpn-pc
+          path: |
+            FastVPN.exe
+            FastVPN-setup.exe
+
+      # Только из main: обновление пользователям ПК-версии. Не «последний релиз» — им остаётся Android.
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = Get-Content VERSION
+          $notes = git log -1 --pretty=%B $env:GITHUB_SHA
+          gh release create "pc-v$ver" FastVPN-setup.exe FastVPN.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Fast VPN для Windows $ver" --notes "$notes" --latest=false
+
+      - name: Publish to pc-builds branch
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force pub | Out-Null
+          Copy-Item FastVPN-setup.exe pub/
+          "$env:GITHUB_SHA" | Out-File pub/SOURCE_COMMIT -NoNewline -Encoding ascii
+          cd pub
+          git init -q
+          git checkout -q -b pc-builds
+          git add .
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "PC build from $env:GITHUB_SHA"
+          git push -f "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git" pc-builds

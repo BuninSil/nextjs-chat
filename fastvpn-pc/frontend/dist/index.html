@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fast VPN</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+<canvas id="fx"></canvas>
+<div id="flash"></div>
+
+<!-- Главный экран -->
+<section class="screen" id="s-main">
+  <header class="top">
+    <div>
+      <div class="title">Fast VPN</div>
+      <div class="slogan"><svg class="ic" viewBox="0 0 24 24"><path d="M13,2L3,14h9l-1,8 10,-12h-9l1,-8z" fill="currentColor"/></svg>Быстрее нас — только свет</div>
+    </div>
+    <button class="icon-btn" data-go="settings" title="Настройки"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-gear"/></svg></button>
+  </header>
+
+  <div class="card status">
+    <div class="st" id="statusLine">○  Отключено</div>
+    <div class="srv">
+      <div class="flag" id="srvFlag"></div>
+      <div class="srv-col">
+        <div class="srv-name" id="srvName">—</div>
+        <div class="muted" id="srvSub"></div>
+      </div>
+      <div class="ping" id="srvPing"></div>
+    </div>
+    <div class="ipline" id="ipLine" title="Нажми, чтобы проверить заново"></div>
+    <div class="warn" id="subWarn" hidden></div>
+  </div>
+
+  <div class="play-wrap">
+    <button class="play" id="play"><span id="playLabel">ПОДКЛЮЧИТЬ</span></button>
+  </div>
+  <div class="hint" id="playHint"></div>
+
+  <div class="card speedline" id="speedLine" hidden></div>
+
+  <div class="grid">
+    <button class="tile" data-go="servers"><b><svg class="ic" viewBox="0 0 24 24"><use href="#i-globe"/></svg>Серверы</b><span>список, пинг, выбрать вручную</span></button>
+    <button class="tile" data-go="sub"><b><svg class="ic" viewBox="0 0 24 24"><use href="#i-link"/></svg>Подписка</b><span>ссылка твоего VPN</span></button>
+    <button class="tile" data-go="speed"><b><svg class="ic" viewBox="0 0 24 24"><use href="#i-pulse"/></svg>Тест скорости</b><span>пинг, загрузка и отдача</span></button>
+    <button class="tile" data-go="settings"><b><svg class="ic" viewBox="0 0 24 24"><use href="#i-gear-solid"/></svg>Настройки</b><span>тема, автозапуск, обновления</span></button>
+  </div>
+</section>
+
+<!-- Серверы -->
+<section class="screen" id="s-servers" hidden>
+  <header class="top">
+    <button class="back" data-go="main"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-back"/></svg></button>
+    <div class="title">Серверы</div>
+  </header>
+  <div class="card row-sw">
+    <div><b>Автовыбор</b><div class="muted">Самый быстрый рабочий сервер при подключении</div></div>
+    <label class="sw"><input type="checkbox" id="autoSel"><i></i></label>
+  </div>
+  <div class="btnbar">
+    <button class="btn2" id="btnPing"><svg class="ic" viewBox="0 0 24 24"><use href="#i-pulse"/></svg>Пинг</button>
+    <button class="btn2" id="btnExits"><svg class="ic" viewBox="0 0 24 24"><use href="#i-globe"/></svg>Выходы</button>
+    <button class="btn2" id="btnHidden">Скрытые</button>
+  </div>
+  <div class="muted small" id="srvBusy"></div>
+  <div class="list" id="srvList"></div>
+  <div class="muted small center">Правый клик по серверу — в избранное или скрыть</div>
+</section>
+
+<!-- Подписка -->
+<section class="screen" id="s-sub" hidden>
+  <header class="top">
+    <button class="back" data-go="main"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-back"/></svg></button>
+    <div class="title">Подписка</div>
+  </header>
+  <div class="card">
+    <div class="muted">Ссылка подписки от твоего VPN-сервиса (https://…) — или сами серверы: строки vless://, trojan://, ss://… или base64-блок.</div>
+    <textarea id="subInput" rows="4" spellcheck="false" placeholder="https://…"></textarea>
+    <div class="btnbar">
+      <button class="btn1" id="subSave">Сохранить</button>
+      <button class="btn2" id="subPaste"><svg class="ic" viewBox="0 0 24 24"><use href="#i-paste"/></svg>Вставить</button>
+    </div>
+  </div>
+  <div class="card" id="subInfo"></div>
+  <button class="btn2 wide" id="subRefresh"><svg class="ic" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>Обновить подписку</button>
+</section>
+
+<!-- Тест скорости -->
+<section class="screen" id="s-speed" hidden>
+  <header class="top">
+    <button class="back" data-go="main"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-back"/></svg></button>
+    <div class="title">Тест скорости</div>
+  </header>
+  <div class="card speedcard">
+    <div class="met"><span>Пинг</span><b id="spPing">—</b></div>
+    <div class="met"><span>Разброс</span><b id="spJit">—</b></div>
+    <div class="met"><span>Загрузка</span><b id="spDown">—</b></div>
+    <div class="met"><span>Отдача</span><b id="spUp">—</b></div>
+    <div class="muted small" id="spNote"></div>
+  </div>
+  <button class="btn1 wide" id="spStart">Начать</button>
+</section>
+
+<!-- Настройки -->
+<section class="screen" id="s-settings" hidden>
+  <header class="top">
+    <button class="back" data-go="main"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-back"/></svg></button>
+    <div class="title">Настройки</div>
+  </header>
+
+  <div class="sec">Тема</div>
+  <div class="themes" id="themes"></div>
+
+  <div class="sec">Анимация подключения</div>
+  <div class="anims" id="anims"></div>
+
+  <div class="sec">VPN</div>
+  <div class="card">
+    <div class="row-sw"><div><b>Российские сайты напрямую</b><div class="muted">Банки, Госуслуги, маркетплейсы, Яндекс и VK — мимо VPN: работают как без него</div></div><label class="sw"><input type="checkbox" data-opt="ruDirect"><i></i></label></div>
+    <div class="div"></div>
+    <div class="row-sw"><div><b>Блокировать рекламу и трекеры</b><div class="muted">Рекламные и следящие домены не загружаются</div></div><label class="sw"><input type="checkbox" data-opt="adBlock"><i></i></label></div>
+  </div>
+
+  <div class="sec">Windows</div>
+  <div class="card">
+    <div class="row-sw"><div><b>Запускать вместе с Windows</b><div class="muted">Сразу в трей, без окна и без вопроса администратора</div></div><label class="sw"><input type="checkbox" data-opt="autostart"><i></i></label></div>
+    <div class="div"></div>
+    <div class="row-sw"><div><b>Подключаться при запуске</b><div class="muted">VPN включается сам, как только открылось приложение</div></div><label class="sw"><input type="checkbox" data-opt="connectOnStart"><i></i></label></div>
+    <div class="div"></div>
+    <div class="row-sw"><div><b>Крестик сворачивает в трей</b><div class="muted">VPN продолжает работать, значок — рядом с часами</div></div><label class="sw"><input type="checkbox" data-opt="closeToTray"><i></i></label></div>
+  </div>
+
+  <div class="sec">Обновления</div>
+  <div class="card">
+    <div class="row-sw"><div><b>Проверять обновления</b><div class="muted">При запуске; поставить — одной кнопкой</div></div><label class="sw"><input type="checkbox" data-opt="autoUpdate"><i></i></label></div>
+    <div class="div"></div>
+    <div class="btnbar">
+      <button class="btn2" id="updCheck"><svg class="ic" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>Проверить</button>
+      <button class="btn1" id="updInstall" hidden>Обновить</button>
+    </div>
+    <div class="muted small" id="updStatus"></div>
+    <div class="notes" id="updNotes" hidden></div>
+  </div>
+
+  <div class="sec">Перенос настроек</div>
+  <div class="card">
+    <div class="muted">Подписка, избранные серверы, тема — одним файлом. Файл подходит и для Android-версии, и обратно.</div>
+    <div class="btnbar">
+      <button class="btn2" id="bkSave"><svg class="ic" viewBox="0 0 24 24"><use href="#i-download"/></svg>В файл</button>
+      <button class="btn2" id="bkLoad"><svg class="ic" viewBox="0 0 24 24"><use href="#i-folder"/></svg>Из файла</button>
+    </div>
+    <div class="muted small">В файле ссылка на твою подписку — не отправляй его другим людям.</div>
+  </div>
+
+  <div class="sec">Помощь</div>
+  <div class="card">
+    <div class="muted">Что-то не работает? Собери отчёт и отправь его разработчику любым способом.</div>
+    <div class="btnbar"><button class="btn2" id="report">Сообщить о проблеме</button></div>
+  </div>
+
+  <div class="foot">
+    <div class="slogan center"><svg class="ic" viewBox="0 0 24 24"><path d="M13,2L3,14h9l-1,8 10,-12h-9l1,-8z" fill="currentColor"/></svg>Быстрее нас — только свет</div>
+    <div class="muted small" id="footVer">Fast VPN · BuninSil</div>
+  </div>
+</section>
+
+<div id="menu" class="menu" hidden></div>
+<div id="modal" class="modal" hidden><div class="dlg"><h3 id="mTitle"></h3><div id="mText"></div><div class="dlg-btns" id="mBtns"></div></div></div>
+<div id="toast" class="toast" hidden></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9,12a3,3 0 1,0 6,0a3,3 0 1,0 -6,0"/><path d="M19.4,15a1.65,1.65 0 0,0 0.33,1.82l0.06,0.06a2,2 0 0,1 0,2.83 2,2 0 0,1 -2.83,0l-0.06,-0.06a1.65,1.65 0 0,0 -1.82,-0.33 1.65,1.65 0 0,0 -1,1.51V21a2,2 0 0,1 -2,2 2,2 0 0,1 -2,-2v-0.09A1.65,1.65 0 0,0 9,19.4a1.65,1.65 0 0,0 -1.82,0.33l-0.06,0.06a2,2 0 0,1 -2.83,0 2,2 0 0,1 0,-2.83l0.06,-0.06a1.65,1.65 0 0,0 0.33,-1.82 1.65,1.65 0 0,0 -1.51,-1H3a2,2 0 0,1 -2,-2 2,2 0 0,1 2,-2h0.09A1.65,1.65 0 0,0 4.6,9a1.65,1.65 0 0,0 -0.33,-1.82l-0.06,-0.06a2,2 0 0,1 0,-2.83 2,2 0 0,1 2.83,0l0.06,0.06a1.65,1.65 0 0,0 1.82,0.33H9a1.65,1.65 0 0,0 1,-1.51V3a2,2 0 0,1 2,-2 2,2 0 0,1 2,2v0.09a1.65,1.65 0 0,0 1,1.51 1.65,1.65 0 0,0 1.82,-0.33l0.06,-0.06a2,2 0 0,1 2.83,0 2,2 0 0,1 0,2.83l-0.06,0.06a1.65,1.65 0 0,0 -0.33,1.82V9a1.65,1.65 0 0,0 1.51,1H21a2,2 0 0,1 2,2 2,2 0 0,1 -2,2h-0.09a1.65,1.65 0 0,0 -1.51,1z"/></g></symbol>
+    <symbol id="i-gear-solid" viewBox="0 0 24 24"><path d="M19.4,15a1.65,1.65 0 0,0 0.33,1.82l0.06,0.06a2,2 0 0,1 0,2.83 2,2 0 0,1 -2.83,0l-0.06,-0.06a1.65,1.65 0 0,0 -1.82,-0.33 1.65,1.65 0 0,0 -1,1.51V21a2,2 0 0,1 -2,2 2,2 0 0,1 -2,-2v-0.09A1.65,1.65 0 0,0 9,19.4a1.65,1.65 0 0,0 -1.82,0.33l-0.06,0.06a2,2 0 0,1 -2.83,0 2,2 0 0,1 0,-2.83l0.06,-0.06a1.65,1.65 0 0,0 0.33,-1.82 1.65,1.65 0 0,0 -1.51,-1H3a2,2 0 0,1 -2,-2 2,2 0 0,1 2,-2h0.09A1.65,1.65 0 0,0 4.6,9a1.65,1.65 0 0,0 -0.33,-1.82l-0.06,-0.06a2,2 0 0,1 0,-2.83 2,2 0 0,1 2.83,0l0.06,0.06a1.65,1.65 0 0,0 1.82,0.33H9a1.65,1.65 0 0,0 1,-1.51V3a2,2 0 0,1 2,-2 2,2 0 0,1 2,2v0.09a1.65,1.65 0 0,0 1,1.51 1.65,1.65 0 0,0 1.82,-0.33l0.06,-0.06a2,2 0 0,1 2.83,0 2,2 0 0,1 0,2.83l-0.06,0.06a1.65,1.65 0 0,0 -0.33,1.82V9a1.65,1.65 0 0,0 1.51,1H21a2,2 0 0,1 2,2 2,2 0 0,1 -2,2h-0.09a1.65,1.65 0 0,0 -1.51,1z" fill="currentColor"/><path d="M9,12a3,3 0 1,0 6,0a3,3 0 1,0 -6,0" fill="var(--card)"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><path d="M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0" fill="currentColor"/><g fill="none" stroke="var(--card)" stroke-width="1.8" stroke-linecap="round"><path d="M2,12h20"/><path d="M12,2a15.3,15.3 0 0,1 4,10 15.3,15.3 0 0,1 -4,10 15.3,15.3 0 0,1 -4,-10 15.3,15.3 0 0,1 4,-10z"/></g></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10,13a5,5 0 0,0 7.54,0.54l3,-3a5,5 0 0,0 -7.07,-7.07l-1.72,1.71"/><path d="M14,11a5,5 0 0,0 -7.54,-0.54l-3,3a5,5 0 0,0 7.07,7.07l1.71,-1.71"/></g></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22,12h-4l-3,9L9,3l-3,9H2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15,18l-6,-6 6,-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23,4v6h-6"/><path d="M1,20v-6h6"/><path d="M3.51,9a9,9 0 0,1 14.85,-3.36L23,10M1,14l4.64,4.36A9,9 0 0,0 20.49,15"/></g></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16,4h2a2,2 0 0,1 2,2v14a2,2 0 0,1 -2,2H6a2,2 0 0,1 -2,-2V6a2,2 0 0,1 2,-2h2"/><path d="M9,2h6v4h-6z"/></g></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21,15v4a2,2 0 0,1 -2,2H5a2,2 0 0,1 -2,-2v-4"/><path d="M7,10l5,5 5,-5"/><path d="M12,15V3"/></g></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22,19a2,2 0 0,1 -2,2H4a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2h5l2,3h9a2,2 0 0,1 2,2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12,2l3.09,6.26L22,9.27l-5,4.87 1.18,6.88L12,17.77l-6.18,3.25L7,14.14 2,9.27l6.91,-1.01L12,2z"/></symbol>
+  </defs>
+</svg>
+<script src="fx.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

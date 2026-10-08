@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Fast VPN",
+  "outputfilename": "FastVPN",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dir": "frontend",
+  "author": {
+    "name": "BuninSil"
+  },
+  "info": {
+    "companyName": "BuninSil",
+    "productName": "Fast VPN",
+    "productVersion": "1.0.0",
+    "copyright": "BuninSil",
+    "comments": "Быстрее нас — только свет"
+  }
+}
