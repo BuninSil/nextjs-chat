@@ -276,10 +276,12 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 rulesPath = try { BoxConfig.rulesDir(this) } catch (_: Exception) { "" },
                 appsMode = AppSettings.appsMode,
                 appsList = AppSettings.appsList,
+                compatStack = AppSettings.compatStack,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
-                "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size})")
+                "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
+                "стек ${if (AppSettings.compatStack) "gvisor (совместимость)" else "mixed"}")
             val service = Libbox.newService(config, this)
             service.start()
             box = service
@@ -511,7 +513,30 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun writeLog(message: String) {
         Log.i("sing-box", message)
         VpnLog.add(message)
+        // Прошивка не дала ядру привязать обработчик TCP к VPN — трафик приложений не идёт.
+        // Один раз сами включаем режим совместимости (стек gVisor) и переподключаемся.
+        if (message.contains("bind forwarder to interface") && !AppSettings.compatStack && !compatSwitching) {
+            compatSwitching = true
+            AppSettings.compatStack = true
+            AppSettings.save(this)
+            AppLog.vpn("ядру не дали привязать TCP к VPN-интерфейсу — включаю режим совместимости и переподключаюсь")
+            val ctx = applicationContext
+            Thread {
+                try {
+                    // Ждём, пока подключение доделается, чтобы не перебить его на полпути
+                    var waited = 0
+                    while ((isStarting || Connector.busy) && waited < 30_000) { Thread.sleep(300); waited += 300 }
+                    stop(ctx, manual = false)
+                    Thread.sleep(1500)
+                    Connector.connect(ctx)
+                } finally {
+                    compatSwitching = false
+                }
+            }.start()
+        }
     }
+
+    @Volatile private var compatSwitching = false
 
     private class StrIter(items: List<String>) : StringIterator {
         private val it = items.iterator()

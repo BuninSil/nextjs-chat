@@ -39,6 +39,13 @@ object Report {
         line("Матч напрямую", AppSettings.battleDirect)
         line("Российские сайты напрямую", AppSettings.ruDirect)
         line("Блок рекламы", AppSettings.adBlock)
+        line("Режим совместимости (gVisor)", AppSettings.compatStack)
+        // Частная DNS (DoT) в настройках Android может мешать VPN
+        line("Частный DNS", try {
+            val mode = android.provider.Settings.Global.getString(ctx.contentResolver, "private_dns_mode") ?: "—"
+            val host = android.provider.Settings.Global.getString(ctx.contentResolver, "private_dns_specifier")
+            mode + (host?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
+        } catch (_: Exception) { "не прочитать" })
         line("Приложения", "режим ${AppSettings.appsMode}, выбрано ${AppSettings.appsList.size}")
         line("Автоподключение", "мобильный ${AppSettings.autoOnMobile}, выкл. на Wi-Fi ${AppSettings.autoOffWifi}")
         line("Ускорение Wi-Fi", AppSettings.wifiBoost)

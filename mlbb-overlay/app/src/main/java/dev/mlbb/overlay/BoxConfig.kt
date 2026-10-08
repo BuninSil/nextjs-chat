@@ -68,6 +68,8 @@ object BoxConfig {
         /** Выбор приложений: AppSettings.APPS_* и список пакетов */
         appsMode: Int = AppSettings.APPS_ALL,
         appsList: Set<String> = emptySet(),
+        /** Режим совместимости — стек gVisor */
+        compatStack: Boolean = false,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -95,7 +97,8 @@ object BoxConfig {
             .put("mtu", if (gameMode) 1500 else 9000)
             .put("auto_route", true)
             .put("strict_route", false)
-            .put("stack", "mixed")
+            // mixed: TCP — системным стеком (быстрее), UDP — gVisor; gvisor — всё через gVisor (совместимость)
+            .put("stack", if (compatStack) "gvisor" else "mixed")
         // Иначе через VPN идёт всё, включая нас самих (обновления и база DB-IP под блокировками)
         // Наше приложение — мимо туннеля: соединения ядра Xray (отдельный процесс) иначе ушли бы
         // обратно в VPN. Свои замеры через VPN приложение делает явно, через SOCKS-вход.

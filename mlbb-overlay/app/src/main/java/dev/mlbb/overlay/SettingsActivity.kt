@@ -143,6 +143,12 @@ class SettingsActivity : AppCompatActivity() {
                 AppSettings.adBlock = it; vpnChanged = true
             })
             addView(divider())
+            addView(switchRow("Режим совместимости",
+                "Если VPN подключается, но в приложениях ничего не грузится. Чуть медленнее, зато работает на любых прошивках. Включается и сам, если нужно",
+                AppSettings.compatStack) {
+                AppSettings.compatStack = it; vpnChanged = true
+            })
+            addView(divider())
             appsRow = linkRow("Приложения через VPN", appsSummary(), { appsSub = it }) {
                 vpnChanged = true
                 startActivity(android.content.Intent(this@SettingsActivity, AppsActivity::class.java))

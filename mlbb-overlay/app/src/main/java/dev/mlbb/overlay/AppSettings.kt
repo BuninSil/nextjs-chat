@@ -56,6 +56,11 @@ object AppSettings {
     @Volatile var ruDirect = true
     /** Блокировать рекламу и трекеры */
     @Volatile var adBlock = false
+    /**
+     * Режим совместимости: весь трафик через стек gVisor вместо системного. Для прошивок,
+     * где ядру не дают привязать обработчик TCP к VPN-интерфейсу (через VPN ничего не грузится).
+     */
+    @Volatile var compatStack = false
 
     /** Какие приложения через VPN: все / только выбранные / все, кроме выбранных */
     const val APPS_ALL = 0
@@ -116,6 +121,7 @@ object AppSettings {
         appsMode = p.getInt("appsMode", APPS_ALL)
         appsList = p.getStringSet("appsList", emptySet())?.toSet() ?: emptySet()
         adBlock = p.getBoolean("adBlock", false)
+        compatStack = p.getBoolean("compatStack", false)
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
         if (simple) applySimple()
@@ -166,6 +172,7 @@ object AppSettings {
             .putInt("appsMode", appsMode)
             .putStringSet("appsList", HashSet(appsList))
             .putBoolean("adBlock", adBlock)
+            .putBoolean("compatStack", compatStack)
             .apply()
     }
 
