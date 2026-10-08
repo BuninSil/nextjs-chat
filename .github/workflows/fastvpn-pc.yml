@@ -2,7 +2,7 @@ name: Fast VPN PC
 
 # Windows-версия: Wails (Go + веб-интерфейс), ядра sing-box и Xray вшиты в exe.
 # Рабочая ветка — только проверочная сборка (артефакт + ветка pc-builds),
-# релиз pc-v1.0.N (источник автообновления ПК-версии) — только из main.
+# релиз pc-v1.0.N (источник автообновления ПК-версии) — только из main и только ручным запуском.
 on:
   push:
     paths:
@@ -72,9 +72,9 @@ jobs:
             FastVPN.exe
             FastVPN-setup.exe
 
-      # Только из main: обновление пользователям ПК-версии. Не «последний релиз» — им остаётся Android.
+      # Только из main и только ручным запуском (Run workflow): обновление пользователям ПК-версии. Не «последний релиз» — им остаётся Android.
       - name: Publish release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
         working-directory: .
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
