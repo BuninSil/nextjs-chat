@@ -79,6 +79,15 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		// Само приложение и Xray — напрямую: замеры пинга и соединения XHTTP-серверов
 		obj{"process_name": selfProcs, "outbound": "direct"},
 	}
+	// Выбор программ (по имени exe), как «Приложения через VPN» на телефоне
+	if len(s.AppsList) > 0 {
+		switch s.AppsMode {
+		case 1: // только выбранные через VPN, остальное напрямую
+			rules = append(rules, obj{"process_name": s.AppsList, "invert": true, "outbound": "direct"})
+		case 2: // все, кроме выбранных
+			rules = append(rules, obj{"process_name": s.AppsList, "outbound": "direct"})
+		}
+	}
 	var ruleSets []any
 	addSet := func(tag, file string) {
 		ruleSets = append(ruleSets, obj{"type": "local", "tag": tag, "format": "binary", "path": filepath.Join(rulesDir, file)})

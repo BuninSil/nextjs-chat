@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"sync"
 
 	"github.com/energye/systray"
@@ -18,6 +19,8 @@ var (
 )
 
 func startTray(a *App) {
+	// Окно значка и его цикл сообщений Windows должны жить в одном системном потоке
+	runtime.LockOSThread()
 	trayApp = a
 	systray.Run(func() {
 		systray.SetIcon(trayIcon(false))

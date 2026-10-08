@@ -144,6 +144,7 @@ func installUpdate(quit func()) error {
 	}
 	updSet(func(s *UpdState) { s.Progress = 100; s.Status = "Устанавливаю…" })
 	logf("UPD", "ставлю версию %s", u.Version)
+	withSettings(func(s *Settings) { s.UpdNotes = u.Notes; s.UpdNotesFor = u.Version })
 	exe, _ := os.Executable()
 	// Установщик ждёт, пока мы закроемся, ставит тихо и запускает новую версию
 	script := filepath.Join(dir, "update.cmd")

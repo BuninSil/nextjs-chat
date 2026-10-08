@@ -474,3 +474,67 @@ func (a *App) SpeedTest() { logf("UI", "нажал «Тест скорости»
 func (a *App) SpeedState() SpeedState { return speedState() }
 
 func (a *App) OpenURL(u string) { runtime.BrowserOpenURL(a.ctx, u) }
+
+// ------------------------------ программы через VPN ------------------------------
+
+type AppsView struct {
+	Mode     int      `json:"mode"`
+	Selected []string `json:"selected"`
+	Running  []string `json:"running"`
+}
+
+// GetApps — режим, выбранные программы и запущенные сейчас (чтобы было из чего выбрать).
+func (a *App) GetApps() AppsView {
+	s := getSettings()
+	return AppsView{Mode: s.AppsMode, Selected: orEmpty(s.AppsList), Running: runningProcesses()}
+}
+
+// SetApps — сохранить выбор; если VPN включён — переподключиться, чтобы применить.
+func (a *App) SetApps(mode int, list []string) {
+	logf("SET", "Программы через VPN: режим %d, выбрано %d", mode, len(list))
+	withSettings(func(s *Settings) { s.AppsMode = mode; s.AppsList = list })
+	if core.Running() {
+		go func() {
+			disconnect()
+			connect()
+		}()
+	}
+}
+
+// RankBySpeed — «Скорость» на экране серверов: пинг до всех и самый быстрый по загрузке среди лучших.
+func (a *App) RankBySpeed() string {
+	if !core.Running() {
+		return "Сначала подключи VPN — скорость меряется через сервер"
+	}
+	if busy.Load() {
+		return "Подожди, идёт подбор сервера"
+	}
+	logf("UI", "нажал «Скорость» на экране серверов")
+	go func() {
+		busy.Store(true)
+		defer busy.Store(false)
+		ranked := measure(func(d, t int) { setBusy(fmt.Sprintf("Меряю пинг: %d из %d", d, t)) })
+		if len(ranked) == 0 || !core.Running() {
+			setBusy("")
+			return
+		}
+		best := pickFastest(ranked, 8, func(d, t int) { setBusy(fmt.Sprintf("Проверяю скорость: %d из %d", d, t)) })
+		setBusy("")
+		myIPInvalidate()
+		trayRefresh()
+		if best != "" {
+			toast(fmt.Sprintf("Самый быстрый: %s — %.0f Мбит/с", nameOf(best), getSpeed(best)))
+		}
+	}()
+	return ""
+}
+
+// TakeUpdatedNotes — «что нового» один раз после обновления.
+func (a *App) TakeUpdatedNotes() map[string]string {
+	s := getSettings()
+	if s.UpdNotesFor == "" || s.UpdNotesFor != appVersion {
+		return nil
+	}
+	withSettings(func(st *Settings) { st.UpdNotes = ""; st.UpdNotesFor = "" })
+	return map[string]string{"version": appVersion, "notes": s.UpdNotes}
+}

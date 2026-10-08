@@ -1,3 +1,5 @@
+// Всё внутри функции: глобальные имена страницы не должны пересекаться с мостом Wails (window.go, window.runtime)
+(() => {
 // Интерфейс Fast VPN для ПК. Логика — в Go (window.go.main.App), здесь только экраны.
 const $ = id => document.getElementById(id);
 // В браузере без приложения (превью) — заглушка с примерными данными
@@ -64,7 +66,7 @@ function dialog(title, text, buttons) {
 }
 const info = (t, m) => dialog(t, m, [['Понятно']]);
 
-function go(name) {
+function showScreen(name) {
   screen = name;
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== 's-' + name;
   FX.setVisible(name === 'main');
@@ -72,14 +74,15 @@ function go(name) {
   if (name === 'sub') renderSub();
   if (name === 'settings') renderSettings();
   if (name === 'speed') renderSpeed();
+  if (name === 'apps') renderApps();
 }
 document.addEventListener('click', e => {
   const g = e.target.closest('[data-go]');
-  if (g) go(g.dataset.go);
+  if (g) showScreen(g.dataset.go);
   if (!e.target.closest('#menu')) $('menu').hidden = true;
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { $('menu').hidden = true; $('modal').hidden = true; if (screen !== 'main') go('main'); }
+  if (e.key === 'Escape') { $('menu').hidden = true; $('modal').hidden = true; if (screen !== 'main') showScreen("main"); }
 });
 
 function applyLook(s) {
@@ -100,6 +103,8 @@ $('play').onclick = async () => {
   await api.Toggle();
   poll();
 };
+$('btnNext').onclick = async () => { toast(await api.SwitchNext()); poll(); };
+$('updBanner').onclick = () => showScreen('settings');
 $('ipLine').onclick = () => { api.RefreshIP(); $('ipLine').textContent = 'Узнаю IP…'; };
 
 function renderMain(s) {
@@ -146,6 +151,10 @@ function renderMain(s) {
   $('playHint').textContent = connecting ? 'Подключаюсь…' : running
     ? (s.busy ? 'VPN уже работает — пользуйся. Лучший сервер подбираю в фоне.' : 'VPN работает. Нажми, чтобы отключить.')
     : 'Нажми, чтобы включить VPN на весь компьютер';
+  $('btnNext').hidden = !running || s.busy;
+  const u = s.update && s.update.available;
+  $('updBanner').hidden = !u;
+  if (u) $('updBanner').innerHTML = `<svg class="ic" viewBox="0 0 24 24"><use href="#i-download"/></svg><span>Вышла <b>Fast VPN ${u.version}</b> — нажми, чтобы обновить</span>`;
   $('speedLine').hidden = !running;
   if (running) $('speedLine').innerHTML = `<span>↓ ${fmtBytes(s.down)} · ↑ ${fmtBytes(s.up)}</span><span>за сессию ${s.sessionMb.toFixed(1)} МБ</span>`;
 
@@ -226,6 +235,7 @@ async function renderServers() {
 }
 $('autoSel').onchange = e => api.SetAutoSelect(e.target.checked);
 $('btnPing').onclick = () => api.MeasureAll();
+$('btnSpeed').onclick = async () => { const m = await api.RankBySpeed(); if (m) info('Скорость', m); };
 $('btnExits').onclick = async () => { const m = await api.CheckExits(); if (m) info('Выходы', m); };
 $('btnHidden').onclick = () => { showHidden = !showHidden; lastServers = ''; renderServers(); };
 
@@ -297,6 +307,7 @@ async function renderSettings() {
     an.appendChild(b);
   }
   for (const el of document.querySelectorAll('[data-opt]')) el.checked = !!s[el.dataset.opt];
+  $('appsSum').textContent = appsSummary({ mode: s.appsMode || 0, selected: s.appsList || [] });
   $('footVer').textContent = `Fast VPN · BuninSil · версия ${state ? state.version : ''}`;
   if (state) renderUpdate(state.update);
 }
@@ -307,6 +318,72 @@ for (const el of document.querySelectorAll('[data-opt]')) {
     else if ((el.dataset.opt === 'ruDirect' || el.dataset.opt === 'adBlock') && state && state.running) toast('Переподключаю, чтобы применить…');
   };
 }
+// -------------------------- программы через VPN --------------------------
+
+const APP_MODES = [
+  { id: 0, title: 'Все программы', sub: 'Весь компьютер через VPN' },
+  { id: 1, title: 'Только выбранные', sub: 'Через VPN — только отмеченные, остальное напрямую' },
+  { id: 2, title: 'Все, кроме выбранных', sub: 'Отмеченные идут напрямую, мимо VPN' },
+];
+let apps = null;
+function appsSummary(v) {
+  if (!v || v.mode === 0 || !v.selected.length) return 'Все программы';
+  return (v.mode === 1 ? 'Только выбранные' : 'Все, кроме выбранных') + ` (${v.selected.length})`;
+}
+async function renderApps() {
+  apps = await api.GetApps();
+  drawApps();
+}
+function drawApps() {
+  const m = $('appModes'); m.innerHTML = '';
+  for (const md of APP_MODES) {
+    const b = document.createElement('button');
+    b.className = 'anim' + (apps.mode === md.id ? ' sel' : '');
+    b.innerHTML = `<b>${md.title}</b><span class="muted">${md.sub}</span>`;
+    b.onclick = () => { apps.mode = md.id; saveApps(); drawApps(); };
+    m.appendChild(b);
+  }
+  $('appPick').hidden = apps.mode === 0;
+  const q = $('appSearch').value.trim().toLowerCase();
+  const sel = new Set(apps.selected.map(x => x.toLowerCase()));
+  const all = [...apps.selected, ...apps.running.filter(x => !sel.has(x.toLowerCase()))];
+  const box = $('appList'); box.innerHTML = '';
+  for (const name of all) {
+    if (q && !name.toLowerCase().includes(q)) continue;
+    const on = sel.has(name.toLowerCase());
+    const r = document.createElement('div');
+    r.className = 'row' + (on ? ' on' : '');
+    r.innerHTML = '<div class="chk"></div><div class="rc"><div class="rn"></div></div>';
+    r.querySelector('.rn').textContent = name;
+    r.onclick = () => {
+      apps.selected = on ? apps.selected.filter(x => x.toLowerCase() !== name.toLowerCase()) : [...apps.selected, name];
+      saveApps(); drawApps();
+    };
+    box.appendChild(r);
+  }
+  if (!box.children.length) box.innerHTML = '<div class="muted small">Не нашлось. Впиши имя программы с .exe и нажми Enter.</div>';
+}
+let appsTimer = 0;
+function saveApps() {
+  clearTimeout(appsTimer);
+  // Сохраняем с задержкой: при включённом VPN каждое сохранение — переподключение
+  appsTimer = setTimeout(() => {
+    api.SetApps(apps.mode, apps.selected);
+    if (state && state.running) toast('Переподключаю, чтобы применить…');
+  }, 900);
+  $('appsSum').textContent = appsSummary(apps);
+}
+$('appSearch').oninput = () => drawApps();
+$('appSearch').onkeydown = e => {
+  if (e.key !== 'Enter') return;
+  let n = $('appSearch').value.trim();
+  if (!n) return;
+  if (!n.toLowerCase().endsWith('.exe')) n += '.exe';
+  if (!apps.selected.some(x => x.toLowerCase() === n.toLowerCase())) apps.selected.push(n);
+  $('appSearch').value = '';
+  saveApps(); drawApps();
+};
+
 function renderUpdate(u) {
   if (!u) return;
   $('updStatus').textContent = u.progress >= 0 && u.progress < 100 ? `Скачиваю обновление: ${u.progress}%` : (u.status || '');
@@ -336,5 +413,10 @@ $('report').onclick = async () => info('Отчёт готов', await api.Report
 // ------------------------------- старт -------------------------------
 
 FX.setAnchor($('play'));
-go('main');
+Promise.resolve(api.TakeUpdatedNotes()).then(n => {
+  if (n) dialog('Fast VPN обновлён до ' + n.version, n.notes || 'Исправления и улучшения', [['Отлично']]);
+}).catch(() => {});
+showScreen("main");
 poll();
+
+})();

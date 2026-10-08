@@ -15,4 +15,5 @@ func osVersion() string                          { return "" }
 func setAutostart(on bool) error                 { return errors.New("только Windows") }
 func openPath(p string)                          {}
 func openSelect(p string)                        {}
+func runningProcesses() []string                 { return nil }
 func runDetached(exe string, args ...string) error { return errors.New("только Windows") }

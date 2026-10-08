@@ -38,6 +38,8 @@
     <button class="play" id="play"><span id="playLabel">ПОДКЛЮЧИТЬ</span></button>
   </div>
   <div class="hint" id="playHint"></div>
+  <button class="btn2 next" id="btnNext" hidden><svg class="ic" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>Сменить сервер</button>
+  <button class="card updbanner" id="updBanner" hidden></button>
 
   <div class="card speedline" id="speedLine" hidden></div>
 
@@ -59,8 +61,9 @@
     <div><b>Автовыбор</b><div class="muted">Самый быстрый рабочий сервер при подключении</div></div>
     <label class="sw"><input type="checkbox" id="autoSel"><i></i></label>
   </div>
-  <div class="btnbar">
+  <div class="btnbar tools">
     <button class="btn2" id="btnPing"><svg class="ic" viewBox="0 0 24 24"><use href="#i-pulse"/></svg>Пинг</button>
+    <button class="btn2" id="btnSpeed"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bolt"/></svg>Скорость</button>
     <button class="btn2" id="btnExits"><svg class="ic" viewBox="0 0 24 24"><use href="#i-globe"/></svg>Выходы</button>
     <button class="btn2" id="btnHidden">Скрытые</button>
   </div>
@@ -121,6 +124,8 @@
     <div class="row-sw"><div><b>Российские сайты напрямую</b><div class="muted">Банки, Госуслуги, маркетплейсы, Яндекс и VK — мимо VPN: работают как без него</div></div><label class="sw"><input type="checkbox" data-opt="ruDirect"><i></i></label></div>
     <div class="div"></div>
     <div class="row-sw"><div><b>Блокировать рекламу и трекеры</b><div class="muted">Рекламные и следящие домены не загружаются</div></div><label class="sw"><input type="checkbox" data-opt="adBlock"><i></i></label></div>
+    <div class="div"></div>
+    <button class="link" data-go="apps"><div><b>Программы через VPN</b><div class="acc" id="appsSum">Все программы</div></div><span>›</span></button>
   </div>
 
   <div class="sec">Windows</div>
@@ -166,6 +171,20 @@
   </div>
 </section>
 
+<!-- Программы через VPN -->
+<section class="screen" id="s-apps" hidden>
+  <header class="top">
+    <button class="back" data-go="settings"><svg viewBox="0 0 24 24" class="ic-lg"><use href="#i-back"/></svg></button>
+    <div class="title">Программы через VPN</div>
+  </header>
+  <div class="anims" id="appModes"></div>
+  <div id="appPick">
+    <input id="appSearch" class="search" placeholder="Поиск или имя программы, например Telegram.exe" spellcheck="false">
+    <div class="muted small">Отмеченные программы. Список — из запущенных сейчас; нужной нет — открой её или впиши имя .exe и нажми Enter.</div>
+    <div class="list" id="appList"></div>
+  </div>
+</section>
+
 <div id="menu" class="menu" hidden></div>
 <div id="modal" class="modal" hidden><div class="dlg"><h3 id="mTitle"></h3><div id="mText"></div><div class="dlg-btns" id="mBtns"></div></div></div>
 <div id="toast" class="toast" hidden></div>
@@ -182,6 +201,7 @@
     <symbol id="i-paste" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16,4h2a2,2 0 0,1 2,2v14a2,2 0 0,1 -2,2H6a2,2 0 0,1 -2,-2V6a2,2 0 0,1 2,-2h2"/><path d="M9,2h6v4h-6z"/></g></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21,15v4a2,2 0 0,1 -2,2H5a2,2 0 0,1 -2,-2v-4"/><path d="M7,10l5,5 5,-5"/><path d="M12,15V3"/></g></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22,19a2,2 0 0,1 -2,2H4a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2h5l2,3h9a2,2 0 0,1 2,2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13,2L3,14h9l-1,8 10,-12h-9l1,-8z" fill="currentColor"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12,2l3.09,6.26L22,9.27l-5,4.87 1.18,6.88L12,17.77l-6.18,3.25L7,14.14 2,9.27l6.91,-1.01L12,2z"/></symbol>
   </defs>
 </svg>

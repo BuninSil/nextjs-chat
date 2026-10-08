@@ -32,8 +32,12 @@ type Settings struct {
 	RankAt      int64    `json:"rankAt"`
 	// Страна выхода в интернет по серверам (tag -> код страны)
 	Exits map[string]string `json:"exits"`
-	// Версия, для которой уже показали «что нового»
-	SeenVersion string `json:"seenVersion"`
+	// Какие программы через VPN: 0 — все, 1 — только выбранные, 2 — все, кроме выбранных
+	AppsMode int      `json:"appsMode"`
+	AppsList []string `json:"appsList"`
+	// «Что нового» для версии, которую ставит обновление: показываем после перезапуска
+	UpdNotes    string `json:"updNotes"`
+	UpdNotesFor string `json:"updNotesFor"`
 }
 
 var (
@@ -112,6 +116,7 @@ func getSettings() Settings {
 	}
 	c.Favorites = append([]string(nil), cfg.Favorites...)
 	c.Hidden = append([]string(nil), cfg.Hidden...)
+	c.AppsList = append([]string(nil), cfg.AppsList...)
 	return c
 }
 
