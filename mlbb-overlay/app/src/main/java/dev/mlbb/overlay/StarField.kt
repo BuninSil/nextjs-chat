@@ -54,7 +54,8 @@ class StarField(ctx: Context) : View(ctx) {
         val target = when {
             connecting -> 0.0025f + min(1f, t / 2.5f).pow(2.2f) * 0.055f
             running && t < 0.25f -> 0.08f
-            running -> 0.0026f
+            // Медленный полёт первые 20 секунд, дальше звёзды замирают — не тратим батарею
+            running && t < 20f -> 0.0026f
             else -> 0f
         }
         // Кадры бывают реже 60 в секунду — скорость считаем на 16 мс

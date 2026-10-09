@@ -206,37 +206,27 @@ var (
 	sessionDown, sessionUp int64
 )
 
-// trafficTicker — раз в секунду скорость ↓↑ по счётчикам ядра.
+// trafficTicker — скорость ↓↑ из потока ядра /traffic (раз в секунду). Он лёгкий, в отличие от
+// списка всех соединений, который растёт со временем и тормозил бы компьютер.
 func trafficTicker() {
-	var lastD, lastU int64
-	var lastAt time.Time
-	wasRunning := false
 	for {
 		time.Sleep(time.Second)
-		d, u, ok := clashTotals()
-		trafMu.Lock()
-		if !ok {
+		if !core.Running() {
+			trafMu.Lock()
 			downBps, upBps = 0, 0
-			if !core.Running() {
-				wasRunning = false
-			}
 			trafMu.Unlock()
 			continue
 		}
-		if !wasRunning {
-			lastD, lastU, lastAt = d, u, time.Now()
-			sessionDown, sessionUp = 0, 0
-			wasRunning = true
-			trafMu.Unlock()
-			continue
-		}
-		sec := time.Since(lastAt).Seconds()
-		dd, du := max(d-lastD, 0), max(u-lastU, 0)
-		downBps, upBps = float64(dd)/sec, float64(du)/sec
-		sessionDown += dd
-		sessionUp += du
-		lastD, lastU, lastAt = d, u, time.Now()
+		trafMu.Lock()
+		sessionDown, sessionUp = 0, 0
 		trafMu.Unlock()
+		streamTraffic(func(up, down int64) {
+			trafMu.Lock()
+			downBps, upBps = float64(down), float64(up)
+			sessionDown += down
+			sessionUp += up
+			trafMu.Unlock()
+		})
 	}
 }
 

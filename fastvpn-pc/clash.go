@@ -73,6 +73,32 @@ func clashDelay(tag, testURL string, timeoutMs int) int {
 	return v.Delay
 }
 
+// streamTraffic — поток скорости ядра (строка {"up":…,"down":…} раз в секунду), пока VPN работает.
+func streamTraffic(onSecond func(up, down int64)) {
+	p := core.Ports()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/traffic", p.API), nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+p.Secret)
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	dec := json.NewDecoder(resp.Body)
+	for core.Running() {
+		var v struct {
+			Up   int64 `json:"up"`
+			Down int64 `json:"down"`
+		}
+		if dec.Decode(&v) != nil {
+			return
+		}
+		onSecond(v.Up, v.Down)
+	}
+}
+
 // clashTotals — сколько всего скачано/отдано через ядро (байты).
 func clashTotals() (down, up int64, ok bool) {
 	if !core.Running() {

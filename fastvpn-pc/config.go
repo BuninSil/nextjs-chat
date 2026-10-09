@@ -99,6 +99,9 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		obj{"action": "sniff", "timeout": "100ms"},
 		obj{"protocol": "dns", "action": "hijack-dns"},
 		obj{"ip_is_private": true, "outbound": "direct"},
+		// Свои замеры приложения (скорость, «Мой IP», страна выхода) идут через вход mixed — строго через
+		// выбранный сервер. Раньше правила «само приложение — напрямую»: иначе замеры ушли бы мимо VPN
+		obj{"inbound": []string{"mixed-in"}, "outbound": "proxy"},
 		// Само приложение и Xray — напрямую: замеры пинга и соединения XHTTP-серверов
 		obj{"process_name": selfProcs, "outbound": "direct"},
 	}
@@ -124,6 +127,12 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		addSet("ads", "geosite-category-ads-all.srs")
 		rules = append(rules, obj{"rule_set": []string{"ads"}, "action": "reject"})
 	}
+	if abroad != "" && !s.RuDirect {
+		// Российские сайты без «напрямую» — через выбранный сервер (остальное идёт через зарубежный)
+		rules = append(rules, obj{"domain_suffix": ruSuffixes, "outbound": "proxy"})
+		addSet("ru", "geosite-category-ru.srs")
+		rules = append(rules, obj{"rule_set": []string{"ru"}, "outbound": "proxy"})
+	}
 	if s.RuDirect {
 		rules = append(rules, obj{"domain_suffix": ruSuffixes, "outbound": "direct"})
 		addSet("ru", "geosite-category-ru.srs")
@@ -145,7 +154,12 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		"final":             "remote",
 		"strategy":          "ipv4_only",
 	}
-	route := obj{"rules": rules, "final": "proxy", "auto_detect_interface": true}
+	final := "proxy"
+	if abroad != "" {
+		// Всё, кроме российского, — через зарубежный выход (abroad = выбранный, если он зарубежный)
+		final = "abroad"
+	}
+	route := obj{"rules": rules, "final": final, "auto_detect_interface": true}
 	if len(ruleSets) > 0 {
 		route["rule_set"] = ruleSets
 	}

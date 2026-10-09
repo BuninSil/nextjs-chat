@@ -179,46 +179,71 @@ class BoxVpnService : VpnService(), PlatformInterface {
         else -> String.format(java.util.Locale.US, "%.0f КБ", b / 1024)
     }
 
-    /** Раз в 2 секунды: скорость ↓↑ и трафик за сессию и за сегодня — в уведомлении VPN. */
+    /**
+     * Скорость ↓↑ и трафик за сессию и за сегодня — в уведомлении VPN (раз в 2 секунды).
+     * Скорость берём из потока ядра /traffic (раз в секунду, лёгкий), а не из списка всех соединений:
+     * тот растёт с каждым соединением, и опрос раз в 2 секунды со временем тормозил телефон.
+     * Трафик за день пишем на диск раз в полминуты, а не каждые 2 секунды.
+     */
     private fun startTicker() {
         if (ticker?.isAlive == true) return
+        val accDown = java.util.concurrent.atomic.AtomicLong()
+        val accUp = java.util.concurrent.atomic.AtomicLong()
+        // Читатель потока скорости; при обрыве переподключается, пока VPN работает
+        Thread {
+            var fails = 0
+            while (isRunning) {
+                val p = ports ?: break
+                try {
+                    ClashApi.streamTraffic(p.api, p.secret) { up, down ->
+                        accUp.addAndGet(up)
+                        accDown.addAndGet(down)
+                    }
+                } catch (_: Exception) {
+                }
+                if (!isRunning) break
+                if (++fails == 5) AppLog.err("уведомление: ядро не отдаёт скорость")
+                try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
+            }
+        }.apply { isDaemon = true; start() }
+
         ticker = Thread {
             val prefs = getSharedPreferences("settings", MODE_PRIVATE)
             val nm = getSystemService(NotificationManager::class.java)
-            var last: Pair<Long, Long>? = null
-            var lastAt = System.nanoTime()
+            val dayFmt = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+            var day = dayFmt.format(java.util.Date())
+            var dayBytes = if (prefs.getString("trafDay", "") == day) prefs.getLong("trafBytes", 0) else 0L
             var session = 0L
+            var lastAt = System.nanoTime()
+            var lastText = ""
+            var ticks = 0
+            fun flush() = prefs.edit().putString("trafDay", day).putLong("trafBytes", dayBytes).apply()
             // Сразу после подключения — «Подключено», дальше каждые 2 секунды скорость и трафик
             if (isRunning) nm.notify(NOTIF_ID, buildNotification(
                 if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры" else "Подключено", null))
-            var misses = 0
             while (isRunning) {
                 try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
-                val p = ports ?: break
-                val now = ClashApi.totals(p.api, p.secret)
-                if (now == null) {
-                    if (++misses == 5) AppLog.err("уведомление: ядро не отдаёт счётчики трафика")
-                    continue
-                }
-                misses = 0
                 val t = System.nanoTime()
-                val prev = last
-                last = now
-                if (prev == null) { lastAt = t; continue }
-                val sec = (t - lastAt) / 1e9
+                val sec = ((t - lastAt) / 1e9).coerceAtLeast(0.5)
                 lastAt = t
-                val dDown = (now.first - prev.first).coerceAtLeast(0)
-                val dUp = (now.second - prev.second).coerceAtLeast(0)
+                val dDown = accDown.getAndSet(0)
+                val dUp = accUp.getAndSet(0)
                 session += dDown + dUp
-                // Трафик за сегодня — копится между сессиями
-                val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
-                val dayBytes = (if (prefs.getString("trafDay", "") == today) prefs.getLong("trafBytes", 0) else 0L) + dDown + dUp
-                prefs.edit().putString("trafDay", today).putLong("trafBytes", dayBytes).apply()
+                // Трафик за сегодня — копится между сессиями, в полночь начинается заново
+                val today = dayFmt.format(java.util.Date())
+                if (today != day) { day = today; dayBytes = 0 }
+                dayBytes += dDown + dUp
+                if (++ticks % 15 == 0) flush()
                 downBps = dDown / sec
                 val text = "↓ ${fmtBytes(dDown / sec)}/с · ↑ ${fmtBytes(dUp / sec)}/с"
                 val sub = "за сессию ${fmtBytes(session.toDouble())} · сегодня ${fmtBytes(dayBytes.toDouble())}"
-                if (isRunning) nm.notify(NOTIF_ID, buildNotification(text, sub))
+                // Уведомление перерисовываем, только если что-то поменялось
+                if (isRunning && text + sub != lastText) {
+                    lastText = text + sub
+                    nm.notify(NOTIF_ID, buildNotification(text, sub))
+                }
             }
+            flush()
         }.apply { isDaemon = true; start() }
     }
 

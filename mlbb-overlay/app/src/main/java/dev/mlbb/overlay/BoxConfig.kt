@@ -157,6 +157,10 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+        if (abroadTag != null) {
+            // Свои замеры приложения (скорость, «Мой IP», страна выхода) — строго через выбранный сервер
+            rules.put(JSONObject().put("inbound", JSONArray().put("mixed-in")).put("outbound", "proxy"))
+        }
         val ruleSets = JSONArray()
         fun ruleSet(tag: String, file: String) {
             ruleSets.put(JSONObject().put("type", "local").put("tag", tag).put("format", "binary")
@@ -171,6 +175,14 @@ object BoxConfig {
             // Telegram, YouTube и другие заблокированные сервисы — всегда через зарубежный выход
             rules.put(JSONObject().put("package_name", BLOCKED_PACKAGES).put("outbound", "abroad"))
             rules.put(JSONObject().put("domain_suffix", BLOCKED_DOMAINS).put("outbound", "abroad"))
+        }
+        if (abroadTag != null && !ruDirect) {
+            // Российские сайты без «напрямую» — через выбранный сервер (остальное идёт через зарубежный)
+            rules.put(JSONObject().put("domain_suffix", RU_SUFFIXES).put("outbound", "proxy"))
+            if (rulesPath.isNotEmpty()) {
+                ruleSet("ru", "geosite-category-ru.srs")
+                rules.put(JSONObject().put("rule_set", JSONArray().put("ru")).put("outbound", "proxy"))
+            }
         }
         if (ruDirect) {
             // Российские сайты напрямую: банки и Госуслуги не пускают с зарубежных адресов, а
@@ -216,7 +228,8 @@ object BoxConfig {
             .put("route", JSONObject()
                 .put("rules", rules)
                 .put("rule_set", ruleSets)
-                .put("final", "proxy")
+                // Обычный режим: всё, кроме российского, — через зарубежный выход (abroad = выбранный, если он зарубежный)
+                .put("final", if (abroadTag != null) "abroad" else "proxy")
                 .put("auto_detect_interface", true)
                 // Определение приложения по каждому соединению — только для игровых функций
                 .put("find_process", gameMode))

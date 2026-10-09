@@ -95,7 +95,12 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             refresh()
             // Пока подключается — чаще, чтобы вспышка «подключено» была точно в момент
-            handler.postDelayed(this, if (BoxVpnService.isStarting || busy || connectTapAt > 0) 120 else 1000)
+            // Часто — только пока идёт само подключение; фоновый подбор сервера хватает раз в полсекунды
+            handler.postDelayed(this, when {
+                BoxVpnService.isStarting || connectTapAt > 0 -> 120
+                busy -> 500
+                else -> 1000
+            })
         }
     }
 
