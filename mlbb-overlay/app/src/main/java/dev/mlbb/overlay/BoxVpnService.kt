@@ -432,8 +432,12 @@ class BoxVpnService : VpnService(), PlatformInterface {
         )
     }
 
+    /** uid → пакет: ядро спрашивает на каждое новое соединение, а запрос к системе не бесплатный */
+    private val uidPackages = java.util.concurrent.ConcurrentHashMap<Int, String>()
+
     override fun packageNameByUid(uid: Int): String =
-        packageManager.getPackagesForUid(uid)?.firstOrNull() ?: throw Exception("нет пакета для uid $uid")
+        uidPackages[uid] ?: (packageManager.getPackagesForUid(uid)?.firstOrNull()
+            ?: throw Exception("нет пакета для uid $uid")).also { uidPackages[uid] = it }
 
     override fun uidByPackageName(packageName: String): Int =
         packageManager.getPackageUid(packageName, 0)
