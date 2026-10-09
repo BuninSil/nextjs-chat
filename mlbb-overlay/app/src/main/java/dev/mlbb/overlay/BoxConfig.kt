@@ -176,7 +176,9 @@ object BoxConfig {
 
         val tun = JSONObject()
             .put("type", "tun").put("tag", "tun-in")
-            .put("address", JSONArray().put("172.19.0.1/30"))
+            // IPv6 тоже в туннель: иначе Android пускает его мимо VPN напрямую через провайдера
+            // (YouTube со своим DNS, игры) — с российского адреса, и часть приложений не работает
+            .put("address", JSONArray().put("172.19.0.1/30").put("fdfe:dcba:9876::1/126"))
             // Обычный режим — 9000 (больше данных за пакет, выше скорость, как по умолчанию в sing-box);
             // игровой — 1500, без лишней буферизации для мелких пакетов игры
             .put("mtu", if (gameMode) 1500 else 9000)
@@ -204,6 +206,8 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+            // IPv6 не проксируем (у многих серверов его нет): отказ — и приложение сразу идёт по IPv4
+            .put(JSONObject().put("ip_version", 6).put("action", "reject"))
         if (selected == XrayCore.BYPASS) {
             // В обходе без сервера QUIC (UDP 443) не пробить — отклоняем, приложения сразу идут по TCP
             rules.put(JSONObject().put("network", "udp").put("port", 443).put("action", "reject"))

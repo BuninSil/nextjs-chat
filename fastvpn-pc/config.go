@@ -87,7 +87,8 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 	tun := obj{
 		"type": "tun", "tag": "tun-in",
 		"interface_name": "FastVPN",
-		"address":        []string{"172.19.0.1/30"},
+		// IPv6 тоже в туннель: иначе Windows пускает его мимо VPN напрямую через провайдера
+		"address":        []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"},
 		"mtu":            9000,
 		"auto_route":     true,
 		"strict_route":   false,
@@ -104,6 +105,8 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		obj{"inbound": []string{"mixed-in"}, "outbound": "proxy"},
 		// Само приложение и Xray — напрямую: замеры пинга и соединения XHTTP-серверов
 		obj{"process_name": selfProcs, "outbound": "direct"},
+		// IPv6 не проксируем (у многих серверов его нет): отказ — и программа сразу идёт по IPv4
+		obj{"ip_version": 6, "action": "reject"},
 	}
 	// Выбор программ (по имени exe), как «Приложения через VPN» на телефоне
 	if len(s.AppsList) > 0 {
