@@ -82,6 +82,7 @@ object AppSettings {
     const val ANIM_WARP = "warp"
     const val ANIM_GAUGE = "gauge"
     const val ANIM_RADAR = "radar"
+    const val ANIM_GLOBE = "globe"
     @Volatile var anim = ANIM_WARP
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -116,7 +117,7 @@ object AppSettings {
         // Автообновления теперь бесшовные — включаем всем (новый ключ, старый «проверять при запуске» не учитываем)
         autoCheckUpdates = p.getBoolean("updAuto2", true)
         theme = p.getString("theme", "dark") ?: "dark"
-        anim = p.getString("anim", ANIM_WARP)?.takeIf { it in setOf(ANIM_WARP, ANIM_GAUGE, ANIM_RADAR) } ?: ANIM_WARP
+        anim = p.getString("anim", ANIM_WARP)?.takeIf { it in setOf(ANIM_WARP, ANIM_GAUGE, ANIM_RADAR, ANIM_GLOBE) } ?: ANIM_WARP
         ruDirect = p.getBoolean("ruDirect", true)
         autoOnMobile = p.getBoolean("autoOnMobile", false)
         autoOffWifi = p.getBoolean("autoOffWifi", true)

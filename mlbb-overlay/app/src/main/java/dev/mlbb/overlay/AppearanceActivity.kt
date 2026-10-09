@@ -19,6 +19,7 @@ class AppearanceActivity : AppCompatActivity() {
     private lateinit var demoButton: TextView
     private lateinit var flash: View
     private var stars: StarField? = null
+    private var globe: GlobeView? = null
     private var demo = false
 
     companion object {
@@ -26,6 +27,7 @@ class AppearanceActivity : AppCompatActivity() {
             Triple(AppSettings.ANIM_WARP, "Гиперпрыжок", "Звёзды на весь экран срываются в лучи, при подключении — вспышка"),
             Triple(AppSettings.ANIM_GAUGE, "Спидометр", "Шкала вокруг кнопки, стрелка улетает в красную зону, потом показывает скорость"),
             Triple(AppSettings.ANIM_RADAR, "Радар", "Луч ищет серверы, при подключении лучший берётся в прицел"),
+            Triple(AppSettings.ANIM_GLOBE, "Глобус", "Земля и дуги от тебя к серверам, при подключении по дуге бежит поток"),
         )
 
         fun animTitle(id: String) = ANIMS.firstOrNull { it.first == id }?.second ?: ANIMS[0].second
@@ -105,8 +107,16 @@ class AppearanceActivity : AppCompatActivity() {
             }
         }
         ring.anchor = demoButton
+        val globeMode = AppSettings.anim == AppSettings.ANIM_GLOBE
+        if (globeMode) {
+            globe = GlobeView(this).also {
+                it.setTargets(GlobeView.targetsFor(this))
+                box.addView(it, FrameLayout.LayoutParams(-1, -1))
+            }
+        }
         box.addView(ring, FrameLayout.LayoutParams(-1, -1))
-        box.addView(demoButton, FrameLayout.LayoutParams(d(180f), d(180f), Gravity.CENTER))
+        if (globeMode) box.addView(demoButton, FrameLayout.LayoutParams(d(96f), d(96f), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = d(8f) })
+        else box.addView(demoButton, FrameLayout.LayoutParams(d(180f), d(180f), Gravity.CENTER))
         flash = View(this).apply {
             setBackgroundColor(0xFFE8FFF0.toInt())
             visibility = View.GONE
@@ -118,10 +128,10 @@ class AppearanceActivity : AppCompatActivity() {
 
     private fun showButton(connecting: Boolean, running: Boolean) {
         if (connecting) {
-            demoButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", 48f, tint = 0xFFFFFFFF.toInt())
+            demoButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", if (globe != null) 30f else 48f, tint = 0xFFFFFFFF.toInt())
         } else {
             demoButton.text = if (running) "ОТКЛЮЧИТЬ" else "ПОДКЛЮЧИТЬ"
-            demoButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 19f)
+            demoButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (globe != null) 11f else 19f)
         }
         val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
         else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
@@ -136,6 +146,7 @@ class AppearanceActivity : AppCompatActivity() {
         showButton(connecting = true, running = false)
         ring.setConnecting(true)
         stars?.setState(true, false)
+        globe?.setState(true, false)
         val pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
             demoButton,
             android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 0.95f),
@@ -153,6 +164,7 @@ class AppearanceActivity : AppCompatActivity() {
             ring.setConnecting(false)
             ring.setRunning(true)
             stars?.setState(false, true)
+            globe?.setState(false, true)
             ring.connected()
             if (stars != null) StarField.flash(flash)
             demoButton.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction {
@@ -167,6 +179,7 @@ class AppearanceActivity : AppCompatActivity() {
             ring.setSpeed(0.0)
             ring.setRunning(false)
             stars?.setState(false, false)
+            globe?.setState(false, false)
             ConnectRing.buzz(demoButton, strong = false)
             demo = false
         }, 6500)

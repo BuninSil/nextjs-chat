@@ -169,6 +169,7 @@ class ConnectRing(ctx: Context) : View(ctx) {
         when (style) {
             AppSettings.ANIM_GAUGE -> animate = drawGauge(c, t) || animate
             AppSettings.ANIM_RADAR -> animate = drawRadar(c, t) || animate
+            AppSettings.ANIM_GLOBE -> {} // рисует GlobeView, здесь только волны
             else -> drawWarp(c, t)
         }
         animate = drawEffects(c) || animate

@@ -46,6 +46,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ring: ConnectRing
     /** Звёзды на весь экран (анимация «Гиперпрыжок») и белая вспышка поверх всего */
     private var stars: StarField? = null
+    /** Анимация «Глобус» (кнопка меньше, поверх Земли) */
+    private var globe: GlobeView? = null
+    private var globeMode = false
     private lateinit var flashView: android.view.View
     /** Что сейчас нарисовано на кнопке — чтобы не перерисовывать каждую секунду */
     private var playKey = ""
@@ -301,9 +304,21 @@ class MainActivity : AppCompatActivity() {
         // Анимация вокруг кнопки рисуется отдельным слоем под всем экраном (см. ниже)
         ring = ConnectRing(this).apply { style = AppSettings.anim; anchor = playButton }
         val playBox = android.widget.FrameLayout(this)
-        playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(200f), d(200f), Gravity.CENTER))
         val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, d(0f), 0, d(0f)) }
-        playWrap.addView(playBox, LinearLayout.LayoutParams(d(260f), d(260f)))
+        if (AppSettings.anim == AppSettings.ANIM_GLOBE) {
+            // Глобус: Земля с дугами к серверам, кнопка поменьше — внизу, поверх глобуса
+            globeMode = true
+            globe = GlobeView(this).also { g ->
+                playBox.addView(g, android.widget.FrameLayout.LayoutParams(-1, -1))
+                getSharedPreferences("settings", MODE_PRIVATE).getString("homeCountry", null)
+                    ?.let { GlobeView.place(it) }?.let { g.setHome(it[0], it[1]) }
+            }
+            playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(120f), d(120f), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
+            playWrap.addView(playBox, LinearLayout.LayoutParams(-1, d(330f)))
+        } else {
+            playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(200f), d(200f), Gravity.CENTER))
+            playWrap.addView(playBox, LinearLayout.LayoutParams(d(260f), d(260f)))
+        }
         root.addView(playWrap)
         playHint = Ui.text(this, "", 13f, Ui.MUTED).apply {
             gravity = Gravity.CENTER
@@ -504,11 +519,15 @@ class MainActivity : AppCompatActivity() {
             playKey = label
             if (connecting) {
                 // Молния в кнопке «заряжается»: кнопка дышит, по кольцу бежит дуга
-                playButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", 54f, tint = 0xFFFFFFFF.toInt())
+                playButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", if (globeMode) 36f else 54f, tint = 0xFFFFFFFF.toInt())
             } else {
                 playButton.text = label
                 // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
-                playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, if (label == "ИГРАТЬ") 28f else 22f)
+                playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, when {
+                    globeMode -> if (label == "ИГРАТЬ") 17f else 13f
+                    label == "ИГРАТЬ" -> 28f
+                    else -> 22f
+                })
             }
             // Подключено — кнопка красная (отключить), иначе зелёная
             val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
@@ -537,6 +556,16 @@ class MainActivity : AppCompatActivity() {
         ring.setRunning(running)
         ring.setSpeed(BoxVpnService.downBps)
         stars?.setState(connecting, running)
+        globe?.let { g ->
+            g.setState(connecting, running)
+            g.setTargets(GlobeView.targetsFor(this))
+            // Дом — страна без VPN (из «Моего IP»), запоминаем
+            if (!BoxVpnService.isRunning) MyIp.country?.let { cc ->
+                val p = getSharedPreferences("settings", MODE_PRIVATE)
+                if (p.getString("homeCountry", null) != cc) p.edit().putString("homeCountry", cc).apply()
+                GlobeView.place(cc)?.let { g.setHome(it[0], it[1]) }
+            }
+        }
         // Переходы: подключилось — вспышка и вибрация, отключилось — лёгкий щелчок
         val prev = wasRunning
         if (prev != null && prev != running) {
