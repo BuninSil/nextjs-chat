@@ -501,15 +501,17 @@ object ServerTester {
      */
     fun gamesFor(ctx: Context, selected: String): String? {
         loadExits(ctx)
+        // Только серверы, которые ответили на последнем замере: до замеров (сразу после
+        // подключения) — тот же зарубежный сервер, что и для Telegram/YouTube
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) || exitsRussia(it) }
-            .filterNot { results.containsKey(it.tag) && results[it.tag] == null }
-        if (nodes.isEmpty()) return null
+            .filter { results[it.tag] != null }
+        if (nodes.isEmpty()) return abroadFor(ctx, selected).takeIf { it.isNotEmpty() && it != XrayCore.BYPASS }
         fun cost(n: Subscription.Node): Int {
-            val ms = results[n.tag]?.score ?: 400
+            val ms = results[n.tag]!!.score
             val proto = when {
                 n.nativeUdp -> 0
-                n.xrayLink != null -> 120
-                else -> 30
+                n.xrayLink != null -> 80
+                else -> 15
             }
             // Уже выбранный сервер чуть в плюсе — без лишних прыжков между почти равными
             return ms + proto - (if (n.tag == selected) 10 else 0)
