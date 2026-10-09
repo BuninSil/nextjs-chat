@@ -82,6 +82,17 @@ class GlobeView(ctx: Context) : View(ctx) {
         return out
     }
 
+    private fun viewCenter(): Pair<Double, Double> {
+        var x = 0.0; var y = 0.0; var z = 0.0
+        fun add(lat: Double, lon: Double, w: Double) {
+            val la = Math.toRadians(lat); val lo = Math.toRadians(lon)
+            x += w * cos(la) * cos(lo); y += w * cos(la) * sin(lo); z += w * sin(la)
+        }
+        add(home[0], home[1], 2.0)
+        for (t in targets) add(t.lat, t.lon, 1.0)
+        return Math.toDegrees(Math.atan2(z, sqrt(x * x + y * y))) to Math.toDegrees(Math.atan2(y, x))
+    }
+
     /** Точка большого круга между a и b (t 0..1). */
     private fun slerp(a: DoubleArray, b: DoubleArray, t: Double): DoubleArray {
         fun vec(p: DoubleArray): DoubleArray {
@@ -108,8 +119,10 @@ class GlobeView(ctx: Context) : View(ctx) {
             connecting -> (t * 25.0) % 360.0
             else -> 18.0 * sin(t / 3.5)
         }
-        vLat = (home[0] - 18).coerceIn(-30.0, 40.0)
-        vLon = home[1] + 12 + sway
+        // Смотрим на середину между домом и серверами (дом с двойным весом), чуть сверху
+        val (cLat, cLon) = viewCenter()
+        vLat = (cLat - 8).coerceIn(-35.0, 45.0)
+        vLon = cLon + sway
         val accent = Ui.GREEN
 
         // Шар: тёмная сфера с подсветкой края
@@ -158,7 +171,7 @@ class GlobeView(ctx: Context) : View(ctx) {
             for (s in 0..steps) {
                 val f = s / steps.toDouble()
                 val g = slerp(a, b, f)
-                val p = project(g[0], g[1], 1.0 + 0.18 * sin(PI * f))
+                val p = project(g[0], g[1], 1.0 + 0.25 * sin(PI * f))
                 val vis = p[2] > -0.15
                 if (vis && has) c.drawLine(px, py, p[0].toFloat(), p[1].toFloat(), line)
                 px = p[0].toFloat(); py = p[1].toFloat(); has = vis
@@ -179,7 +192,7 @@ class GlobeView(ctx: Context) : View(ctx) {
                 for (k in 0 until if (connecting) 1 else 3) {
                     val f = (phase + k / 3.0) % 1.0
                     val g = slerp(a, b, f)
-                    val p = project(g[0], g[1], 1.0 + 0.18 * sin(PI * f))
+                    val p = project(g[0], g[1], 1.0 + 0.25 * sin(PI * f))
                     if (p[2] > -0.15) {
                         fill.color = Color.WHITE
                         fill.setShadowLayer(dp(7f), 0f, 0f, accent)
