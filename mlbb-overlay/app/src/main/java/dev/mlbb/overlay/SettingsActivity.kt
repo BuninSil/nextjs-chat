@@ -140,7 +140,7 @@ class SettingsActivity : AppCompatActivity() {
             })
             addView(divider())
             addView(switchRow("Игры напрямую",
-                "Brawl Stars, Clash of Clans, Clash Royale, PUBG, Standoff 2, Free Fire, Genshin — мимо VPN, без лагов в бою. " +
+                "PUBG, Standoff 2, Free Fire, Genshin — мимо VPN, без лагов в бою. " +
                     "Выключи, если на мобильном интернете игра без VPN не заходит",
                 AppSettings.gamesDirect) {
                 AppSettings.gamesDirect = it; vpnChanged = true

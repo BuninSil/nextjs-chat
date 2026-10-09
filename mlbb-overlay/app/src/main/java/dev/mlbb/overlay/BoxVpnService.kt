@@ -310,6 +310,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 abroad = if (AppSettings.gameMode) null else ServerTester.abroadFor(this, selected),
                 bypassPort = bypassPort,
                 gamesDirect = AppSettings.gamesDirect,
+                games = ServerTester.gamesFor(this, selected),
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +

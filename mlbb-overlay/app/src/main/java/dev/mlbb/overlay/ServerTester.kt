@@ -492,10 +492,41 @@ object ServerTester {
             ?: selected
     }
 
-    /** Переключить группу «abroad» в ядре под текущий выбранный сервер. */
+    @Volatile private var lastGames: String? = null
+
+    /**
+     * Сервер для Brawl Stars и других игр Supercell: только зарубежный выход (Россию они не
+     * пускают), из них — с меньшим пингом. Протоколы с настоящим UDP (Hysteria2, TUIC) в
+     * приоритете, XHTTP — в последнюю очередь: UDP поверх HTTP в бою даёт лаги.
+     */
+    fun gamesFor(ctx: Context, selected: String): String? {
+        loadExits(ctx)
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) || exitsRussia(it) }
+            .filterNot { results.containsKey(it.tag) && results[it.tag] == null }
+        if (nodes.isEmpty()) return null
+        fun cost(n: Subscription.Node): Int {
+            val ms = results[n.tag]?.score ?: 400
+            val proto = when {
+                n.nativeUdp -> 0
+                n.xrayLink != null -> 120
+                else -> 30
+            }
+            // Уже выбранный сервер чуть в плюсе — без лишних прыжков между почти равными
+            return ms + proto - (if (n.tag == selected) 10 else 0)
+        }
+        return nodes.minByOrNull { cost(it) }?.tag
+    }
+
+    /** Переключить группы «abroad» и «games» в ядре под текущий выбранный сервер. */
     fun applyAbroad(ctx: Context) {
-        if (AppSettings.gameMode) return // игровой режим не трогаем
         val p = BoxVpnService.ports ?: return
+        gamesFor(ctx, AppSettings.selectedTag)?.let { g ->
+            if (ClashApi.select(p.api, p.secret, "games", g) && g != lastGames) {
+                lastGames = g
+                AppLog.srv("игры Supercell (Brawl Stars и др.) — через «${AppLog.name(ctx, g)}»")
+            }
+        }
+        if (AppSettings.gameMode) return // игровой режим не трогаем
         val sel = AppSettings.selectedTag
         val tag = abroadFor(ctx, sel)
         if (tag.isEmpty()) return

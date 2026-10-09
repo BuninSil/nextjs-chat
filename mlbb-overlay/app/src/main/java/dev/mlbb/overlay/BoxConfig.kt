@@ -65,16 +65,23 @@ object BoxConfig {
      * застревают в очереди, в бою лаги. Напрямую — как без VPN.
      */
     val GAMES_DIRECT = JSONArray(listOf(
-        // Supercell
-        "com.supercell.brawlstars", "com.supercell.clashofclans", "com.supercell.clashroyale",
-        "com.supercell.hayday", "com.supercell.boombeach", "com.supercell.squad",
         // PUBG Mobile, Standoff 2, Free Fire
         "com.tencent.ig", "com.pubg.krmobile", "com.vng.pubgmobile", "com.rekoo.pubgm",
         "com.axlebolt.standoff2", "com.dts.freefireth", "com.dts.freefiremax",
         // HoYoverse
         "com.miHoYo.GenshinImpact", "com.HoYoverse.hkrpgoversea",
     ))
-    val GAMES_DOMAINS = JSONArray(listOf(
+
+    /**
+     * Игры Supercell: игроков из России не пускают, нужен зарубежный выход. Идут через группу
+     * «games» — зарубежный сервер, выбранный под игру: настоящий UDP и низкий пинг
+     * важнее скорости загрузки (см. [ServerTester.gamesFor]).
+     */
+    val GAMES_ABROAD = JSONArray(listOf(
+        "com.supercell.brawlstars", "com.supercell.clashofclans", "com.supercell.clashroyale",
+        "com.supercell.hayday", "com.supercell.boombeach", "com.supercell.squad",
+    ))
+    val GAMES_ABROAD_DOMAINS = JSONArray(listOf(
         "supercell.com", "supercell.net", "brawlstarsgame.com", "clashofclans.com", "clashroyaleapp.com",
         "haydaygame.com", "boombeachgame.com",
     ))
@@ -111,27 +118,7 @@ object BoxConfig {
         ruDirect: Boolean = false,
         /** Блокировать рекламу и трекеры */
         adBlock: Boolean = false,
-        /**
-     * Онлайн-игры (кроме MLBB — у неё свой игровой режим), которые в России работают без VPN.
-     * Через VPN их UDP идёт поверх TCP/HTTP до зарубежного сервера — пинг растёт, пакеты
-     * застревают в очереди, в бою лаги. Напрямую — как без VPN.
-     */
-    val GAMES_DIRECT = JSONArray(listOf(
-        // Supercell
-        "com.supercell.brawlstars", "com.supercell.clashofclans", "com.supercell.clashroyale",
-        "com.supercell.hayday", "com.supercell.boombeach", "com.supercell.squad",
-        // PUBG Mobile, Standoff 2, Free Fire
-        "com.tencent.ig", "com.pubg.krmobile", "com.vng.pubgmobile", "com.rekoo.pubgm",
-        "com.axlebolt.standoff2", "com.dts.freefireth", "com.dts.freefiremax",
-        // HoYoverse
-        "com.miHoYo.GenshinImpact", "com.HoYoverse.hkrpgoversea",
-    ))
-    val GAMES_DOMAINS = JSONArray(listOf(
-        "supercell.com", "supercell.net", "brawlstarsgame.com", "clashofclans.com", "clashroyaleapp.com",
-        "haydaygame.com", "boombeachgame.com",
-    ))
-
-    /** Папка с наборами правил (.srs), см. [rulesDir] */
+        /** Папка с наборами правил (.srs), см. [rulesDir] */
         rulesPath: String = "",
         /** Выбор приложений: AppSettings.APPS_* и список пакетов */
         appsMode: Int = AppSettings.APPS_ALL,
@@ -144,6 +131,8 @@ object BoxConfig {
         bypassPort: Int? = null,
         /** Онлайн-игры ([GAMES_DIRECT]) мимо VPN */
         gamesDirect: Boolean = false,
+        /** Сервер для игр Supercell ([GAMES_ABROAD]); null — без группы */
+        games: String? = null,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -172,6 +161,14 @@ object BoxConfig {
             outbounds.put(
                 JSONObject().put("type", "selector").put("tag", "abroad")
                     .put("outbounds", tags).put("default", abroadTag)
+                    .put("interrupt_exist_connections", false)
+            )
+        }
+        val gamesTag = games?.takeIf { g -> (0 until tags.length()).any { tags.getString(it) == g } }
+        if (gamesTag != null) {
+            outbounds.put(
+                JSONObject().put("type", "selector").put("tag", "games")
+                    .put("outbounds", tags).put("default", gamesTag)
                     .put("interrupt_exist_connections", false)
             )
         }
@@ -223,7 +220,11 @@ object BoxConfig {
         if (gamesDirect) {
             // Brawl Stars и другие игры — напрямую: без лишнего круга через сервер и без лагов в бою
             rules.put(JSONObject().put("package_name", GAMES_DIRECT).put("outbound", "direct"))
-            rules.put(JSONObject().put("domain_suffix", GAMES_DOMAINS).put("outbound", "direct"))
+        }
+        if (gamesTag != null) {
+            // Brawl Stars и др. Supercell — через зарубежный сервер, подобранный под игру
+            rules.put(JSONObject().put("package_name", GAMES_ABROAD).put("outbound", "games"))
+            rules.put(JSONObject().put("domain_suffix", GAMES_ABROAD_DOMAINS).put("outbound", "games"))
         }
         if (adBlock && rulesPath.isNotEmpty()) {
             // Реклама и трекеры — соединение отклоняется
@@ -270,7 +271,6 @@ object BoxConfig {
         if (gamesDirect) {
             // Игры напрямую — и адреса их серверов настоящие, через DNS сети: ближайший к игроку сервер
             dnsRules.put(JSONObject().put("package_name", GAMES_DIRECT).put("server", "local"))
-            dnsRules.put(JSONObject().put("domain_suffix", GAMES_DOMAINS).put("server", "local"))
         }
         dnsRules.put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fakeip"))
         val dns = JSONObject()
