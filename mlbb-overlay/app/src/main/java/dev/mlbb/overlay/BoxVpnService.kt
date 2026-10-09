@@ -309,10 +309,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 // Только обычный режим: в игровом всё через выбранный сервер, как и было
                 abroad = if (AppSettings.gameMode) null else ServerTester.abroadFor(this, selected),
                 bypassPort = bypassPort,
+                gamesDirect = AppSettings.gamesDirect,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
-                "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
+                "РФ напрямую ${AppSettings.ruDirect}, игры напрямую ${AppSettings.gamesDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
                 "стек ${if (AppSettings.compatStack) "gvisor (совместимость)" else "mixed"}")
             val service = Libbox.newService(config, this)
             service.start()
