@@ -17,14 +17,14 @@ object SpeedTest {
      * close = true — соединение не переиспользуется. Важно: после смены сервера Android взял бы
      * уже открытое соединение, проложенное через ПРЕДЫДУЩИЙ сервер, и замер был бы не того сервера.
      */
-    private fun conn(path: String, close: Boolean = true): HttpURLConnection {
+    private fun conn(path: String, close: Boolean = true, timeoutMs: Int = 8000): HttpURLConnection {
         val mixed = BoxVpnService.ports?.mixed
         val c = if (mixed != null) URL(BASE + path).openConnection(
             java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", mixed))
         ) else URL(BASE + path).openConnection()
         return (c as HttpURLConnection).apply {
-            connectTimeout = 8000
-            readTimeout = 8000
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
             setRequestProperty("User-Agent", "fast-vpn")
             if (close) setRequestProperty("Connection", "close")
         }
@@ -91,7 +91,7 @@ object SpeedTest {
                 try {
                     val buf = ByteArray(64 * 1024)
                     while (System.currentTimeMillis() < deadline) {
-                        conn("/__down?bytes=25000000").inputStream.use { input ->
+                        conn("/__down?bytes=25000000", timeoutMs = 3000).inputStream.use { input ->
                             while (System.currentTimeMillis() < deadline) {
                                 val n = input.read(buf)
                                 if (n < 0) break
@@ -101,9 +101,10 @@ object SpeedTest {
                     }
                 } catch (_: Exception) {
                 }
-            }.apply { start() }
+            }.apply { isDaemon = true; start() }
         }
-        threads.forEach { it.join(3500 + 9000) }
+        // Зависший поток не ждём: замер всё равно считается только до deadline
+        threads.forEach { it.join(maxOf(1, deadline + 800 - System.currentTimeMillis())) }
         if (counted.get() < 50_000) return null
         val sec = (minOf(System.currentTimeMillis(), deadline) - warm) / 1000.0
         return counted.get() * 8 / sec / 1_000_000

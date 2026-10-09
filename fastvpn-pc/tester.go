@@ -288,7 +288,7 @@ func quickDownload() float64 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			cl := httpClient(proxy, 6*time.Second)
+			cl := httpClient(proxy, 4*time.Second)
 			for time.Now().Before(deadline) {
 				resp, err := cl.Get("https://speed.cloudflare.com/__down?bytes=25000000")
 				if err != nil {
@@ -334,14 +334,28 @@ func pickFastest(ranked []string, candidates int, progress func(done, total int)
 		}
 	}
 	defer clashProbe(getSettings().SelectedTag)
+	if len(order) > candidates*2 {
+		order = order[:candidates*2]
+	}
+	// Живы ли — проверяем все кандидаты разом, а не по очереди (раньше это и тянуло время)
+	alive := make([]bool, len(order))
+	var wg sync.WaitGroup
+	for i, tag := range order {
+		wg.Add(1)
+		go func(i int, tag string) {
+			defer wg.Done()
+			alive[i] = clashDelay(tag, checkURL, 3000) > 0
+		}(i, tag)
+	}
+	wg.Wait()
 	checked := 0
 	best := ""
 	bestSpeed, currentSpeed := 0.0, -1.0
 	for i, tag := range order {
-		if checked >= candidates || i >= candidates*2 || !core.Running() {
+		if checked >= candidates || !core.Running() {
 			break
 		}
-		if clashDelay(tag, checkURL, 4000) == 0 {
+		if !alive[i] {
 			setResult(tag, nil)
 			continue
 		}

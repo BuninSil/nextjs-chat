@@ -70,7 +70,7 @@ class ServersActivity : AppCompatActivity() {
                     text = Ui.iconText(this@ServersActivity, R.drawable.ic_bolt, "Обход блокировок без сервера", 18f)
                 })
                 addView(Ui.text(this@ServersActivity,
-                    if (on) "Включено. YouTube, Discord и другие идут напрямую — без VPN-сервера и без трафика подписки. Чтобы вернуться на сервер — выбери его в списке ниже"
+                    if (on) "Включено. YouTube, Discord и другие идут напрямую — без VPN-сервера и без трафика подписки. Нажми ещё раз, чтобы выключить и вернуться на сервер"
                     else "YouTube, Discord и другие — напрямую, без VPN-сервера: бесплатно, полная скорость, не тратит трафик подписки. Работает не у всех провайдеров — способ подберётся сам",
                     12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
                 setOnClickListener { pickBypass() }
@@ -215,7 +215,7 @@ class ServersActivity : AppCompatActivity() {
         withVpn("Ищу самый быстрый", onStop = {}) { say ->
             say("Меряю пинг до серверов…")
             val ranked = ServerTester.measure(applicationContext) { done, total -> say("Пинг: $done из $total") }
-            val best = ServerTester.pickFastest(applicationContext, ranked, 8) { done, total ->
+            val best = ServerTester.pickFastest(applicationContext, ranked, 6) { done, total ->
                 say("Скорость: сервер $done из $total")
             }
             val n = Subscription.usable(applicationContext).firstOrNull { it.tag == best }
@@ -246,14 +246,31 @@ class ServersActivity : AppCompatActivity() {
     }
 
     private fun pickBypass() {
-        if (AppSettings.selectedTag == XrayCore.BYPASS) return
-        AppLog.ui("выбрал «Обход блокировок без сервера»")
-        AppSettings.autoSelect = false
-        AppSettings.selectedTag = XrayCore.BYPASS
+        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        val turningOff = AppSettings.selectedTag == XrayCore.BYPASS
+        if (turningOff) {
+            // Выключаем обход — обратно на сервер, который был до него, и автовыбор, если был включён
+            val before = prefs.getString("beforeBypass", null)
+            val nodes = Subscription.usable(this).filterNot { ServerTester.isSeparator(it) }
+            val back = nodes.firstOrNull { it.tag == before } ?: nodes.firstOrNull()
+            if (back == null) {
+                Toast.makeText(this, "В подписке нет серверов — обход не выключить", Toast.LENGTH_LONG).show()
+                return
+            }
+            AppLog.ui("выключил «Обход блокировок без сервера» — обратно на «${Ui.cleanName(back)}»")
+            AppSettings.autoSelect = prefs.getBoolean("beforeBypassAuto", true)
+            AppSettings.selectedTag = back.tag
+        } else {
+            AppLog.ui("выбрал «Обход блокировок без сервера»")
+            prefs.edit().putString("beforeBypass", AppSettings.selectedTag)
+                .putBoolean("beforeBypassAuto", AppSettings.autoSelect).apply()
+            AppSettings.autoSelect = false
+            AppSettings.selectedTag = XrayCore.BYPASS
+        }
         AppSettings.save(this)
         if (BoxVpnService.isRunning) {
             // Нужен перезапуск ядра: в обходе отключается QUIC, чтобы YouTube шёл по TCP
-            Toast.makeText(this, "Переключаю на обход блокировок…", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (turningOff) "Возвращаю на сервер…" else "Переключаю на обход блокировок…", Toast.LENGTH_SHORT).show()
             val ctx = applicationContext
             Thread {
                 BoxVpnService.stop(ctx, manual = false)

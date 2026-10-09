@@ -77,13 +77,18 @@ object ServerTester {
         var bestSpeed = 0.0
         var currentSpeed: Double? = null
         val order = (listOf(current).filter { t -> ranked.contains(t) } + ranked.filter { it != current }).take(candidates * 2)
+        // Живы ли — проверяем все кандидаты разом, а не по очереди (раньше это и тянуло время)
+        val alive = ConcurrentHashMap.newKeySet<String>()
+        val pool = Executors.newFixedThreadPool(order.size.coerceIn(1, 12))
+        for (tag in order) pool.execute {
+            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 3000) != null) alive.add(tag) else results.put(tag, null)
+        }
+        pool.shutdown()
+        pool.awaitTermination(6, TimeUnit.SECONDS)
         try {
             for (tag in order) {
                 if (checked >= candidates || !BoxVpnService.isRunning) break
-                if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
-                    results.put(tag, null)
-                    continue
-                }
+                if (tag !in alive) continue
                 if (!probe(p, tag)) continue
                 checked++
                 progress(checked, candidates)
