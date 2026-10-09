@@ -31,6 +31,34 @@ object BoxConfig {
         "rutube.ru", "dzen.ru", "2gis.com", "kaspersky.com",
     ))
 
+    /**
+     * Сервисы, заблокированные в России: через сервер с выходом в России они не работают.
+     * Их трафик всегда идёт через группу «abroad» — выбранный сервер, если он зарубежный,
+     * иначе лучший зарубежный (переключает [ServerTester.applyAbroad]).
+     */
+    val BLOCKED_PACKAGES = JSONArray(listOf(
+        // Telegram и клиенты
+        "org.telegram.messenger", "org.telegram.messenger.web", "org.telegram.messenger.beta", "org.telegram.plus",
+        "org.thunderdog.challegram", "tw.nekomimi.nekogram", "xyz.nextalone.nagram", "com.radolyn.ayugram",
+        "uz.unnarsx.cherrygram", "com.exteragram.messenger", "ir.ilmili.telegraph",
+        // YouTube
+        "com.google.android.youtube", "com.google.android.apps.youtube.music", "app.revanced.android.youtube",
+        "app.rvx.android.youtube", "com.vanced.android.youtube",
+        // Meta, X, Discord и др.
+        "com.instagram.android", "com.instagram.barcelona", "com.facebook.katana", "com.facebook.orca", "com.whatsapp",
+        "com.twitter.android", "com.discord", "com.openai.chatgpt", "com.spotify.music", "com.linkedin.android",
+        "com.viber.voip", "com.snapchat.android", "com.patreon.android", "tv.twitch.android.app",
+    ))
+    val BLOCKED_DOMAINS = JSONArray(listOf(
+        "telegram.org", "telegram.me", "t.me", "telesco.pe", "tdesktop.com", "tg.dev", "telegra.ph", "graph.org",
+        "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com",
+        "instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net", "fb.com", "messenger.com", "threads.net",
+        "whatsapp.com", "whatsapp.net", "x.com", "twitter.com", "twimg.com", "t.co",
+        "discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media",
+        "openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "spotify.com", "scdn.co",
+        "linkedin.com", "licdn.com", "viber.com", "twitch.tv", "ttvnw.net", "patreon.com", "medium.com", "soundcloud.com",
+    ))
+
     /** Папка с наборами правил: копируются из APK при первом запуске и после обновлений. */
     fun rulesDir(ctx: android.content.Context): String {
         val dir = java.io.File(ctx.filesDir, "rules").apply { mkdirs() }
@@ -70,6 +98,8 @@ object BoxConfig {
         appsList: Set<String> = emptySet(),
         /** Режим совместимости — стек gVisor */
         compatStack: Boolean = false,
+        /** Сервер для заблокированных в России сервисов (см. [BLOCKED_DOMAINS]); null — без группы */
+        abroad: String? = null,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -87,6 +117,14 @@ object BoxConfig {
                 .put("outbounds", tags).put("default", selected)
                 .put("interrupt_exist_connections", false)
         )
+        val abroadTag = abroad?.takeIf { a -> (0 until tags.length()).any { tags.getString(it) == a } }
+        if (abroadTag != null) {
+            outbounds.put(
+                JSONObject().put("type", "selector").put("tag", "abroad")
+                    .put("outbounds", tags).put("default", abroadTag)
+                    .put("interrupt_exist_connections", false)
+            )
+        }
         outbounds.put(JSONObject().put("type", "direct").put("tag", "direct"))
 
         val tun = JSONObject()
@@ -128,6 +166,11 @@ object BoxConfig {
             // Реклама и трекеры — соединение отклоняется
             ruleSet("ads", "geosite-category-ads-all.srs")
             rules.put(JSONObject().put("rule_set", JSONArray().put("ads")).put("action", "reject"))
+        }
+        if (abroadTag != null) {
+            // Telegram, YouTube и другие заблокированные сервисы — всегда через зарубежный выход
+            rules.put(JSONObject().put("package_name", BLOCKED_PACKAGES).put("outbound", "abroad"))
+            rules.put(JSONObject().put("domain_suffix", BLOCKED_DOMAINS).put("outbound", "abroad"))
         }
         if (ruDirect) {
             // Российские сайты напрямую: банки и Госуслуги не пускают с зарубежных адресов, а

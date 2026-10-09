@@ -6,8 +6,15 @@ import java.io.File
 
 /** Ловим падения, чтобы показать причину при следующем запуске. */
 class App : Application() {
+    companion object {
+        /** Контекст приложения — для фоновых мест без своего Context */
+        lateinit var ctx: android.content.Context
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
+        ctx = applicationContext
         AppLog.init(this)
         // Переходы между экранами — в журнал
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {

@@ -82,6 +82,7 @@ object ServerTester {
         ClashApi.select(p.api, p.secret, "proxy", chosen)
         AppSettings.selectedTag = chosen
         AppSettings.save(ctx)
+        applyAbroad(ctx)
         return chosen
     }
 
@@ -179,6 +180,11 @@ object ServerTester {
             // зарубежные — только запасным вариантом
             val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { isRussian(it) } == true }
             ranked = ru + other
+        } else {
+            // Обычный режим: VPN с выходом в России ничего не разблокирует (Telegram, YouTube…) —
+            // такие серверы только запасным вариантом
+            val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { exitsRussia(it) } == true }
+            ranked = other + ru
         }
         // Избранные пользователем — в начало, порядок внутри сохраняется
         val (fav, rest) = ranked.partition { tag -> byTag[tag]?.let { Subscription.isFavorite(it) } == true }
@@ -219,6 +225,7 @@ object ServerTester {
         ClashApi.select(p.api, p.secret, "proxy", best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)
+        applyAbroad(ctx)
         return best
     }
 
@@ -444,7 +451,56 @@ object ServerTester {
         if (ok) {
             AppSettings.selectedTag = tag
             AppSettings.save(ctx)
+            applyAbroad(ctx)
         }
         return ok
+    }
+
+    // ------------------- заблокированные сервисы — через зарубежный сервер -------------------
+
+    /**
+     * Выход в интернет в России: по проверенной стране выхода, а пока она не известна — по названию.
+     * Без базы IP: серверы «для белых списков» стоят в России, но выходят за границей.
+     */
+    fun exitsRussia(n: Subscription.Node): Boolean {
+        exitCountry[n.tag]?.let { return it == "RU" }
+        val name = n.name.lowercase()
+        return ruWords.any { name.contains(it) }
+    }
+
+    /** Страна выхода выбранного сервера узнана из «Моего IP» — запоминаем. */
+    fun rememberExit(ctx: Context, tag: String, country: String) {
+        if (tag.isEmpty() || country.length != 2 || exitCountry[tag] == country) return
+        loadExits(ctx)
+        exitCountry[tag] = country
+        saveExits(ctx)
+        applyAbroad(ctx)
+    }
+
+    /**
+     * Через какой сервер пускать Telegram, YouTube и прочее заблокированное: через выбранный,
+     * если он выходит за границей, иначе — через лучший зарубежный.
+     */
+    fun abroadFor(ctx: Context, selected: String): String {
+        loadExits(ctx)
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
+        val sel = nodes.firstOrNull { it.tag == selected }
+        if (sel != null && !exitsRussia(sel)) return selected
+        val byTag = nodes.associateBy { it.tag }
+        return results.ranked().firstOrNull { t -> byTag[t]?.let { !exitsRussia(it) } == true }
+            ?: nodes.firstOrNull { !exitsRussia(it) && !(results.containsKey(it.tag) && results[it.tag] == null) }?.tag
+            ?: selected
+    }
+
+    /** Переключить группу «abroad» в ядре под текущий выбранный сервер. */
+    fun applyAbroad(ctx: Context) {
+        if (AppSettings.gameMode) return // игровой режим не трогаем
+        val p = BoxVpnService.ports ?: return
+        val sel = AppSettings.selectedTag
+        val tag = abroadFor(ctx, sel)
+        if (tag.isEmpty()) return
+        if (ClashApi.select(p.api, p.secret, "abroad", tag) && tag != sel) {
+            AppLog.srv("выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «${AppLog.name(ctx, tag)}»")
+        }
     }
 }

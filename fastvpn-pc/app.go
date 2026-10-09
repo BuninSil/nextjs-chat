@@ -207,6 +207,7 @@ func (a *App) SelectServer(tag string) {
 	withSettings(func(s *Settings) { s.SelectedTag = tag; s.AutoSelect = false })
 	if core.Running() {
 		clashSelect(tag)
+		applyAbroad()
 		myIPInvalidate()
 	}
 	trayRefresh()

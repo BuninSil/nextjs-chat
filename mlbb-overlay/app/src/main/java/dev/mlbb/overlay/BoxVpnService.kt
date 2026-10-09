@@ -277,6 +277,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 appsMode = AppSettings.appsMode,
                 appsList = AppSettings.appsList,
                 compatStack = AppSettings.compatStack,
+                // Только обычный режим: в игровом всё через выбранный сервер, как и было
+                abroad = if (AppSettings.gameMode) null else ServerTester.abroadFor(this, selected),
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +

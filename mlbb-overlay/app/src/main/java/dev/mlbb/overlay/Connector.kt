@@ -145,6 +145,9 @@ object Connector {
 
     @Volatile private var watchdog: Thread? = null
 
+    /** Как часто искать сервер быстрее, пока VPN работает (обычный режим, автовыбор) */
+    private const val RERANK_MS = 30 * 60 * 1000L
+
     /**
      * Обычный режим: раз в 30 секунд проверяет, что сервер отвечает. Два провала подряд —
      * тихо переключает на первый рабочий. В игровом режиме не запускается.
@@ -153,9 +156,36 @@ object Connector {
         if (watchdog?.isAlive == true) return
         watchdog = Thread {
             var fails = 0
+            var lastRank = System.currentTimeMillis()
             while (BoxVpnService.isRunning && !AppSettings.gameMode && AppSettings.autoSelect) {
                 try { Thread.sleep(30_000) } catch (_: InterruptedException) { break }
                 if (!BoxVpnService.isRunning || busy) continue
+                // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
+                // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
+                if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
+                    ServerTester.netKey(ctx) != "none"
+                ) {
+                    lastRank = System.currentTimeMillis()
+                    val before = AppSettings.selectedTag
+                    busy = true
+                    try {
+                        busyText = "Ищу сервер побыстрее…"
+                        Widget.update(ctx)
+                        AppLog.conn("плановая проверка: нет ли сервера быстрее")
+                        val ranked = ServerTester.measure(ctx) { _, _ -> }
+                        if (ranked.isNotEmpty() && BoxVpnService.isRunning) {
+                            ServerTester.pickFastest(ctx, ranked)
+                            ServerTester.markRanked(ctx)
+                            if (AppSettings.selectedTag != before) {
+                                AppLog.conn("плановая проверка: переключил на «${nodeName(ctx, AppSettings.selectedTag)}»")
+                            }
+                        }
+                    } finally {
+                        busy = false
+                        Widget.update(ctx)
+                    }
+                    continue
+                }
                 if (ServerTester.alive(AppSettings.selectedTag)) { fails = 0; continue }
                 // Без сети менять сервер бесполезно
                 if (ServerTester.netKey(ctx) == "none") continue

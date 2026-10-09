@@ -172,6 +172,16 @@ func measure(progress func(done, total int)) []string {
 	wg.Wait()
 	ranked := rankedTags()
 	logf("SRV", "пинг до серверов: ответили %d из %d", len(ranked), len(cand))
+	// VPN с выходом в России ничего не разблокирует (Telegram, YouTube…) — такие только запасным вариантом
+	var other, ru []string
+	for _, t := range ranked {
+		if n := nodeByTag(t); n != nil && exitsRussia(*n) {
+			ru = append(ru, t)
+		} else {
+			other = append(other, t)
+		}
+	}
+	ranked = append(other, ru...)
 	// Избранные — в начало, порядок внутри сохраняется
 	favs := getSettings().Favorites
 	var fav, rest []string
@@ -188,6 +198,59 @@ func measure(progress func(done, total int)) []string {
 func selectTag(tag string) {
 	clashSelect(tag)
 	withSettings(func(s *Settings) { s.SelectedTag = tag })
+	applyAbroad()
+}
+
+// exitsRussia — выход в интернет в России: по проверенной стране выхода, пока не известна — по названию.
+func exitsRussia(n Node) bool {
+	if c, ok := getSettings().Exits[n.Tag]; ok {
+		return c == "RU"
+	}
+	name := strings.ToLower(n.Name)
+	for _, w := range ruWords {
+		if strings.Contains(name, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// abroadFor — через какой сервер пускать Telegram, YouTube и прочее заблокированное:
+// через выбранный, если он выходит за границей, иначе через лучший зарубежный.
+func abroadFor(selected string) string {
+	if n := nodeByTag(selected); n == nil || !exitsRussia(*n) {
+		return selected
+	}
+	for _, t := range rankedTags() {
+		if n := nodeByTag(t); n != nil && !isSeparator(*n) && !exitsRussia(*n) {
+			return t
+		}
+	}
+	for _, n := range usableNodes(false) {
+		if r, ok := getResult(n.Tag); !isSeparator(n) && !exitsRussia(n) && !(ok && r == nil) {
+			return n.Tag
+		}
+	}
+	return selected
+}
+
+// applyAbroad — переключить группу «abroad» в ядре под выбранный сервер.
+func applyAbroad() {
+	if !core.Running() {
+		return
+	}
+	sel := getSettings().SelectedTag
+	tag := abroadFor(sel)
+	if tag == "" {
+		return
+	}
+	r, err := clashReq(core.Ports(), "PUT", "/proxies/abroad", map[string]string{"name": tag}, 3*time.Second)
+	if err == nil {
+		r.Body.Close()
+		if tag != sel {
+			logf("SRV", "выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «%s»", nameOf(tag))
+		}
+	}
 }
 
 // pickWorking — первый по списку сервер, через который реально проходит запрос.
@@ -435,6 +498,7 @@ func switchNext() *Node {
 		}
 		if clashDelay(n.Tag, checkURL, 3000) > 0 {
 			withSettings(func(st *Settings) { st.SelectedTag = n.Tag; st.AutoSelect = false })
+			applyAbroad()
 			logf("SRV", "сменил сервер на «%s»", cleanName(n))
 			return &n
 		}

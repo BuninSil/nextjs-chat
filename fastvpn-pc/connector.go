@@ -144,10 +144,30 @@ func watchdog() {
 	}
 	defer watchdogOn.Store(false)
 	fails := 0
+	lastRank := time.Now()
 	for core.Running() {
 		time.Sleep(30 * time.Second)
 		s := getSettings()
 		if !core.Running() || !s.AutoSelect || busy.Load() {
+			continue
+		}
+		// Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео (больше ~1,5 МБ/с)
+		trafMu.Lock()
+		down := downBps
+		trafMu.Unlock()
+		if time.Since(lastRank) > 30*time.Minute && down < 1_500_000 {
+			lastRank = time.Now()
+			busy.Store(true)
+			setBusy("Ищу сервер побыстрее…")
+			logf("CONN", "плановая проверка: нет ли сервера быстрее")
+			if ranked := measure(nil); len(ranked) > 0 && core.Running() {
+				pickFastest(ranked, 6, nil)
+				myIPInvalidate()
+				withSettings(func(st *Settings) { st.RankAt = time.Now().UnixMilli() })
+			}
+			setBusy("")
+			busy.Store(false)
+			trayRefresh()
 			continue
 		}
 		if clashDelay(s.SelectedTag, checkURL, 4000) > 0 {
@@ -255,6 +275,11 @@ func refreshMyIP(force bool) {
 		ipMu.Lock()
 		myIP, myCountry, ipKey, ipAt, ipLoading = ip, c, key, time.Now(), false
 		ipMu.Unlock()
+		if ip != "" && key != "" && c != "" && getSettings().Exits[key] != c {
+			// Через VPN — это страна выхода выбранного сервера: запоминаем для подбора
+			withSettings(func(s *Settings) { s.Exits[key] = c })
+			applyAbroad()
+		}
 		if ip != "" {
 			// Сам адрес в журнал не пишем — он попадёт в отчёт
 			via := "без VPN"

@@ -27,6 +27,21 @@ var ruSuffixes = []string{
 	"rutube.ru", "dzen.ru", "2gis.com", "kaspersky.com",
 }
 
+// Заблокированные в России сервисы: через сервер с выходом в России не работают —
+// их трафик всегда идёт через группу «abroad» (выбранный сервер, если он зарубежный, иначе лучший зарубежный).
+var blockedProcs = []string{"Telegram.exe", "AyuGram.exe", "Kotatogram.exe", "64Gram.exe", "Discord.exe", "Update.exe",
+	"WhatsApp.exe", "Spotify.exe", "ChatGPT.exe"}
+
+var blockedDomains = []string{
+	"telegram.org", "telegram.me", "t.me", "telesco.pe", "tdesktop.com", "tg.dev", "telegra.ph", "graph.org",
+	"youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com",
+	"instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net", "fb.com", "messenger.com", "threads.net",
+	"whatsapp.com", "whatsapp.net", "x.com", "twitter.com", "twimg.com", "t.co",
+	"discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media",
+	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "spotify.com", "scdn.co",
+	"linkedin.com", "licdn.com", "viber.com", "twitch.tv", "ttvnw.net", "patreon.com", "medium.com", "soundcloud.com",
+}
+
 type Ports struct {
 	API    int
 	Secret string
@@ -58,8 +73,16 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 	}
 	outbounds = append(outbounds,
 		obj{"type": "selector", "tag": "proxy", "outbounds": tags, "default": selected, "interrupt_exist_connections": false},
-		obj{"type": "direct", "tag": "direct"},
 	)
+	abroad := ""
+	if len(tags) > 0 {
+		abroad = abroadFor(selected)
+		if !contains(tags, abroad) {
+			abroad = selected
+		}
+		outbounds = append(outbounds, obj{"type": "selector", "tag": "abroad", "outbounds": tags, "default": abroad, "interrupt_exist_connections": false})
+	}
+	outbounds = append(outbounds, obj{"type": "direct", "tag": "direct"})
 
 	tun := obj{
 		"type": "tun", "tag": "tun-in",
@@ -87,6 +110,11 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		case 2: // все, кроме выбранных
 			rules = append(rules, obj{"process_name": s.AppsList, "outbound": "direct"})
 		}
+	}
+	if abroad != "" {
+		// Telegram, YouTube и другие заблокированные сервисы — всегда через зарубежный выход
+		rules = append(rules, obj{"process_name": blockedProcs, "outbound": "abroad"},
+			obj{"domain_suffix": blockedDomains, "outbound": "abroad"})
 	}
 	var ruleSets []any
 	addSet := func(tag, file string) {
