@@ -47,6 +47,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         private const val ACTION_STOP = "dev.mlbb.overlay.BOX_STOP"
         /** Включение из уведомления автоподключения */
         const val ACTION_AUTO = "dev.mlbb.overlay.BOX_AUTO"
+        /** Сеть, через которую сейчас ходит ядро (лучшая без VPN, как её выбрал Android) */
+        @Volatile var coreNetwork: Network? = null
         /** «Сменить сервер» из уведомления */
         private const val ACTION_NEXT = "dev.mlbb.overlay.BOX_NEXT"
 
@@ -451,6 +453,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             private fun update(network: Network?) {
                 val lp: LinkProperties? = network?.let { cm.getLinkProperties(it) }
                 val name = lp?.interfaceName
+                coreNetwork = if (name != null) network else null
                 if (name == null) {
                     if (lastKey != "") {
                         lastKey = ""
@@ -503,6 +506,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         networkCallback?.let { try { cm.unregisterNetworkCallback(it) } catch (_: Exception) {} }
         networkCallback = null
+        coreNetwork = null
     }
 
     override fun getInterfaces(): NetworkInterfaceIterator {

@@ -129,14 +129,31 @@ object ServerTester {
     /** Строки-разделители в подписках («Локации под обход ⬇️») — не серверы. */
     fun isSeparator(n: Subscription.Node) = n.name.contains("⬇") || n.name.contains("⬆")
 
-    /** «Настоящая» сеть телефона (Wi-Fi/мобильная), не VPN. */
+    /**
+     * «Настоящая» сеть телефона (Wi-Fi/мобильная), не VPN — та, через которую реально идёт трафик.
+     * Не первая попавшаяся: Xiaomi и др. держат мобильный интернет поднятым рядом с Wi-Fi, и пинг
+     * уходил через мобильную сеть (с её белыми списками) — у серверов были кресты, хотя Wi-Fi работал.
+     */
     private fun underlying(ctx: Context): Network? {
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
+        fun real(n: Network?) = n?.let { cm.getNetworkCapabilities(it) }?.let {
+            it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                it.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        } == true
+        // VPN включён — та же сеть, что у ядра
+        BoxVpnService.coreNetwork?.takeIf { BoxVpnService.isRunning && real(it) }?.let { return it }
+        // VPN выключен — сеть по умолчанию
+        cm.activeNetwork?.takeIf { real(it) }?.let { return it }
+        // Иначе лучшая из настоящих: рабочая (проверенная Android), Wi-Fi > кабель > мобильная
         @Suppress("DEPRECATION")
-        return cm.allNetworks.firstOrNull {
-            val c = cm.getNetworkCapabilities(it) ?: return@firstOrNull false
-            c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        return cm.allNetworks.filter { real(it) }.maxByOrNull { n ->
+            val c = cm.getNetworkCapabilities(n) ?: return@maxByOrNull 0
+            (if (c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) 10 else 0) + when {
+                c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> 3
+                c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> 2
+                c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> 1
+                else -> 0
+            }
         }
     }
 

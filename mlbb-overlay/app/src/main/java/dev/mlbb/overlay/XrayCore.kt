@@ -72,6 +72,8 @@ object XrayCore {
         q("host")?.let { xhttp.put("host", it) }
         q("extra")?.let { e -> try { xhttp.put("extra", JSONObject(e)) } catch (_: Exception) {} }
         stream.put("xhttpSettings", xhttp)
+        // Адрес сервера — через DNS из конфига (см. [dns]): системного резолвера у Xray на Android нет
+        stream.put("sockopt", JSONObject().put("domainStrategy", "UseIPv4"))
         out.put("streamSettings", stream)
         return out
     }
@@ -90,6 +92,28 @@ object XrayCore {
         Triple("tlshello", "3-5", "5-10"),
         Triple("1-2", "10-20", "5-10"),
     )
+
+    /**
+     * DNS для Xray. Без него Xray на Android ищет адреса через [::1]:53, где ничего нет, — обход
+     * блокировок не открывал ни одного сайта по имени. Сначала зашифрованный DNS (провайдер не
+     * подменит ответ для заблокированных сайтов), запасной — DNS самой сети.
+     */
+    private fun dns(ctx: Context): JSONObject {
+        val servers = JSONArray()
+            .put("https+local://1.1.1.1/dns-query")
+            .put("https+local://8.8.8.8/dns-query")
+        try {
+            val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+            // Ядро ещё не подняло VPN — сеть по умолчанию и есть настоящая
+            val net = BoxVpnService.coreNetwork ?: cm.activeNetwork
+            if (net != null) {
+                cm.getLinkProperties(net)?.dnsServers?.filterIsInstance<java.net.Inet4Address>()
+                    ?.forEach { servers.put(it.hostAddress) }
+            }
+        } catch (_: Exception) {}
+        servers.put("77.88.8.8")
+        return JSONObject().put("servers", servers).put("queryStrategy", "UseIPv4")
+    }
 
     private var lastNodes: Map<String, Pair<String, Int>> = emptyMap()
     private var lastBypassPort: Int? = null
@@ -115,14 +139,16 @@ object XrayCore {
             val (packets, length, interval) = BYPASS_PRESETS[AppSettings.bypassPreset.coerceIn(0, BYPASS_PRESETS.size - 1)]
             inbounds.put(JSONObject().put("tag", "in-$BYPASS").put("listen", "127.0.0.1").put("port", bypassPort)
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
-            outbounds.put(JSONObject().put("tag", BYPASS).put("protocol", "freedom").put("settings", JSONObject()
-                .put("domainStrategy", "UseIPv4")
-                .put("fragment", JSONObject().put("packets", packets).put("length", length).put("interval", interval))))
+            outbounds.put(JSONObject().put("tag", BYPASS).put("protocol", "freedom")
+                .put("settings", JSONObject()
+                    .put("fragment", JSONObject().put("packets", packets).put("length", length).put("interval", interval)))
+                .put("streamSettings", JSONObject().put("sockopt", JSONObject().put("domainStrategy", "UseIPv4"))))
             rules.put(JSONObject().put("type", "field").put("inboundTag", JSONArray().put("in-$BYPASS")).put("outboundTag", BYPASS))
         }
         outbounds.put(JSONObject().put("tag", "direct").put("protocol", "freedom"))
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
+            .put("dns", dns(ctx))
             .put("inbounds", inbounds)
             .put("outbounds", outbounds)
             .put("routing", JSONObject().put("rules", rules))
