@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- «Не беспокоить» на время матча MLBB -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -67,6 +69,10 @@
 
         <activity
             android:name=".AppearanceActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".MatchesActivity"
             android:exported="false" />
 
         <service

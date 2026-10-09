@@ -163,6 +163,21 @@ class SettingsActivity : AppCompatActivity() {
             addView(switchRow("Матч напрямую", "UDP матча мимо VPN — минимальный пинг, если оператор пускает", AppSettings.battleDirect) {
                 AppSettings.battleDirect = it; vpnChanged = true
             })
+            addView(divider())
+            addView(switchRow("«Не беспокоить» в бою",
+                "Матч начался — уведомления не всплывают поверх игры (будильники и звонки избранных проходят). Закончился — всё как было",
+                AppSettings.battleDnd) {
+                AppSettings.battleDnd = it
+                AppSettings.save(this@SettingsActivity)
+                // Android пускает менять «Не беспокоить» только с разрешения — открываем его экран
+                if (it && !MatchTracker.dndAllowed(this@SettingsActivity)) {
+                    Toast.makeText(this@SettingsActivity, "Разреши Fast VPN доступ к режиму «Не беспокоить»", Toast.LENGTH_LONG).show()
+                    try {
+                        startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                    } catch (_: Exception) {
+                    }
+                }
+            })
         })
 
         // ---------- Автоподключение ----------

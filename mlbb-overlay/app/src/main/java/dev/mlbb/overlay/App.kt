@@ -24,6 +24,7 @@ class App : Application() {
                 is SettingsActivity -> "Настройки"
                 is AppsActivity -> "Приложения через VPN"
                 is LogActivity -> "Лог соединений"
+                is MatchesActivity -> "Матчи"
                 else -> a.javaClass.simpleName
             }
             override fun onActivityResumed(a: android.app.Activity) = AppLog.ui("открыт экран «${name(a)}»")

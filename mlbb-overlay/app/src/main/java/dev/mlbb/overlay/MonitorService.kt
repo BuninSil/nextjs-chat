@@ -51,6 +51,8 @@ class MonitorService : Service() {
 
         @Volatile
         var lastPing: Pinger.Result? = null
+        /** Номер последнего замера пинга — чтобы [MatchTracker] не посчитал один замер дважды */
+        @Volatile var pingSeq = 0L
             private set
 
         /** apiPort > 0 — Clash API нашего встроенного ядра (порт/секрет известны заранее). */
@@ -209,6 +211,7 @@ class MonitorService : Service() {
                 ConnTracker.battleServer()?.let {
                     pinger.probe(it.conn.dstIp)
                     lastPing = pinger.last
+                    pingSeq++
                 }
                 try {
                     Thread.sleep(2000)
@@ -262,8 +265,15 @@ class MonitorService : Service() {
     }
 
     private fun refreshOverlay() {
-        val ov = overlay ?: return
         val battle = ConnTracker.battleServer()
+        // Режим боя и статистика матчей — по боевому трафику игры, даже без плашки
+        run {
+            val active = battle != null && (!ConnTracker.metricBytes || battle.pktsLast10s >= MIN_BATTLE_BYTES)
+            val g = battle?.let { GeoDb.lookup(it.conn.dstIp) }
+            val p = pinger.last?.takeIf { battle != null && it.ip == battle.conn.dstIp }
+            MatchTracker.tick(this, active, g?.countryCode?.uppercase() ?: "", g?.city?.ifEmpty { g.country } ?: "", p?.ms, pingSeq)
+        }
+        val ov = overlay ?: return
         if (battle == null) {
             ov.update("MLBB: жду трафик игры…", OverlayController.COLOR_UNKNOWN)
             return
@@ -309,6 +319,7 @@ class MonitorService : Service() {
     }
 
     private fun stopMonitor() {
+        MatchTracker.finish(this)
         handler.removeCallbacks(ticker)
         isRunning = false
         ConnTracker.battleOverride = null
