@@ -156,6 +156,13 @@ object BoxConfig {
                 .put("outbounds", tags).put("default", selected)
                 .put("interrupt_exist_connections", false)
         )
+        // «probe» — только для собственных замеров приложения (вход mixed): проверка серверов
+        // переключает его, а не «proxy», и трафик пользователя не скачет по проверяемым серверам
+        outbounds.put(
+            JSONObject().put("type", "selector").put("tag", "probe")
+                .put("outbounds", tags).put("default", selected)
+                .put("interrupt_exist_connections", false)
+        )
         val abroadTag = abroad?.takeIf { a -> (0 until tags.length()).any { tags.getString(it) == a } }
         if (abroadTag != null) {
             outbounds.put(
@@ -212,10 +219,9 @@ object BoxConfig {
             // В обходе без сервера QUIC (UDP 443) не пробить — отклоняем, приложения сразу идут по TCP
             rules.put(JSONObject().put("network", "udp").put("port", 443).put("action", "reject"))
         }
-        if (abroadTag != null) {
-            // Свои замеры приложения (скорость, «Мой IP», страна выхода) — строго через выбранный сервер
-            rules.put(JSONObject().put("inbound", JSONArray().put("mixed-in")).put("outbound", "proxy"))
-        }
+        // Свои замеры приложения (скорость, «Мой IP», страна выхода) — через «probe»: это выбранный
+        // сервер, а на время проверки — проверяемый
+        rules.put(JSONObject().put("inbound", JSONArray().put("mixed-in")).put("outbound", "probe"))
         val ruleSets = JSONArray()
         fun ruleSet(tag: String, file: String) {
             ruleSets.put(JSONObject().put("type", "local").put("tag", tag).put("format", "binary")

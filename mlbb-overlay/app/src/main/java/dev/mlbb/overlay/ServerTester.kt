@@ -50,36 +50,61 @@ object ServerTester {
     val results = Results()
 
 
+    /** Проверяемый сервер — только для замеров приложения, трафик пользователя не трогаем. */
+    fun probe(p: BoxConfig.Ports, tag: String) = ClashApi.select(p.api, p.secret, "probe", tag)
+
+    /** Сервер для всего трафика (и для замеров — тоже он). */
+    fun selectMain(p: BoxConfig.Ports, tag: String): Boolean {
+        val ok = ClashApi.select(p.api, p.secret, "proxy", tag)
+        ClashApi.select(p.api, p.secret, "probe", tag)
+        return ok
+    }
+
     /** Скорость загрузки через сервер (tag -> Мбит/с), из короткого замера. */
     val speed = ConcurrentHashMap<String, Double>()
 
     /**
-     * Обычный режим: среди лучших по пингу рабочих серверов выбирает самый быстрый
-     * по загрузке (2 секунды на сервер). Нужен запущенный VPN.
+     * Обычный режим: среди лучших по пингу рабочих серверов выбирает самый быстрый по загрузке.
+     * Замеры идут через «probe» — трафик пользователя всё это время на текущем сервере.
+     * Текущий сервер меряется тоже и меняется, только если другой заметно быстрее: короткий
+     * замер шумный, и без этого сервер прыгал бы туда-сюда.
      */
     fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
         val p = BoxVpnService.ports ?: return null
+        val current = AppSettings.selectedTag
         var checked = 0
         var best: String? = null
         var bestSpeed = 0.0
-        for (tag in ranked.take(candidates * 2)) {
-            if (checked >= candidates) break
-            if (!ClashApi.select(p.api, p.secret, "proxy", tag)) continue
-            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
-                results.put(tag, null)
-                continue
+        var currentSpeed: Double? = null
+        val order = (listOf(current).filter { t -> ranked.contains(t) } + ranked.filter { it != current }).take(candidates * 2)
+        try {
+            for (tag in order) {
+                if (checked >= candidates || !BoxVpnService.isRunning) break
+                if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
+                    results.put(tag, null)
+                    continue
+                }
+                if (!probe(p, tag)) continue
+                checked++
+                progress(checked, candidates)
+                val mbps = SpeedTest.quickDownload()
+                AppLog.srv("скорость: «${AppLog.name(ctx, tag)}» — ${mbps?.let { String.format(java.util.Locale.US, "%.1f Мбит/с", it) } ?: "не замерилась"}")
+                if (mbps == null) continue
+                speed[tag] = mbps
+                if (tag == current) currentSpeed = mbps
+                if (mbps > bestSpeed) { bestSpeed = mbps; best = tag }
             }
-            checked++
-            progress(checked, candidates)
-            val mbps = SpeedTest.quickDownload(2)
-            AppLog.srv("скорость: «${AppLog.name(ctx, tag)}» — ${mbps?.let { String.format(java.util.Locale.US, "%.1f Мбит/с", it) } ?: "не замерилась"}")
-            if (mbps == null) continue
-            speed[tag] = mbps
-            if (mbps > bestSpeed) { bestSpeed = mbps; best = tag }
+        } finally {
+            probe(p, AppSettings.selectedTag)
         }
         AppLog.srv("по скорости: лучший «${best?.let { AppLog.name(ctx, it) }}» ${String.format(java.util.Locale.US, "%.1f", bestSpeed)} Мбит/с")
+        val cur = currentSpeed
+        if (best != null && best != current && cur != null && cur >= bestSpeed * 0.75) {
+            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${String.format(java.util.Locale.US, "%.1f", cur)} Мбит/с, разница небольшая")
+            return current
+        }
         val chosen = best ?: return pickWorking(ctx, ranked)
-        ClashApi.select(p.api, p.secret, "proxy", chosen)
+        selectMain(p, chosen)
         AppSettings.selectedTag = chosen
         AppSettings.save(ctx)
         applyAbroad(ctx)
@@ -205,7 +230,7 @@ object ServerTester {
         // и кидает на зарубежный сервер. Проверяем до 20 кандидатов, обычный режим — до первого рабочего.
         val limit = if (game) 20 else maxTries
         for (tag in ranked.take(limit)) {
-            if (!ClashApi.select(p.api, p.secret, "proxy", tag)) { AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — не переключился"); continue }
+            if (!probe(p, tag)) { AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — не переключился"); continue }
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
                 AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — трафик не идёт, пропускаю")
                 results.put(tag, null)
@@ -220,9 +245,13 @@ object ServerTester {
             if (loc == "RU") { chosen = tag; break }
         }
         saveExits(ctx)
-        val best = chosen ?: fallback ?: run { AppLog.srv("подбор: рабочих серверов не нашлось"); return null }
+        val best = chosen ?: fallback ?: run {
+            AppLog.srv("подбор: рабочих серверов не нашлось")
+            probe(p, AppSettings.selectedTag)
+            return null
+        }
         AppLog.srv("подбор: выбран «${AppLog.name(ctx, best)}»" + if (game && chosen == null) " (запасной — с выходом в России не нашлось)" else "")
-        ClashApi.select(p.api, p.secret, "proxy", best)
+        selectMain(p, best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)
         applyAbroad(ctx)
@@ -287,7 +316,7 @@ object ServerTester {
             for ((i, n) in nodes.withIndex()) {
                 if (cancelExits || BoxVpnService.ports == null) break
                 progress(i + 1, nodes.size, Ui.cleanName(n))
-                if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
+                if (!probe(p, n.tag)) continue
                 // Мёртвый сервер — сразу дальше, не ждём таймаутов проверки выхода
                 if (ClashApi.delay(p.api, p.secret, n.tag, CHECK_URL, 2500) == null) {
                     AppLog.srv("выход: «${Ui.cleanName(n)}» — не отвечает")
@@ -303,7 +332,7 @@ object ServerTester {
             }
         } finally {
             saveExits(ctx)
-            if (keep.isNotEmpty() && BoxVpnService.ports != null) ClashApi.select(p.api, p.secret, "proxy", keep)
+            if (keep.isNotEmpty() && BoxVpnService.ports != null) probe(p, keep)
         }
         return Triple(found, ru, dead)
     }
@@ -447,7 +476,7 @@ object ServerTester {
     fun use(ctx: Context, tag: String): Boolean {
         AppLog.srv("переключаю на «${AppLog.name(ctx, tag)}»")
         val p = BoxVpnService.ports
-        val ok = p == null || ClashApi.select(p.api, p.secret, "proxy", tag)
+        val ok = p == null || selectMain(p, tag)
         if (ok) {
             AppSettings.selectedTag = tag
             AppSettings.save(ctx)

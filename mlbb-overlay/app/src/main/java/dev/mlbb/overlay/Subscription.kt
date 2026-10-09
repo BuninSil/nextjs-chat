@@ -147,7 +147,7 @@ object Subscription {
             for ((i, n) in candidates.withIndex()) {
                 if (ServerTester.exitCountry[n.tag]?.let { it != "RU" } == true) break
                 progress("Ищу сервер с выходом в России: ${i + 1} из ${candidates.size}…")
-                if (!ClashApi.select(p.api, p.secret, "proxy", n.tag)) continue
+                if (!ServerTester.probe(p, n.tag)) continue
                 if (!ServerTester.exitOkForGame(ctx, n.tag)) continue
                 progress("Скачиваю подписку через «${Ui.cleanName(n)}»…")
                 AppLog.sub("пробую скачать через «${Ui.cleanName(n)}» (выход в России)")
@@ -158,7 +158,7 @@ object Subscription {
                 }
             }
         } finally {
-            if (keep.isNotEmpty()) ClashApi.select(p.api, p.secret, "proxy", keep)
+            if (keep.isNotEmpty()) ServerTester.probe(p, keep)
         }
         throw last
     }

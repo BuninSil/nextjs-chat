@@ -77,18 +77,36 @@ object SpeedTest {
         }
     }
 
-    /** Короткий замер загрузки (для сравнения серверов между собой). */
-    fun quickDownload(seconds: Int = 2): Double? = parallel(seconds) { bytes, deadline ->
-        val buf = ByteArray(64 * 1024)
-        while (System.currentTimeMillis() < deadline) {
-            conn("/__down?bytes=25000000").inputStream.use { input ->
-                while (System.currentTimeMillis() < deadline) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    bytes.addAndGet(n.toLong())
+    /**
+     * Короткий замер загрузки (для сравнения серверов между собой): 3,5 секунды, первая
+     * секунда не считается — это разгон TCP и рукопожатия, из-за них короткий замер прыгал.
+     */
+    fun quickDownload(): Double? {
+        val counted = AtomicLong()
+        val start = System.currentTimeMillis()
+        val warm = start + 1000
+        val deadline = start + 3500
+        val threads = (1..4).map {
+            Thread {
+                try {
+                    val buf = ByteArray(64 * 1024)
+                    while (System.currentTimeMillis() < deadline) {
+                        conn("/__down?bytes=25000000").inputStream.use { input ->
+                            while (System.currentTimeMillis() < deadline) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                if (System.currentTimeMillis() >= warm) counted.addAndGet(n.toLong())
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
                 }
-            }
+            }.apply { start() }
         }
+        threads.forEach { it.join(3500 + 9000) }
+        if (counted.get() < 50_000) return null
+        val sec = (minOf(System.currentTimeMillis(), deadline) - warm) / 1000.0
+        return counted.get() * 8 / sec / 1_000_000
     }
 
     fun upload(progress: (Double) -> Unit): Double? {
