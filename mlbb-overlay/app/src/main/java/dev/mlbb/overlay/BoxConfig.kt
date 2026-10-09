@@ -289,7 +289,7 @@ object BoxConfig {
             .put("strategy", "ipv4_only")
 
         return JSONObject()
-            .put("log", JSONObject().put("level", "warn"))
+            .put("log", JSONObject().put("level", "info"))
             .put("dns", dns)
             .put("inbounds", JSONArray().put(tun).put(mixed))
             .put("outbounds", outbounds)

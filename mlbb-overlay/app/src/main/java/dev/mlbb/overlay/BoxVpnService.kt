@@ -544,9 +544,37 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun readWIFIState(): WIFIState = WIFIState("", "")
     override fun clearDNSCache() {}
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {}
+    /** id соединения ядра → «куда, через что»: чтобы в ошибке было видно адрес, а не только номер */
+    private val connDest = object : LinkedHashMap<String, String>(256, 0.75f, false) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 3000
+    }
+    private val ansi = Regex("\u001B\\[[0-9;]*m")
+    private val connId = Regex("""\[(\d+) [^\]]*\]""")
+    private val outTo = Regex("""outbound/([\w-]+)\[([^\]]*)\]: outbound (?:packet )?connection to (\S+)""")
+
+    private fun routeName(type: String, tag: String) =
+        if (type == "direct") "напрямую" else "$type «${AppLog.name(this, tag)}»"
+
     override fun writeLog(message: String) {
+        val plain = message.replace(ansi, "")
+        if (plain.startsWith("INFO") || plain.startsWith("DEBUG")) {
+            // Обычный ход соединений в журнал не пишем — только запоминаем, куда шло соединение
+            val m = outTo.find(plain) ?: return
+            val id = connId.find(plain)?.groupValues?.get(1) ?: return
+            val (type, tag, dest) = m.destructured
+            // Название сервера — только когда понадобится (ошибка, игра): на каждое соединение дорого
+            synchronized(connDest) { connDest[id] = "$type\u0000$tag\u0000$dest" }
+            // Игры Supercell — каждое соединение в журнал: видно, куда и через какой сервер пошла игра
+            if (dest.contains("supercell") || dest.contains("brawlstars") || dest.contains("clashofclans") ||
+                dest.contains("clashroyale") || dest.endsWith(":9339")) {
+                AppLog.add("GAME", "Supercell: $dest → ${routeName(type, tag)}")
+            }
+            return
+        }
         Log.i("sing-box", message)
-        VpnLog.add(message)
+        val id = connId.find(plain)?.groupValues?.get(1)
+        val dest = id?.let { synchronized(connDest) { connDest[it] } }?.split('\u0000')?.takeIf { it.size == 3 }
+        VpnLog.add(if (dest != null) "$message  ⟶ ${dest[2]} через ${routeName(dest[0], dest[1])}" else message)
         // Прошивка не дала ядру привязать обработчик TCP к VPN — трафик приложений не идёт.
         // Один раз сами включаем режим совместимости (стек gVisor) и переподключаемся.
         if (message.contains("bind forwarder to interface") && !AppSettings.compatStack && !compatSwitching) {
