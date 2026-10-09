@@ -238,13 +238,13 @@ func fetchViaRuExit(rawURL string) (string, string, error) {
 	keep := getSettings().SelectedTag
 	defer func() {
 		if keep != "" {
-			clashSelect(keep)
+			clashProbe(keep)
 		}
 	}()
 	var last error = errors.New("не нашёл сервер с выходом в России")
 	cands := ruCandidates(12)
 	for _, n := range cands {
-		if !clashSelect(n.Tag) || exitCountryNow(n.Tag) != "RU" {
+		if !clashProbe(n.Tag) || exitCountryNow(n.Tag) != "RU" {
 			continue
 		}
 		logf("SUB", "пробую скачать через сервер с выходом в России")

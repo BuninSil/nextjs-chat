@@ -59,33 +59,6 @@ object BoxConfig {
         "linkedin.com", "licdn.com", "viber.com", "twitch.tv", "ttvnw.net", "patreon.com", "medium.com", "soundcloud.com",
     ))
 
-    /**
-     * Онлайн-игры (кроме MLBB — у неё свой игровой режим), которые в России работают без VPN.
-     * Через VPN их UDP идёт поверх TCP/HTTP до зарубежного сервера — пинг растёт, пакеты
-     * застревают в очереди, в бою лаги. Напрямую — как без VPN.
-     */
-    val GAMES_DIRECT = JSONArray(listOf(
-        // PUBG Mobile, Standoff 2, Free Fire
-        "com.tencent.ig", "com.pubg.krmobile", "com.vng.pubgmobile", "com.rekoo.pubgm",
-        "com.axlebolt.standoff2", "com.dts.freefireth", "com.dts.freefiremax",
-        // HoYoverse
-        "com.miHoYo.GenshinImpact", "com.HoYoverse.hkrpgoversea",
-    ))
-
-    /**
-     * Игры Supercell: игроков из России не пускают, нужен зарубежный выход. Идут через группу
-     * «games» — зарубежный сервер, выбранный под игру: настоящий UDP и низкий пинг
-     * важнее скорости загрузки (см. [ServerTester.gamesFor]).
-     */
-    val GAMES_ABROAD = JSONArray(listOf(
-        "com.supercell.brawlstars", "com.supercell.clashofclans", "com.supercell.clashroyale",
-        "com.supercell.hayday", "com.supercell.boombeach", "com.supercell.squad",
-    ))
-    val GAMES_ABROAD_DOMAINS = JSONArray(listOf(
-        "supercell.com", "supercell.net", "brawlstarsgame.com", "clashofclans.com", "clashroyaleapp.com",
-        "haydaygame.com", "boombeachgame.com",
-    ))
-
     /** Папка с наборами правил: копируются из APK при первом запуске и после обновлений. */
     fun rulesDir(ctx: android.content.Context): String {
         val dir = java.io.File(ctx.filesDir, "rules").apply { mkdirs() }
@@ -129,10 +102,6 @@ object BoxConfig {
         abroad: String? = null,
         /** Порт Xray для обхода блокировок без сервера (null — нет Xray) */
         bypassPort: Int? = null,
-        /** Онлайн-игры ([GAMES_DIRECT]) мимо VPN */
-        gamesDirect: Boolean = false,
-        /** Сервер для игр Supercell ([GAMES_ABROAD]); null — без группы */
-        games: String? = null,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -168,14 +137,6 @@ object BoxConfig {
             outbounds.put(
                 JSONObject().put("type", "selector").put("tag", "abroad")
                     .put("outbounds", tags).put("default", abroadTag)
-                    .put("interrupt_exist_connections", false)
-            )
-        }
-        val gamesTag = games?.takeIf { g -> (0 until tags.length()).any { tags.getString(it) == g } }
-        if (gamesTag != null) {
-            outbounds.put(
-                JSONObject().put("type", "selector").put("tag", "games")
-                    .put("outbounds", tags).put("default", gamesTag)
                     .put("interrupt_exist_connections", false)
             )
         }
@@ -227,15 +188,6 @@ object BoxConfig {
             ruleSets.put(JSONObject().put("type", "local").put("tag", tag).put("format", "binary")
                 .put("path", "$rulesPath/$file"))
         }
-        if (gamesDirect) {
-            // Brawl Stars и другие игры — напрямую: без лишнего круга через сервер и без лагов в бою
-            rules.put(JSONObject().put("package_name", GAMES_DIRECT).put("outbound", "direct"))
-        }
-        if (gamesTag != null) {
-            // Brawl Stars и др. Supercell — через зарубежный сервер, подобранный под игру
-            rules.put(JSONObject().put("package_name", GAMES_ABROAD).put("outbound", "games"))
-            rules.put(JSONObject().put("domain_suffix", GAMES_ABROAD_DOMAINS).put("outbound", "games"))
-        }
         if (adBlock && rulesPath.isNotEmpty()) {
             // Реклама и трекеры — соединение отклоняется
             ruleSet("ads", "geosite-category-ads-all.srs")
@@ -277,18 +229,14 @@ object BoxConfig {
 
         // FakeIP: приложения сразу получают адрес, домен разрешает VPN-сервер — без задержек DNS.
         // Адреса самих VPN-серверов резолвим через DNS сети (local).
-        val dnsRules = JSONArray().put(JSONObject().put("outbound", "any").put("server", "local"))
-        if (gamesDirect) {
-            // Игры напрямую — и адреса их серверов настоящие, через DNS сети: ближайший к игроку сервер
-            dnsRules.put(JSONObject().put("package_name", GAMES_DIRECT).put("server", "local"))
-        }
-        dnsRules.put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fakeip"))
         val dns = JSONObject()
             .put("servers", JSONArray()
                 .put(JSONObject().put("tag", "remote").put("address", "https://1.1.1.1/dns-query").put("detour", "proxy"))
                 .put(JSONObject().put("tag", "local").put("address", "local").put("detour", "direct"))
                 .put(JSONObject().put("tag", "fakeip").put("address", "fakeip")))
-            .put("rules", dnsRules)
+            .put("rules", JSONArray()
+                .put(JSONObject().put("outbound", "any").put("server", "local"))
+                .put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fakeip")))
             .put("fakeip", JSONObject().put("enabled", true).put("inet4_range", "198.18.0.0/15"))
             .put("independent_cache", true)
             .put("final", "remote")

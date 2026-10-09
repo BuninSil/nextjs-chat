@@ -73,6 +73,9 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 	}
 	outbounds = append(outbounds,
 		obj{"type": "selector", "tag": "proxy", "outbounds": tags, "default": selected, "interrupt_exist_connections": false},
+		// «probe» — только для замеров программы: проверка серверов переключает его, а не «proxy»,
+		// и трафик пользователя не скачет по проверяемым серверам
+		obj{"type": "selector", "tag": "probe", "outbounds": tags, "default": selected, "interrupt_exist_connections": false},
 	)
 	abroad := ""
 	if len(tags) > 0 {
@@ -102,7 +105,7 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		obj{"ip_is_private": true, "outbound": "direct"},
 		// Свои замеры приложения (скорость, «Мой IP», страна выхода) идут через вход mixed — строго через
 		// выбранный сервер. Раньше правила «само приложение — напрямую»: иначе замеры ушли бы мимо VPN
-		obj{"inbound": []string{"mixed-in"}, "outbound": "proxy"},
+		obj{"inbound": []string{"mixed-in"}, "outbound": "probe"},
 		// Само приложение и Xray — напрямую: замеры пинга и соединения XHTTP-серверов
 		obj{"process_name": selfProcs, "outbound": "direct"},
 		// IPv6 не проксируем (у многих серверов его нет): отказ — и программа сразу идёт по IPv4

@@ -54,8 +54,6 @@ object AppSettings {
 
     /** Российские сайты (банки, Госуслуги, маркетплейсы…) — напрямую, мимо VPN */
     @Volatile var ruDirect = true
-    /** Онлайн-игры (Brawl Stars и др., см. BoxConfig.GAMES_DIRECT) мимо VPN */
-    @Volatile var gamesDirect = true
     /** Блокировать рекламу и трекеры */
     @Volatile var adBlock = false
     /**
@@ -123,7 +121,6 @@ object AppSettings {
         theme = p.getString("theme", "dark") ?: "dark"
         anim = p.getString("anim", ANIM_WARP)?.takeIf { it in setOf(ANIM_WARP, ANIM_GAUGE, ANIM_RADAR, ANIM_GLOBE) } ?: ANIM_WARP
         ruDirect = p.getBoolean("ruDirect", true)
-        gamesDirect = p.getBoolean("gamesDirect", true)
         autoOnMobile = p.getBoolean("autoOnMobile", false)
         autoOffWifi = p.getBoolean("autoOffWifi", true)
         appsMode = p.getInt("appsMode", APPS_ALL)
@@ -177,7 +174,6 @@ object AppSettings {
             .putString("theme", theme)
             .putString("anim", anim)
             .putBoolean("ruDirect", ruDirect)
-            .putBoolean("gamesDirect", gamesDirect)
             .putBoolean("autoOnMobile", autoOnMobile)
             .putBoolean("autoOffWifi", autoOffWifi)
             .putInt("appsMode", appsMode)

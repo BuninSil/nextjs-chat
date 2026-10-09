@@ -259,9 +259,6 @@ func pickWorking(ranked []string, maxTries int) string {
 		if i >= maxTries || !core.Running() {
 			break
 		}
-		if !clashSelect(tag) {
-			continue
-		}
 		if clashDelay(tag, checkURL, 4000) == 0 {
 			logf("SRV", "подбор: «%s» — трафик не идёт, пропускаю", nameOf(tag))
 			setResult(tag, nil)
@@ -275,15 +272,17 @@ func pickWorking(ranked []string, maxTries int) string {
 	return ""
 }
 
-// quickDownload — короткий замер загрузки через VPN (Мбит/с).
-func quickDownload(seconds int) float64 {
+// quickDownload — короткий замер загрузки через VPN (Мбит/с): 3,5 с, первая секунда не считается —
+// это разгон TCP и рукопожатия, из-за них короткий замер прыгал.
+func quickDownload() float64 {
 	proxy := core.MixedProxy()
 	if proxy == "" {
 		return 0
 	}
 	var total atomic.Int64
-	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
 	start := time.Now()
+	warm := start.Add(time.Second)
+	deadline := start.Add(3500 * time.Millisecond)
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
@@ -298,7 +297,9 @@ func quickDownload(seconds int) float64 {
 				buf := make([]byte, 64*1024)
 				for time.Now().Before(deadline) {
 					n, err := resp.Body.Read(buf)
-					total.Add(int64(n))
+					if time.Now().After(warm) {
+						total.Add(int64(n))
+					}
 					if err != nil {
 						break
 					}
@@ -311,30 +312,47 @@ func quickDownload(seconds int) float64 {
 	if total.Load() < 50_000 {
 		return 0
 	}
-	return float64(total.Load()) * 8 / time.Since(start).Seconds() / 1e6
+	end := time.Now()
+	if end.After(deadline) {
+		end = deadline
+	}
+	return float64(total.Load()) * 8 / end.Sub(warm).Seconds() / 1e6
 }
 
-// pickFastest — среди лучших по пингу рабочих серверов самый быстрый по загрузке (2 с на сервер).
+// pickFastest — среди лучших по пингу рабочих серверов самый быстрый по загрузке. Замеры идут через
+// «probe» — трафик пользователя всё это время на текущем сервере. Текущий меряется тоже и меняется,
+// только если другой заметно быстрее: короткий замер шумный, без этого сервер прыгал бы туда-сюда.
 func pickFastest(ranked []string, candidates int, progress func(done, total int)) string {
+	current := getSettings().SelectedTag
+	order := []string{}
+	if contains(ranked, current) {
+		order = append(order, current)
+	}
+	for _, t := range ranked {
+		if t != current {
+			order = append(order, t)
+		}
+	}
+	defer clashProbe(getSettings().SelectedTag)
 	checked := 0
 	best := ""
-	bestSpeed := 0.0
-	for i, tag := range ranked {
+	bestSpeed, currentSpeed := 0.0, -1.0
+	for i, tag := range order {
 		if checked >= candidates || i >= candidates*2 || !core.Running() {
 			break
 		}
-		if !clashSelect(tag) {
-			continue
-		}
 		if clashDelay(tag, checkURL, 4000) == 0 {
 			setResult(tag, nil)
+			continue
+		}
+		if !clashProbe(tag) {
 			continue
 		}
 		checked++
 		if progress != nil {
 			progress(checked, candidates)
 		}
-		mbps := quickDownload(2)
+		mbps := quickDownload()
 		logf("SRV", "скорость: «%s» — %.1f Мбит/с", nameOf(tag), mbps)
 		if mbps <= 0 {
 			continue
@@ -342,9 +360,16 @@ func pickFastest(ranked []string, candidates int, progress func(done, total int)
 		resMu.Lock()
 		speeds[tag] = mbps
 		resMu.Unlock()
+		if tag == current {
+			currentSpeed = mbps
+		}
 		if mbps > bestSpeed {
 			bestSpeed, best = mbps, tag
 		}
+	}
+	if best != "" && best != current && currentSpeed >= bestSpeed*0.75 {
+		logf("SRV", "оставляю «%s» — %.1f Мбит/с, разница небольшая", nameOf(current), currentSpeed)
+		return current
 	}
 	if best == "" {
 		return pickWorking(ranked, 8)
@@ -431,7 +456,7 @@ func checkAllExits(progress func(done, total int)) (found int) {
 	keep := getSettings().SelectedTag
 	defer func() {
 		if keep != "" && core.Running() {
-			clashSelect(keep)
+			clashProbe(keep)
 		}
 	}()
 	var list []Node
@@ -447,7 +472,7 @@ func checkAllExits(progress func(done, total int)) (found int) {
 		if progress != nil {
 			progress(i+1, len(list))
 		}
-		if !clashSelect(n.Tag) {
+		if !clashProbe(n.Tag) {
 			continue
 		}
 		if _, loc := whoAmI(core.MixedProxy()); loc != "" {
@@ -493,16 +518,15 @@ func switchNext() *Node {
 	}
 	for step := 1; step <= min(5, len(list)); step++ {
 		n := list[(cur+step+len(list))%len(list)]
-		if n.Tag == s.SelectedTag || !clashSelect(n.Tag) {
+		if n.Tag == s.SelectedTag {
 			continue
 		}
-		if clashDelay(n.Tag, checkURL, 3000) > 0 {
+		if clashDelay(n.Tag, checkURL, 3000) > 0 && clashSelect(n.Tag) {
 			withSettings(func(st *Settings) { st.SelectedTag = n.Tag; st.AutoSelect = false })
 			applyAbroad()
 			logf("SRV", "сменил сервер на «%s»", cleanName(n))
 			return &n
 		}
 	}
-	clashSelect(s.SelectedTag)
 	return nil
 }

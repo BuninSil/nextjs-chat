@@ -122,9 +122,19 @@ class ServersActivity : AppCompatActivity() {
 
     private fun retest() {
         if (ServerTester.testing) return
+        // Чужой VPN (Karing, Happ…) не пускает приложение к серверам напрямую — пинг не пройдёт ни у одного
+        if (ServerTester.otherVpnActive(applicationContext)) {
+            AppLog.srv("пинг: включён другой VPN — замер не запускаю")
+            Toast.makeText(this, "Включён другой VPN — выключи его, и пинг заработает", Toast.LENGTH_LONG).show()
+            return
+        }
         Thread {
             val ranked = ServerTester.measure(applicationContext) { done, total ->
                 runOnUiThread { header.text = "Проверено $done из $total…" }
+            }
+            if (ranked.isEmpty()) runOnUiThread {
+                Toast.makeText(this, "Ни один сервер не ответил: нет интернета или оператор режет соединения. " +
+                    "Попробуй Wi-Fi или другой сервер", Toast.LENGTH_LONG).show()
             }
             // При включённом VPN и автовыборе — сразу переключаемся на лучший рабочий.
             // В игровом режиме — нет: смена сервера посреди матча = скачок пинга и вылет

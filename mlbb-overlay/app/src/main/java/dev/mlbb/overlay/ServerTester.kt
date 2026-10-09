@@ -521,26 +521,10 @@ object ServerTester {
             ?: selected
     }
 
-    @Volatile private var lastGames: String? = null
-
-    /**
-     * Сервер для Brawl Stars и других игр Supercell: Россию они не пускают, поэтому — выбранный
-     * сервер, если у него зарубежный выход, иначе лучший зарубежный (как для Telegram/YouTube).
-     * Свой «умный» выбор не делаем: сервер, который выбрал пользователь, точно работает в его сети.
-     */
-    fun gamesFor(ctx: Context, selected: String): String? =
-        abroadFor(ctx, selected).takeIf { it.isNotEmpty() && it != XrayCore.BYPASS }
-
-    /** Переключить группы «abroad» и «games» в ядре под текущий выбранный сервер. */
+    /** Переключить группу «abroad» в ядре под текущий выбранный сервер. */
     fun applyAbroad(ctx: Context) {
-        val p = BoxVpnService.ports ?: return
-        gamesFor(ctx, AppSettings.selectedTag)?.let { g ->
-            if (ClashApi.select(p.api, p.secret, "games", g) && g != lastGames) {
-                lastGames = g
-                AppLog.srv("игры Supercell (Brawl Stars и др.) — через «${AppLog.name(ctx, g)}»")
-            }
-        }
         if (AppSettings.gameMode) return // игровой режим не трогаем
+        val p = BoxVpnService.ports ?: return
         val sel = AppSettings.selectedTag
         val tag = abroadFor(ctx, sel)
         if (tag.isEmpty()) return

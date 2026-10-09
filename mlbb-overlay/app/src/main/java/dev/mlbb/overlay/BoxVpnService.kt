@@ -309,12 +309,10 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 // Только обычный режим: в игровом всё через выбранный сервер, как и было
                 abroad = if (AppSettings.gameMode) null else ServerTester.abroadFor(this, selected),
                 bypassPort = bypassPort,
-                gamesDirect = AppSettings.gamesDirect,
-                games = ServerTester.gamesFor(this, selected),
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
-                "РФ напрямую ${AppSettings.ruDirect}, игры напрямую ${AppSettings.gamesDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
+                "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
                 "стек ${if (AppSettings.compatStack) "gvisor (совместимость)" else "mixed"}")
             val service = Libbox.newService(config, this)
             service.start()
@@ -566,13 +564,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val m = outTo.find(plain) ?: return
             val id = connId.find(plain)?.groupValues?.get(1) ?: return
             val (type, tag, dest) = m.destructured
-            // Название сервера — только когда понадобится (ошибка, игра): на каждое соединение дорого
+            // Название сервера — только когда понадобится (ошибка): на каждое соединение дорого
             synchronized(connDest) { connDest[id] = "$type\u0000$tag\u0000$dest" }
-            // Игры Supercell — каждое соединение в журнал: видно, куда и через какой сервер пошла игра
-            if (dest.contains("supercell") || dest.contains("brawlstars") || dest.contains("clashofclans") ||
-                dest.contains("clashroyale") || dest.endsWith(":9339")) {
-                AppLog.add("GAME", "Supercell: $dest → ${routeName(type, tag)}")
-            }
             return
         }
         Log.i("sing-box", message)

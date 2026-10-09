@@ -39,12 +39,21 @@ func clashVersionOK(p Ports) bool {
 	return r.StatusCode == 200
 }
 
-// clashSelect — переключить селектор «proxy» на сервер.
+// clashSelect — переключить весь трафик на сервер (селектор «proxy», и «probe» вслед за ним).
 func clashSelect(tag string) bool {
+	ok := clashSelectGroup("proxy", tag)
+	clashSelectGroup("probe", tag)
+	return ok
+}
+
+// clashProbe — сервер только для замеров программы (вход mixed): трафик пользователя не трогаем.
+func clashProbe(tag string) bool { return clashSelectGroup("probe", tag) }
+
+func clashSelectGroup(group, tag string) bool {
 	if !core.Running() {
 		return false
 	}
-	r, err := clashReq(core.Ports(), "PUT", "/proxies/proxy", map[string]string{"name": tag}, 3*time.Second)
+	r, err := clashReq(core.Ports(), "PUT", "/proxies/"+group, map[string]string{"name": tag}, 3*time.Second)
 	if err != nil {
 		return false
 	}

@@ -38,7 +38,6 @@ object Report {
         line("Только игра", AppSettings.onlyGame)
         line("Матч напрямую", AppSettings.battleDirect)
         line("Российские сайты напрямую", AppSettings.ruDirect)
-        line("Игры напрямую", AppSettings.gamesDirect)
         line("Блок рекламы", AppSettings.adBlock)
         line("Режим совместимости (gVisor)", AppSettings.compatStack)
         // Частная DNS (DoT) в настройках Android может мешать VPN
