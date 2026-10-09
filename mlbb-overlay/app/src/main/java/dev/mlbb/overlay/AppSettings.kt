@@ -63,6 +63,8 @@ object AppSettings {
     @Volatile var compatStack = false
     /** «Не беспокоить» на время матча MLBB */
     @Volatile var battleDnd = true
+    /** Способ обхода блокировок без сервера (номер в XrayCore.BYPASS_PRESETS) — подбирается сам */
+    @Volatile var bypassPreset = 0
 
     /** Какие приложения через VPN: все / только выбранные / все, кроме выбранных */
     const val APPS_ALL = 0
@@ -126,6 +128,7 @@ object AppSettings {
         adBlock = p.getBoolean("adBlock", false)
         compatStack = p.getBoolean("compatStack", false)
         battleDnd = p.getBoolean("battleDnd", true)
+        bypassPreset = p.getInt("bypassPreset", 0)
         // Кто ставил приложение до появления выбора — уже пользуется им для игры
         profile = p.getString("profile", null) ?: if (p.contains("gameMode") || subUrl.isNotEmpty()) PROFILE_GAME else ""
         if (simple) applySimple()
@@ -178,6 +181,7 @@ object AppSettings {
             .putBoolean("adBlock", adBlock)
             .putBoolean("compatStack", compatStack)
             .putBoolean("battleDnd", battleDnd)
+            .putInt("bypassPreset", bypassPreset)
             .apply()
     }
 

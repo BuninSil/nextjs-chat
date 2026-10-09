@@ -76,11 +76,31 @@ object XrayCore {
         return out
     }
 
-    /** Запускает Xray для XHTTP-серверов: tag -> (ссылка, локальный порт). */
+    /** Тег «сервера» обхода блокировок без VPN-сервера */
+    const val BYPASS = "bypass"
+
+    /**
+     * Способы обхода (ByeDPI-подобные): Xray режет начало TLS-соединения на куски, и система
+     * блокировок провайдера не узнаёт сайт. Разные провайдеры — разные способы, перебираем по очереди.
+     * packets, length, interval
+     */
+    val BYPASS_PRESETS = listOf(
+        Triple("tlshello", "100-200", "10-20"),
+        Triple("1-3", "1-5", "1-2"),
+        Triple("tlshello", "3-5", "5-10"),
+        Triple("1-2", "10-20", "5-10"),
+    )
+
+    private var lastNodes: Map<String, Pair<String, Int>> = emptyMap()
+    private var lastBypassPort: Int? = null
+
+    /** Запускает Xray для XHTTP-серверов (tag -> ссылка, порт) и/или обхода блокировок (свой порт). */
     @Synchronized
-    fun start(ctx: Context, nodes: Map<String, Pair<String, Int>>) {
+    fun start(ctx: Context, nodes: Map<String, Pair<String, Int>>, bypassPort: Int? = null) {
         stop()
-        if (nodes.isEmpty() || !available(ctx)) return
+        lastNodes = nodes
+        lastBypassPort = bypassPort
+        if ((nodes.isEmpty() && bypassPort == null) || !available(ctx)) return
         val inbounds = JSONArray()
         val outbounds = JSONArray()
         val rules = JSONArray()
@@ -90,6 +110,15 @@ object XrayCore {
             inbounds.put(JSONObject().put("tag", "in-$tag").put("listen", "127.0.0.1").put("port", v.second)
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
             rules.put(JSONObject().put("type", "field").put("inboundTag", JSONArray().put("in-$tag")).put("outboundTag", tag))
+        }
+        if (bypassPort != null) {
+            val (packets, length, interval) = BYPASS_PRESETS[AppSettings.bypassPreset.coerceIn(0, BYPASS_PRESETS.size - 1)]
+            inbounds.put(JSONObject().put("tag", "in-$BYPASS").put("listen", "127.0.0.1").put("port", bypassPort)
+                .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
+            outbounds.put(JSONObject().put("tag", BYPASS).put("protocol", "freedom").put("settings", JSONObject()
+                .put("domainStrategy", "UseIPv4")
+                .put("fragment", JSONObject().put("packets", packets).put("length", length).put("interval", interval))))
+            rules.put(JSONObject().put("type", "field").put("inboundTag", JSONArray().put("in-$BYPASS")).put("outboundTag", BYPASS))
         }
         outbounds.put(JSONObject().put("tag", "direct").put("protocol", "freedom"))
         val config = JSONObject()
@@ -113,6 +142,13 @@ object XrayCore {
             } catch (_: Exception) {
             }
         }, "xray-log").start()
+    }
+
+    /** Сменить способ обхода на лету: перезапускаем только Xray, VPN не рвётся. */
+    fun setBypassPreset(ctx: Context, preset: Int) {
+        AppSettings.bypassPreset = preset
+        AppSettings.save(ctx)
+        if (lastBypassPort != null) start(ctx, lastNodes, lastBypassPort)
     }
 
     @Synchronized

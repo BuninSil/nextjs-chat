@@ -259,12 +259,15 @@ class BoxVpnService : VpnService(), PlatformInterface {
             AppSettings.load(this)
             Subscription.load(this)
             val nodes = Subscription.usable(this)
-            if (nodes.isEmpty()) throw RuntimeException("Нет серверов: добавь ссылку подписки")
+            // Обход блокировок без сервера — через Xray (есть только на 64-битных телефонах)
+            val bypassPort = if (XrayCore.available(this)) freePort() else null
+            val bypass = bypassPort != null && AppSettings.selectedTag == XrayCore.BYPASS
+            if (nodes.isEmpty() && !bypass) throw RuntimeException("Нет серверов: добавь ссылку подписки или включи «Обход блокировок» в «Серверах»")
             // Серверы XHTTP — через ядро Xray, каждому свой локальный порт
             val xrayPorts = if (XrayCore.available(this)) {
                 nodes.filter { it.xrayLink != null }.associate { it.tag to freePort() }
             } else emptyMap()
-            XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) })
+            XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) }, bypassPort)
 
             if (!setupDone) {
                 val work = File(filesDir, "box").apply { mkdirs() }
@@ -285,8 +288,9 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val p = BoxConfig.Ports(freePort(), secret, freePort())
             // Выбранный сервер должен попасть в конфиг (XHTTP без Xray туда не попадает)
             val usable = nodes.filter { it.xrayLink == null || it.tag in xrayPorts }
-            if (usable.isEmpty()) throw RuntimeException("Нет серверов, которые поддерживает это устройство")
-            val selected = AppSettings.selectedTag.takeIf { t -> usable.any { it.tag == t } } ?: usable.first().tag
+            if (usable.isEmpty() && !bypass) throw RuntimeException("Нет серверов, которые поддерживает это устройство")
+            val selected = if (bypass) XrayCore.BYPASS
+                else AppSettings.selectedTag.takeIf { t -> usable.any { it.tag == t } } ?: usable.first().tag
             if (selected != AppSettings.selectedTag) {
                 AppSettings.selectedTag = selected
                 AppSettings.save(this)
@@ -304,6 +308,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 compatStack = AppSettings.compatStack,
                 // Только обычный режим: в игровом всё через выбранный сервер, как и было
                 abroad = if (AppSettings.gameMode) null else ServerTester.abroadFor(this, selected),
+                bypassPort = bypassPort,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +

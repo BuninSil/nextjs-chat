@@ -24,7 +24,8 @@ object Connector {
         Subscription.usable(ctx).firstOrNull { it.tag == tag }?.let { Ui.cleanName(it) } ?: ""
 
     /** Разрешение на VPN уже есть — можно подключаться без открытия приложения. */
-    fun canStart(ctx: Context) = VpnService.prepare(ctx) == null && Subscription.usable(ctx).isNotEmpty()
+    fun canStart(ctx: Context) = VpnService.prepare(ctx) == null &&
+        (Subscription.usable(ctx).isNotEmpty() || (AppSettings.selectedTag == XrayCore.BYPASS && XrayCore.available(ctx)))
 
     /**
      * Подключить в фоне. onReady(сообщение) — когда интернет через VPN уже есть
@@ -86,6 +87,10 @@ object Connector {
         val t0 = System.currentTimeMillis()
         if (!waitUp()) { AppLog.conn("VPN не поднялся: ${BoxVpnService.lastError}"); return }
         AppLog.conn("VPN поднялся за ${System.currentTimeMillis() - t0} мс")
+        if (AppSettings.selectedTag == XrayCore.BYPASS) {
+            checkBypass(ctx, onReady)
+            return
+        }
         val game = AppSettings.gameMode
         val tag = AppSettings.selectedTag
         busyText = "Проверяю сервер…"
@@ -116,6 +121,36 @@ object Connector {
         }
         AppLog.conn("готово за ${System.currentTimeMillis() - t0} мс, сервер «${nodeName(ctx, AppSettings.selectedTag)}»")
         if (!game) startWatchdog(ctx)
+    }
+
+    /** Сайт, по которому проверяем обход: YouTube — главное, что режут */
+    private const val BYPASS_CHECK = "https://www.youtube.com/generate_204"
+
+    /**
+     * Обход блокировок без сервера: проверяем, открывается ли YouTube. Не открывается — перебираем
+     * способы (у разных провайдеров работают разные), рабочий запоминаем.
+     */
+    private fun checkBypass(ctx: Context, onReady: (String?) -> Unit) {
+        val p = BoxVpnService.ports ?: return
+        val presets = XrayCore.BYPASS_PRESETS.indices.let { all ->
+            listOf(AppSettings.bypassPreset) + all.filter { it != AppSettings.bypassPreset }
+        }
+        for ((i, preset) in presets.withIndex()) {
+            if (!BoxVpnService.isRunning) return
+            busyText = if (i == 0) "Проверяю обход блокировок…" else "Подбираю способ обхода: ${i + 1} из ${presets.size}…"
+            Widget.update(ctx)
+            if (preset != AppSettings.bypassPreset) {
+                XrayCore.setBypassPreset(ctx, preset)
+                Thread.sleep(700)
+            }
+            val ms = ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000)
+            AppLog.conn("обход блокировок: способ ${preset + 1} — YouTube ${if (ms != null) "открылся за $ms мс" else "не открылся"}")
+            if (ms != null) {
+                onReady("Обход блокировок работает: YouTube открывается без сервера")
+                return
+            }
+        }
+        onReady("Провайдер режет и так — для YouTube нужен сервер. Выбери сервер в «Серверах»")
     }
 
     /** Полный подбор при работающем VPN; прогресс — в busyText. Прерывается, если VPN выключили. */

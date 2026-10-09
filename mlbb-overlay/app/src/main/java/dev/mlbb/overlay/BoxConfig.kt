@@ -100,9 +100,17 @@ object BoxConfig {
         compatStack: Boolean = false,
         /** Сервер для заблокированных в России сервисов (см. [BLOCKED_DOMAINS]); null — без группы */
         abroad: String? = null,
+        /** Порт Xray для обхода блокировок без сервера (null — нет Xray) */
+        bypassPort: Int? = null,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
+        if (bypassPort != null) {
+            // «Обход блокировок»: трафик идёт напрямую через Xray, который режет начало TLS-соединения
+            outbounds.put(JSONObject().put("type", "socks").put("tag", XrayCore.BYPASS)
+                .put("server", "127.0.0.1").put("server_port", bypassPort).put("version", "5"))
+            tags.put(XrayCore.BYPASS)
+        }
         for (n in nodes) {
             val o = JSONObject(n.outbound.toString())
             if (n.xrayLink != null) {
@@ -157,6 +165,10 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+        if (selected == XrayCore.BYPASS) {
+            // В обходе без сервера QUIC (UDP 443) не пробить — отклоняем, приложения сразу идут по TCP
+            rules.put(JSONObject().put("network", "udp").put("port", 443).put("action", "reject"))
+        }
         if (abroadTag != null) {
             // Свои замеры приложения (скорость, «Мой IP», страна выхода) — строго через выбранный сервер
             rules.put(JSONObject().put("inbound", JSONArray().put("mixed-in")).put("outbound", "proxy"))

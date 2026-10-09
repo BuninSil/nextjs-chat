@@ -481,12 +481,17 @@ class MainActivity : AppCompatActivity() {
         statusLine.setTextColor(if (running) Ui.GREEN else if (err != null) Ui.RED else Ui.MUTED)
 
         when (AppSettings.mode) {
-            AppSettings.MODE_BOX -> {
+            AppSettings.MODE_BOX -> if (AppSettings.selectedTag == XrayCore.BYPASS && XrayCore.available(this)) {
+                serverFlag.text = Ui.iconText(this, R.drawable.ic_bolt, "", 26f)
+                serverName.text = "Обход блокировок"
+                serverSub.text = "без сервера · напрямую, трафик подписки не тратится"
+                serverPing.text = ""
+            } else {
                 val n = nodeByTag(AppSettings.selectedTag) ?: Subscription.usable(this).firstOrNull()
                 if (n == null) {
                     serverFlag.text = Ui.iconText(this, R.drawable.ic_link, "", 26f)
                     serverName.text = "Нет подписки"
-                    serverSub.text = "Нажми «Подписка» и вставь ссылку"
+                    serverSub.text = if (XrayCore.available(this)) "Вставь ссылку в «Подписке» — или включи обход блокировок в «Серверах»" else "Нажми «Подписка» и вставь ссылку"
                     serverPing.text = ""
                 } else {
                     val r = ServerTester.results[n.tag]
@@ -644,7 +649,8 @@ class MainActivity : AppCompatActivity() {
 
     /** Мастер первого запуска: показывает первый невыполненный шаг с кнопкой «сделать». */
     private fun updateSetup() {
-        val needSub = AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isEmpty()
+        val needSub = AppSettings.mode == AppSettings.MODE_BOX && Subscription.usable(this).isEmpty() &&
+            AppSettings.selectedTag != XrayCore.BYPASS
         // Простой режим: нужна только подписка; база стран и плашка — для игры
         val needDb = !AppSettings.simple && !GeoDb.isLoaded
         val needOverlay = !AppSettings.simple && !Settings.canDrawOverlays(this)
@@ -775,7 +781,8 @@ class MainActivity : AppCompatActivity() {
         clearErrors()
         when (AppSettings.mode) {
             AppSettings.MODE_BOX -> {
-                if (Subscription.usable(this).isEmpty()) {
+                val bypass = AppSettings.selectedTag == XrayCore.BYPASS && XrayCore.available(this)
+                if (Subscription.usable(this).isEmpty() && !bypass) {
                     showSubscription()
                     return
                 }

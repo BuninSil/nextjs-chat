@@ -61,6 +61,24 @@ class ServersActivity : AppCompatActivity() {
             .apply { setPadding(d(4f), d(10f), d(4f), 0) })
         root.addView(Ui.space(this, 12f))
 
+        // Обход блокировок без сервера (нужен Xray — есть на 64-битных телефонах)
+        if (XrayCore.available(this)) {
+            val on = AppSettings.selectedTag == XrayCore.BYPASS
+            val card = Ui.card(this).apply {
+                if (on) background = Ui.rounded(Ui.SEL, d(18f).toFloat()).apply { setStroke(d(2f), Ui.GREEN) }
+                addView(Ui.text(this@ServersActivity, "", 15f, bold = true).apply {
+                    text = Ui.iconText(this@ServersActivity, R.drawable.ic_bolt, "Обход блокировок без сервера", 18f)
+                })
+                addView(Ui.text(this@ServersActivity,
+                    if (on) "Включено. YouTube, Discord и другие идут напрямую — без VPN-сервера и без трафика подписки. Чтобы вернуться на сервер — выбери его в списке ниже"
+                    else "YouTube, Discord и другие — напрямую, без VPN-сервера: бесплатно, полная скорость, не тратит трафик подписки. Работает не у всех провайдеров — способ подберётся сам",
+                    12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
+                setOnClickListener { pickBypass() }
+            }
+            root.addView(card)
+            root.addView(Ui.space(this, 10f))
+        }
+
         val autoCard = Ui.card(this)
         val auto = CheckBox(this).apply {
             text = "Автовыбор сервера"
@@ -215,6 +233,27 @@ class ServersActivity : AppCompatActivity() {
                 adapter.reload()
             }
             .show()
+    }
+
+    private fun pickBypass() {
+        if (AppSettings.selectedTag == XrayCore.BYPASS) return
+        AppLog.ui("выбрал «Обход блокировок без сервера»")
+        AppSettings.autoSelect = false
+        AppSettings.selectedTag = XrayCore.BYPASS
+        AppSettings.save(this)
+        if (BoxVpnService.isRunning) {
+            // Нужен перезапуск ядра: в обходе отключается QUIC, чтобы YouTube шёл по TCP
+            Toast.makeText(this, "Переключаю на обход блокировок…", Toast.LENGTH_SHORT).show()
+            val ctx = applicationContext
+            Thread {
+                BoxVpnService.stop(ctx, manual = false)
+                Thread.sleep(1500)
+                Connector.connect(ctx)
+            }.start()
+        } else {
+            Toast.makeText(this, "Готово — нажми ПОДКЛЮЧИТЬ на главном", Toast.LENGTH_LONG).show()
+        }
+        recreate()
     }
 
     private fun pick(n: Subscription.Node) {
