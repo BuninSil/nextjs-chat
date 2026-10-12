@@ -212,8 +212,27 @@ object Subscription {
         ServerTester.resetRanking(ctx)
     }
 
+    /** Больше этого подписка не бывает (сотни серверов — десятки КБ); больше — мусор или атака */
+    private const val MAX_BODY = 5 * 1024 * 1024
+
+    /** Читает не больше [MAX_BODY] байт: огромный ответ не повесит приложение и не съест память. */
+    private fun readLimited(input: java.io.InputStream, limit: Int = MAX_BODY): String {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        input.use {
+            while (true) {
+                val n = it.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+                if (out.size() > limit) throw RuntimeException("подписка слишком большая (больше ${limit / 1024 / 1024} МБ) — это не похоже на подписку")
+            }
+        }
+        return out.toString("UTF-8")
+    }
+
     /** Подписка, вставленная текстом (ссылки серверов или base64), а не URL. */
     fun importText(ctx: Context, text: String): Int {
+        if (text.length > MAX_BODY) throw RuntimeException("текст слишком большой — это не похоже на подписку")
         val parsed = parseAll(text)
         if (parsed.isEmpty()) throw RuntimeException("в тексте не нашлось ссылок серверов (vless://, trojan://, ss://…)")
         file(ctx).writeText(text)
@@ -257,7 +276,7 @@ object Subscription {
                 if (code != 200) {
                     // Панели обычно объясняют отказ текстом — показываем его
                     val why = try {
-                        c.errorStream?.bufferedReader()?.use { it.readText() }
+                        c.errorStream?.let { readLimited(it, 64 * 1024) }
                             ?.replace(Regex("<[^>]+>"), " ")?.replace(Regex("\\s+"), " ")?.trim()?.take(160)
                     } catch (_: Exception) { null }
                     // Панель режет не российские адреса — смена User-Agent тут не поможет
@@ -269,7 +288,7 @@ object Subscription {
                     lastProblem = "сервер подписки ответил HTTP $code" + (why?.takeIf { it.isNotEmpty() }?.let { " («$it»)" } ?: "")
                     continue
                 }
-                val body = c.inputStream.bufferedReader().use { it.readText() }
+                val body = readLimited(c.inputStream)
                 val parsed = parseAll(body)
                 AppLog.sub("получено ${body.length} байт, серверов распознано ${parsed.size}")
                 if (parsed.isEmpty()) {
