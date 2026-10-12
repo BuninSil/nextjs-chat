@@ -209,6 +209,20 @@ class MainActivity : AppCompatActivity() {
         }.also { it.start() }
     }
 
+    /** Окна прогресса долгих операций: закрываем при уходе с экрана, иначе WindowLeaked */
+    private val openDialogs = ArrayList<android.app.Dialog>()
+
+    private fun android.app.Dialog.dismissSafe() {
+        openDialogs.remove(this)
+        if (isShowing && !isDestroyed) try { dismiss() } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        openDialogs.toList().forEach { try { it.dismiss() } catch (_: Exception) {} }
+        openDialogs.clear()
+        super.onDestroy()
+    }
+
     override fun onPause() {
         super.onPause()
         AutoUpdate.uiVisible = false
@@ -847,12 +861,13 @@ class MainActivity : AppCompatActivity() {
         }
         val progress = AlertDialog.Builder(this).setTitle("Подключаюсь к VPN-клиенту")
             .setMessage("Секунду…").setCancelable(false).show()
+        openDialogs += progress
         Thread {
             val found = ClashApi.find(AppSettings.apiPort, AppSettings.apiSecret) { msg ->
-                runOnUiThread { progress.setMessage(msg) }
+                runOnUiThread { if (progress.isShowing) progress.setMessage(msg) }
             }
             runOnUiThread {
-                progress.dismiss()
+                progress.dismissSafe()
                 when (found?.second) {
                     ClashApi.Probe.OK -> {
                         AppSettings.apiPort = found.first
@@ -979,6 +994,7 @@ class MainActivity : AppCompatActivity() {
         AppSettings.save(this)
         val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку").setMessage("Секунду…")
             .setCancelable(false).show()
+        openDialogs += progress
         Thread {
             var error: String? = null
             var geo = false
@@ -988,7 +1004,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Subscription.GeoBlocked) {
                     // Панель пускает только российские адреса: если наш VPN включён — через сервер с выходом в России
                     if (!BoxVpnService.isRunning) throw e
-                    Subscription.updateViaRuExit(applicationContext, url) { m -> runOnUiThread { progress.setMessage(m) } }
+                    Subscription.updateViaRuExit(applicationContext, url) { m -> runOnUiThread { if (progress.isShowing) progress.setMessage(m) } }
                 }
                 "Готово: серверов $n" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
             } catch (e: Exception) {
@@ -997,7 +1013,7 @@ class MainActivity : AppCompatActivity() {
                 ""
             }
             runOnUiThread {
-                progress.dismiss()
+                progress.dismissSafe()
                 when {
                     error == null -> toast(msg)
                     // Напрямую не открылась или панель режет зарубежный адрес — через свой VPN на сохранённых серверах
@@ -1022,13 +1038,14 @@ class MainActivity : AppCompatActivity() {
         busy = true
         val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку через VPN")
             .setMessage("Подключаюсь к сохранённому серверу…").setCancelable(false).show()
+        openDialogs += progress
         Thread {
             var error: String? = null
             var n = 0
             if (!Connector.startAndWait(applicationContext)) {
                 error = BoxVpnService.lastError ?: "VPN не подключился"
             } else {
-                val say: (String) -> Unit = { m -> runOnUiThread { progress.setMessage(m) } }
+                val say: (String) -> Unit = { m -> runOnUiThread { if (progress.isShowing) progress.setMessage(m) } }
                 n = try {
                     if (needRu) Subscription.updateViaRuExit(applicationContext, url, say)
                     else try {
@@ -1045,7 +1062,7 @@ class MainActivity : AppCompatActivity() {
             }
             busy = false
             runOnUiThread {
-                progress.dismiss()
+                progress.dismissSafe()
                 if (error != null) showInfo("Подписка не загрузилась", error!!)
                 else toast("Готово: серверов $n (обновлено через VPN)")
             }
