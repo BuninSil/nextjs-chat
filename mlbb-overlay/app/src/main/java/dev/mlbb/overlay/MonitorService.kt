@@ -100,11 +100,26 @@ class MonitorService : Service() {
             return START_NOT_STICKY
         }
         startForegroundCompat()
-        fixedApiPort = intent?.getIntExtra("api_port", 0) ?: 0
-        fixedSecret = intent?.getStringExtra("secret") ?: ""
-        socksPort = intent?.getIntExtra("socks_port", 0) ?: 0
+        // Система перезапустила сервис после убийства процесса (intent == null) — портов и секрета
+        // нет. Не угадываем: владелец (VPN-сервис или кнопка в приложении) запустит заново как надо
+        if (intent == null) {
+            AppLog.add("MON", "перезапуск системой без параметров — жду, пока запустит приложение")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        fixedApiPort = intent.getIntExtra("api_port", 0)
+        fixedSecret = intent.getStringExtra("secret") ?: ""
+        socksPort = intent.getIntExtra("socks_port", 0)
+        AppSettings.load(this)
+        // Встроенный VPN без портов — это не «внешний клиент», а ошибка запуска: не уходим в чужую ветку
+        if (fixedApiPort == 0 && AppSettings.mode == AppSettings.MODE_BOX) {
+            AppLog.add("MON", "встроенный VPN без порта Clash API — мониторинг не запускаю")
+            if (!isRunning) stopSelf()
+            return START_NOT_STICKY
+        }
         if (!isRunning) startMonitor()
-        return START_STICKY
+        // Владелец сервиса сам перезапустит его с верными портами — система не должна
+        return START_NOT_STICKY
     }
 
     private fun startForegroundCompat() {
