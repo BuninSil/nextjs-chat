@@ -277,9 +277,20 @@ class SettingsActivity : AppCompatActivity() {
                 saveBackup.launch(Backup.suggestedName())
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(8f) })
             row.addView(secondary(Ui.iconText(this@SettingsActivity, R.drawable.ic_share_w, "Отправить", 18f)) {
-                try { Backup.share(this@SettingsActivity) } catch (e: Exception) {
-                    Toast.makeText(this@SettingsActivity, "Не удалось: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+                // Внутри — ссылка подписки и ключи серверов открытым текстом: предупреждаем до отправки
+                android.app.AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("Отправить бэкап?")
+                    .setMessage("В файле твоя ссылка подписки и ключи серверов — открытым текстом. " +
+                        "Кто получит файл, сможет пользоваться твоей подпиской и тратить её трафик.\n\n" +
+                        "Отправляй только себе — например, в «Избранное» Telegram.")
+                    .setPositiveButton("Отправить себе") { _, _ ->
+                        AppLog.ui("бэкап: отправка подтверждена")
+                        try { Backup.share(this@SettingsActivity) } catch (e: Exception) {
+                            Toast.makeText(this@SettingsActivity, "Не удалось: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    .setNegativeButton("Отмена", null)
+                    .show()
             }, LinearLayout.LayoutParams(0, -2, 1f))
             addView(row, LinearLayout.LayoutParams(-1, -2))
             addView(Ui.space(this@SettingsActivity, 8f))
