@@ -891,14 +891,26 @@ class MainActivity : AppCompatActivity() {
             text = "Ссылка подписки — та же, что в Karing, Hiddify или v2rayNG.\n" +
                 "Можно вставить и сами серверы: строки vless://, trojan://… или base64-блок."
         })
+        // Токен подписки в поле замаскирован — полностью по кнопке «Показать»
+        val saved = AppSettings.subUrl
+        val masked = maskSubUrl(saved)
         val input = EditText(this).apply {
             hint = "https://…"
-            setText(AppSettings.subUrl)
+            setText(masked)
             // Многострочное: можно вставить и список серверов
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             maxLines = 4
         }
         box.addView(input)
+        if (masked != saved) box.addView(TextView(this).apply {
+            text = "Показать ссылку полностью"
+            setPadding(0, d(8f), 0, 0)
+            setTextColor(Ui.MUTED)
+            setOnClickListener {
+                if (input.text.toString() == masked) input.setText(saved)
+                visibility = android.view.View.GONE
+            }
+        })
         box.addView(TextView(this).apply {
             text = Ui.iconText(this@MainActivity, R.drawable.ic_paste, "Вставить из буфера", 18f)
             setPadding(0, d(10f), 0, d(10f))
@@ -918,16 +930,29 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Подписка")
             .setView(box)
             .setPositiveButton("Сохранить и обновить") { _, _ ->
-                val t = input.text.toString().trim()
+                // Не трогали маску — значит, ссылка прежняя
+                val t = input.text.toString().trim().let { if (it == masked) saved else it }
                 AppLog.sub("нажал «Сохранить и обновить»: " + if (t.startsWith("http")) "ссылка, сервер ${AppLog.host(t)}" else "вставлены серверы текстом (${t.lines().size} строк)")
                 updateSubscription(t)
             }
             .setNegativeButton("Отмена", null)
-            .show()
+            .create()
+        // Ссылка с токеном — не в скриншоты, запись экрана и превью «Недавних»
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dialog.show()
+    }
+
+    /** https://host/путь/токен → https://host/…**** (путь с токеном скрыт); не ссылка — как есть */
+    private fun maskSubUrl(url: String): String {
+        if (!url.startsWith("http")) return url
+        val host = AppLog.host(url)
+        if (host == "?") return url
+        val scheme = url.substringBefore("://")
+        return "$scheme://$host/…****"
     }
 
     private fun updateSubscription(url: String) {
