@@ -154,6 +154,25 @@ class SettingsActivity : AppCompatActivity() {
                 startActivity(android.content.Intent(this@SettingsActivity, AppsActivity::class.java))
             }
             addView(appsRow)
+            addView(divider())
+            // Полностью закрыть трафик без VPN может только сам Android — ведём туда
+            addView(linkRow("Защита от утечек", "Ни байта мимо VPN, даже при переподключении") {
+                android.app.AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("Защита от утечек")
+                    .setMessage("Пока VPN переподключается или меняется сеть, Android может на секунду пустить " +
+                        "трафик напрямую — с твоим настоящим IP. Запретить это может только сам Android:\n\n" +
+                        "1. Открой настройки VPN (кнопка ниже)\n" +
+                        "2. Нажми шестерёнку у Fast VPN\n" +
+                        "3. Включи «Постоянный VPN» и «Блокировать соединения без VPN»\n\n" +
+                        "Минус: пока VPN выключен, интернета не будет совсем. «Российские сайты напрямую» продолжат работать.")
+                    .setPositiveButton("Открыть настройки VPN") { _, _ ->
+                        AppLog.ui("защита от утечек: открыл системные настройки VPN")
+                        try { startActivity(android.content.Intent(android.provider.Settings.ACTION_VPN_SETTINGS)) }
+                        catch (_: Exception) { Toast.makeText(this@SettingsActivity, "Не открылось — найди VPN в настройках телефона", Toast.LENGTH_LONG).show() }
+                    }
+                    .setNegativeButton("Закрыть", null)
+                    .show()
+            })
             if (simple) return@apply
             addView(divider())
             addView(switchRow("Через VPN только игра", "Весь канал — игре, остальные приложения без VPN", AppSettings.onlyGame) {

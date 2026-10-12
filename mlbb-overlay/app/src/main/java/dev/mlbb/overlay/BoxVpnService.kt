@@ -338,7 +338,18 @@ class BoxVpnService : VpnService(), PlatformInterface {
         }
     }
 
-    private fun stopBox() {
+    /**
+     * Перезапуск ядра без выключения VPN-сервиса: уведомление и сервис остаются, ядро сразу
+     * поднимается заново. Окно без туннеля — доли секунды, а не «выключить, ждать, включить».
+     */
+    private fun restartCore(reason: String) {
+        AppLog.vpn("перезапуск ядра без выключения VPN: $reason")
+        isStarting = true
+        stopBox(keepForeground = true)
+        startBox()
+    }
+
+    private fun stopBox(keepForeground: Boolean = false) {
         isRunning = false
         downBps = 0.0
         try { Widget.update(this) } catch (_: Exception) {}
@@ -355,7 +366,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
         } catch (_: Exception) {
         }
         tunPfd = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (!keepForeground) stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     override fun onRevoke() {
@@ -589,9 +600,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                     // Ждём, пока подключение доделается, чтобы не перебить его на полпути
                     var waited = 0
                     while ((isStarting || Connector.busy) && waited < 30_000) { Thread.sleep(300); waited += 300 }
-                    stop(ctx, manual = false)
-                    Thread.sleep(1500)
-                    Connector.connect(ctx)
+                    if (isRunning) restartCore("режим совместимости") else Connector.connect(ctx)
                 } finally {
                     compatSwitching = false
                 }

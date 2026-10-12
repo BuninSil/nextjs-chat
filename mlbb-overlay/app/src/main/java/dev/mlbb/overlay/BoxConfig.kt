@@ -151,7 +151,8 @@ object BoxConfig {
             // игровой — 1500, без лишней буферизации для мелких пакетов игры
             .put("mtu", if (gameMode) 1500 else 9000)
             .put("auto_route", true)
-            .put("strict_route", false)
+            // Строгая маршрутизация: трафик не обходит туннель (где платформа это поддерживает)
+            .put("strict_route", true)
             // mixed: TCP — системным стеком (быстрее), UDP — gVisor; gvisor — всё через gVisor (совместимость)
             .put("stack", if (compatStack) "gvisor" else "mixed")
         // Иначе через VPN идёт всё, включая нас самих (обновления и база DB-IP под блокировками)
