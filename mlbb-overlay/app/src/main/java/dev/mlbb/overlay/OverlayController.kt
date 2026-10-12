@@ -10,7 +10,10 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.TextView
 
-/** Перетаскиваемая плашка поверх всех окон (SYSTEM_ALERT_WINDOW). */
+/**
+ * Перетаскиваемая плашка поверх всех окон (SYSTEM_ALERT_WINDOW). Во время матча касания
+ * пропускает в игру ([setPassThrough]) — плашка не съест тап по кнопке под ней.
+ */
 class OverlayController(private val ctx: Context) {
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val prefs = ctx.getSharedPreferences("overlay", Context.MODE_PRIVATE)
@@ -23,8 +26,8 @@ class OverlayController(private val ctx: Context) {
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        // Без FLAG_LAYOUT_NO_LIMITS: плашка не уезжает под вырез камеры и статусбар
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.TOP or Gravity.START
@@ -62,6 +65,7 @@ class OverlayController(private val ctx: Context) {
                 MotionEvent.ACTION_MOVE -> {
                     params.x = startX + (e.rawX - downX).toInt()
                     params.y = startY + (e.rawY - downY).toInt()
+                    clamp()
                     view?.let { wm.updateViewLayout(it, params) }
                     true
                 }
@@ -72,8 +76,29 @@ class OverlayController(private val ctx: Context) {
                 else -> false
             }
         }
+        clamp()
         wm.addView(tv, params)
         view = tv
+    }
+
+    /** Не даём утащить плашку за край экрана (и не восстанавливаем её туда после поворота). */
+    private fun clamp() {
+        val m = ctx.resources.displayMetrics
+        val w = view?.width?.takeIf { it > 0 } ?: dp(120f).toInt()
+        val h = view?.height?.takeIf { it > 0 } ?: dp(24f).toInt()
+        params.x = params.x.coerceIn(0, maxOf(0, m.widthPixels - w))
+        params.y = params.y.coerceIn(0, maxOf(0, m.heightPixels - h))
+    }
+
+    private var passThrough = false
+
+    /** true — плашка не принимает касания (идёт матч): тапы проходят в игру. Перетаскивать — вне матча. */
+    fun setPassThrough(on: Boolean) {
+        if (on == passThrough) return
+        passThrough = on
+        params.flags = if (on) params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        else params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        view?.let { try { wm.updateViewLayout(it, params) } catch (_: Exception) {} }
     }
 
     fun update(text: String, color: Int) {

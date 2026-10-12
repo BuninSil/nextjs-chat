@@ -289,6 +289,8 @@ class MonitorService : Service() {
             MatchTracker.tick(this, active, g?.countryCode?.uppercase() ?: "", g?.city?.ifEmpty { g.country } ?: "", p?.ms, pingSeq)
         }
         val ov = overlay ?: return
+        // Во время матча плашка пропускает касания в игру
+        ov.setPassThrough(MatchTracker.inMatch)
         if (battle == null) {
             ov.update("MLBB: жду трафик игры…", OverlayController.COLOR_UNKNOWN)
             return
