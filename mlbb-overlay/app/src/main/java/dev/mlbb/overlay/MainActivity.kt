@@ -444,8 +444,17 @@ class MainActivity : AppCompatActivity() {
         frame.addView(ring, android.widget.FrameLayout.LayoutParams(-1, -1))
         frame.addView(ScrollView(this).apply {
             addView(root)
-            // Кнопка уехала при прокрутке — анимация за ней
-            setOnScrollChangeListener { _, _, _, _, _ -> ring.invalidate(); stars?.invalidate() }
+            // Кнопка уехала при прокрутке — анимация за ней. Звёзды (150 лучей) — не чаще ~25 раз
+            // в секунду и с догоняющим кадром в конце: на каждый пиксель прокрутки скролл дёргался
+            var starsAt = 0L
+            val catchUp = Runnable { stars?.invalidate() }
+            setOnScrollChangeListener { v, _, _, _, _ ->
+                ring.invalidate()
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - starsAt >= 40) { starsAt = now; stars?.invalidate() }
+                v.removeCallbacks(catchUp)
+                v.postDelayed(catchUp, 60)
+            }
         }, android.widget.FrameLayout.LayoutParams(-1, -1))
         flashView = android.view.View(this).apply {
             setBackgroundColor(0xFFE8FFF0.toInt())
