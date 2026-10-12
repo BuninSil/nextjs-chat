@@ -81,7 +81,7 @@ object Report {
         sb.append("Категории: UI — нажатия и экраны, SET — настройки, VPN, CONN — подключение, SRV — замеры серверов, ")
         sb.append("SUB — подписка, UPD — обновления, AUTO — автоподключение, NET — сеть, TILE — плитка/виджет, ")
         sb.append("SPEED — тест скорости, CORE — VPN-ядро, ERR — ошибки\n\n")
-        sb.append(AppLog.all().ifBlank { "(пусто)" }).append('\n')
+        sb.append(redact(AppLog.all()).ifBlank { "(пусто)" }).append('\n')
 
         CrashReport.last(ctx)?.let {
             sb.append("\n--- Последнее падение ---\n").append(it).append('\n')
@@ -122,4 +122,8 @@ object Report {
             .setNegativeButton("Закрыть", null)
             .show()
     }
+
+    /** Старые журналы (до исправления) могли содержать значение поля secret — вырезаем */
+    private fun redact(log: String): String =
+        log.replace(Regex("""(поле «secret» = ).*"""), "$1(скрыто)")
 }

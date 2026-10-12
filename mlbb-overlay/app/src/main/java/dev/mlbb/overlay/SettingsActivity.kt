@@ -259,7 +259,7 @@ class SettingsActivity : AppCompatActivity() {
                 })
                 addView(Ui.space(this@SettingsActivity, 10f))
                 addView(Ui.text(this@SettingsActivity, "Секрет (если клиент просит)", 12f, Ui.MUTED))
-                addView(input(AppSettings.apiSecret, "secret") { AppSettings.apiSecret = it.trim() })
+                addView(input(AppSettings.apiSecret, "secret", sensitive = true) { AppSettings.apiSecret = it.trim() })
             })
         }
         root.addView(apiCard)
@@ -407,7 +407,8 @@ class SettingsActivity : AppCompatActivity() {
         return row
     }
 
-    private fun input(value: String, hint: String, number: Boolean = false, onChange: (String) -> Unit) =
+    /** sensitive — пароль/секрет: значение не пишется в журнал и скрыто точками */
+    private fun input(value: String, hint: String, number: Boolean = false, sensitive: Boolean = false, onChange: (String) -> Unit) =
         EditText(this).apply {
             setText(value)
             this.hint = hint
@@ -417,12 +418,13 @@ class SettingsActivity : AppCompatActivity() {
             background = Ui.rounded(Ui.INPUT, d(12f).toFloat())
             setPadding(d(12f), d(10f), d(12f), d(10f))
             if (number) inputType = InputType.TYPE_CLASS_NUMBER
+            if (sensitive) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(6f) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    AppLog.set("поле «$hint»", s?.toString())
+                    AppLog.set("поле «$hint»", if (sensitive) "(изменено, значение не пишем)" else s?.toString())
                     onChange(s?.toString() ?: "")
                 }
             })
