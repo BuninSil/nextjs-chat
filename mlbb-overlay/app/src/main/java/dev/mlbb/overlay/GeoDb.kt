@@ -136,7 +136,14 @@ object GeoDb {
                 }
             }
         }
-        MmdbReader(tmp) // валидация: бросит исключение, если файл битый
+        // Валидация: открыть и разобрать пару адресов — битый файл бросит исключение здесь, а не потом
+        try {
+            val r = MmdbReader(tmp)
+            for (ip in listOf("8.8.8.8", "77.88.8.8", "1.1.1.1")) r.lookup(java.net.InetAddress.getByName(ip))
+        } catch (e: Throwable) {
+            tmp.delete()
+            throw IllegalStateException("файл повреждён или это не база IP", e)
+        }
         synchronized(this) {
             reader = null
             val dst = file(ctx)

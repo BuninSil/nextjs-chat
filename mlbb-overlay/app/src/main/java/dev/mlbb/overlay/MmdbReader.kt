@@ -13,6 +13,11 @@ import java.nio.charset.StandardCharsets
  * Спецификация: https://maxmind.github.io/MaxMind-DB/
  */
 class MmdbReader(file: File) {
+    private companion object {
+        /** Настоящие базы вложены на 3–5 уровней; больше — битый или подложенный файл */
+        const val MAX_DEPTH = 32
+    }
+
     private val buf: ByteBuffer
     private val nodeCount: Long
     private val recordSize: Int
@@ -107,8 +112,15 @@ class MmdbReader(file: File) {
         }
     }
 
-    /** Декодер секции данных. [base] — начало секции, указатели считаются от него. */
+    /**
+     * Декодер секции данных. [base] — начало секции, указатели считаются от него.
+     * Файл может прийти от пользователя («Импортировать базу»), поэтому всё проверяется:
+     * глубина (циклические указатели — иначе StackOverflowError), границы буфера, размеры.
+     */
     private inner class Decoder(private val base: Int, private var pos: Int) {
+        private fun bad(msg: String): Nothing = throw IllegalStateException("Файл базы повреждён: $msg")
+        private fun left() = buf.limit() - pos
+
         private fun next(): Int = buf.get(pos++).toInt() and 0xFF
 
         private fun readUInt(size: Int): Long {
@@ -117,7 +129,9 @@ class MmdbReader(file: File) {
             return v
         }
 
-        fun decode(): Any? {
+        fun decode(depth: Int = 0): Any? {
+            if (depth > MAX_DEPTH) bad("слишком глубокая вложенность (цикл указателей?)")
+            if (pos < 0 || pos >= buf.limit()) bad("выход за границы")
             val ctrl = next()
             var type = ctrl ushr 5
 
@@ -130,7 +144,9 @@ class MmdbReader(file: File) {
                     2 -> ((vvv shl 24) or readUInt(3)) + 526336
                     else -> readUInt(4)
                 }
-                return Decoder(base, base + ptr.toInt()).decode()
+                val target = base.toLong() + ptr
+                if (ptr < 0 || target >= buf.limit()) bad("указатель за пределами файла")
+                return Decoder(base, target.toInt()).decode(depth + 1)
             }
 
             if (type == 0) type = 7 + next()
@@ -142,6 +158,7 @@ class MmdbReader(file: File) {
                 31 -> 65821 + readUInt(3).toInt()
                 else -> size
             }
+            if (size < 0 || (type != 14 && size > left())) bad("неверный размер")
 
             return when (type) {
                 2 -> { // utf8 string
@@ -156,14 +173,14 @@ class MmdbReader(file: File) {
                 8 -> readUInt(size).toInt()
                 10 -> { pos += size; null } // uint128 — не нужен
                 7 -> {
-                    val m = HashMap<String, Any?>(size * 2)
+                    val m = HashMap<String, Any?>(minOf(size, 1024) * 2)
                     repeat(size) {
-                        val k = decode() as String
-                        m[k] = decode()
+                        val k = decode(depth + 1) as? String ?: bad("ключ не строка")
+                        m[k] = decode(depth + 1)
                     }
                     m
                 }
-                11 -> List(size) { decode() }
+                11 -> List(size) { decode(depth + 1) }
                 14 -> size != 0
                 15 -> java.lang.Float.intBitsToFloat(readUInt(4).toInt())
                 else -> throw IllegalStateException("Unknown MMDB type $type")

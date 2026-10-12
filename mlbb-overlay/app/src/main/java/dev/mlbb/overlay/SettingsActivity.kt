@@ -521,8 +521,10 @@ class SettingsActivity : AppCompatActivity() {
                 contentResolver.openInputStream(uri)!!.use { input ->
                     GeoDb.install(applicationContext, input) { msg -> runOnUiThread { dbStatus.text = msg } }
                 }
-            } catch (e: Exception) {
-                runOnUiThread { dbStatus.text = "Импорт не удался: ${e.message}" }
+            } catch (e: Throwable) {
+                // Throwable, а не Exception: битый файл может дать и StackOverflowError/OutOfMemoryError
+                AppLog.err("импорт базы", e)
+                runOnUiThread { dbStatus.text = "Файл повреждён или это не база IP — импорт не удался" }
             } finally {
                 dbBusy = false
             }
