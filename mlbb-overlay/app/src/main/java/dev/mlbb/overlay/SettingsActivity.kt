@@ -329,6 +329,8 @@ class SettingsActivity : AppCompatActivity() {
             addView(Ui.text(this@SettingsActivity, "Что-то не работает? Собери отчёт и отправь его разработчику любым способом.", 12f, Ui.MUTED))
             addView(Ui.space(this@SettingsActivity, 10f))
             addView(secondary("Сообщить о проблеме") { Report.show(this@SettingsActivity) })
+            addView(Ui.space(this@SettingsActivity, 8f))
+            addView(secondary("Лицензии и благодарности") { showLicenses() })
         })
 
         root.addView(Ui.slogan(this, 13f, bold = true).apply {
@@ -560,5 +562,30 @@ class SettingsActivity : AppCompatActivity() {
                 dbBusy = false
             }
         }.start()
+    }
+
+    /** Сторонние компоненты и их лицензии — атрибуция (в том числе обязательная для DB-IP, CC BY 4.0). */
+    private fun showLicenses() {
+        AppLog.ui("открыл «Лицензии»")
+        val text = """
+            Fast VPN построен на открытых проектах:
+
+            • sing-box (SagerNet) — VPN-ядро. GPL-3.0. github.com/SagerNet/sing-box
+            • Xray-core (XTLS) — XHTTP и обход блокировок. MPL-2.0. github.com/XTLS/Xray-core
+            • zdtun (emanuele-f) — захват трафика игры. LGPL-3.0. github.com/emanuele-f/zdtun
+            • Shizuku (RikkaApps) — режим без своего VPN. Apache-2.0. github.com/RikkaApps/Shizuku
+
+            База IP-адресов: IP Geolocation by DB-IP (db-ip.com) — CC BY 4.0.
+            Карта для анимации «Глобус»: world-atlas (Mike Bostock) — ISC; центры стран — world-countries, ODbL.
+            Списки сайтов: v2fly/domain-list-community — MIT.
+
+            Исходники компонентов под GPL/LGPL доступны по ссылкам выше; исходники самого приложения —
+            по запросу у разработчика.
+        """.trimIndent()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Лицензии и благодарности")
+            .setMessage(text)
+            .setPositiveButton("Закрыть", null)
+            .show()
     }
 }
