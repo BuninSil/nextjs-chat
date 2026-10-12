@@ -200,6 +200,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         handler.post(refresher)
+        informRuDirect()
         // Замер Wi-Fi (пинг до роутера) — в фоне раз в 5 секунд
         wifiThread = Thread {
             while (wifiThread === Thread.currentThread()) {
@@ -207,6 +208,29 @@ class MainActivity : AppCompatActivity() {
                 try { Thread.sleep(5000) } catch (_: InterruptedException) { break }
             }
         }.also { it.start() }
+    }
+
+    /**
+     * Один раз честно говорим: при «Российских сайтах напрямую» эти сайты видят настоящий IP.
+     * Включено по умолчанию, потому что банки и Госуслуги с иностранных адресов не пускают.
+     */
+    private fun informRuDirect() {
+        val p = getSharedPreferences("settings", MODE_PRIVATE)
+        if (!AppSettings.ruDirect || p.getBoolean("ruDirectInformed", false)) return
+        p.edit().putBoolean("ruDirectInformed", true).apply()
+        AlertDialog.Builder(this)
+            .setTitle("Российские сайты — напрямую")
+            .setMessage("Банки, Госуслуги, маркетплейсы, Яндекс и VK идут мимо VPN — с твоим настоящим IP. " +
+                "Так они работают без ошибок и быстрее: многие из них не пускают с иностранных адресов.\n\n" +
+                "Всё остальное — через VPN. Выключить можно в Настройках → «Российские сайты напрямую».")
+            .setPositiveButton("Понятно", null)
+            .setNegativeButton("Выключить") { _, _ ->
+                AppSettings.ruDirect = false
+                AppSettings.save(this)
+                AppLog.set("Российские сайты напрямую", false)
+                if (BoxVpnService.isRunning) toast("Переподключи VPN, чтобы применить")
+            }
+            .show()
     }
 
     /** Окна прогресса долгих операций: закрываем при уходе с экрана, иначе WindowLeaked */
