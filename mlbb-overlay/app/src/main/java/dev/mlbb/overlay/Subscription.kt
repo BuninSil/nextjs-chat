@@ -100,9 +100,104 @@ object Subscription {
     }
 
     fun load(ctx: Context) {
-        val f = file(ctx)
-        if (f.exists()) nodes = parseAll(f.readText())
+        nodes = combined(ctx)
         infoFile(ctx).takeIf { it.exists() }?.readText()?.let { info = parseUserInfo(it) }
+    }
+
+    // ------------------------- дополнительные подписки -------------------------
+    // Основная — как раньше (subscription.txt, AppSettings.subUrl): номера её серверов не меняются,
+    // избранное, выходы и выбранный сервер не слетают. Дополнительные — своими файлами, их серверы
+    // идут в общий список после основной.
+
+    private const val EXTRA_KEY = "extraSubs"
+
+    /** Ссылки дополнительных подписок, по порядку добавления */
+    fun extras(ctx: Context): List<String> {
+        val raw = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString(EXTRA_KEY, null) ?: return emptyList()
+        return try { JSONArray(raw).let { a -> (0 until a.length()).map { a.getString(it) } } } catch (_: Exception) { emptyList() }
+    }
+
+    private fun saveExtras(ctx: Context, list: List<String>) {
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+            .putString(EXTRA_KEY, JSONArray(list).toString()).apply()
+    }
+
+    private fun key(url: String) = java.security.MessageDigest.getInstance("SHA-1")
+        .digest(url.trim().toByteArray()).take(8).joinToString("") { "%02x".format(it) }
+
+    fun extraFile(ctx: Context, url: String) = File(ctx.filesDir, "subscription-${key(url)}.txt")
+    private fun extraInfoFile(ctx: Context, url: String) = File(ctx.filesDir, "subscription-${key(url)}-info.txt")
+
+    private fun isPrimary(url: String) = url.trim() == AppSettings.subUrl.trim()
+
+    /** Основная + все дополнительные; номера (n0, n1…) — сквозные, основная первой. */
+    private fun combined(ctx: Context): List<Node> {
+        val out = ArrayList<Node>()
+        file(ctx).takeIf { it.exists() }?.let { out += parseAll(it.readText()) }
+        for (u in extras(ctx)) {
+            val f = extraFile(ctx, u)
+            if (!f.exists()) continue
+            val parsed = try { parseAll(f.readText()) } catch (_: Exception) { emptyList() }
+            for (n in parsed) {
+                val tag = "n${out.size}"
+                out += n.copy(tag = tag, outbound = JSONObject(n.outbound.toString()).put("tag", tag))
+            }
+        }
+        return out
+    }
+
+    /** Сколько серверов в подписке (для списка в окне «Подписки») */
+    fun countFor(ctx: Context, url: String): Int {
+        val f = if (isPrimary(url)) file(ctx) else extraFile(ctx, url)
+        return try { if (f.exists()) parseAll(f.readText()).size else 0 } catch (_: Exception) { 0 }
+    }
+
+    fun infoFor(ctx: Context, url: String): Info? {
+        val f = if (isPrimary(url)) infoFile(ctx) else extraInfoFile(ctx, url)
+        return try { f.takeIf { it.exists() }?.readText()?.let { parseUserInfo(it) } } catch (_: Exception) { null }
+    }
+
+    /** Добавить дополнительную подписку и скачать её. Не скачалась — не добавляется. */
+    fun addExtra(ctx: Context, url: String): Int {
+        val u = url.trim()
+        if (!u.startsWith("http")) throw RuntimeException("нужна ссылка подписки (https://…)")
+        if (isPrimary(u) || u in extras(ctx)) throw RuntimeException("эта подписка уже добавлена")
+        AppLog.sub("добавляю дополнительную подписку: ${AppLog.host(u)}")
+        saveExtras(ctx, extras(ctx) + u)
+        return try {
+            update(ctx, u)
+        } catch (e: Exception) {
+            saveExtras(ctx, extras(ctx) - u)
+            extraFile(ctx, u).delete()
+            extraInfoFile(ctx, u).delete()
+            throw e
+        }
+    }
+
+    /** Удалить подписку (основную или дополнительную) вместе с её серверами. */
+    fun remove(ctx: Context, url: String) {
+        val u = url.trim()
+        AppLog.sub("удаляю подписку ${AppLog.host(u)}")
+        if (isPrimary(u)) {
+            // Основная уходит — первая дополнительная становится основной
+            val next = extras(ctx).firstOrNull()
+            file(ctx).delete()
+            infoFile(ctx).delete()
+            info = null
+            if (next != null) {
+                extraFile(ctx, next).takeIf { it.exists() }?.renameTo(file(ctx))
+                extraInfoFile(ctx, next).takeIf { it.exists() }?.renameTo(infoFile(ctx))
+                info = infoFile(ctx).takeIf { it.exists() }?.readText()?.let { parseUserInfo(it) }
+                saveExtras(ctx, extras(ctx) - next)
+            }
+            AppSettings.subUrl = next ?: ""
+            AppSettings.save(ctx)
+        } else {
+            extraFile(ctx, u).delete()
+            extraInfoFile(ctx, u).delete()
+            saveExtras(ctx, extras(ctx) - u)
+        }
+        setNodes(ctx, combined(ctx))
     }
 
     /**
@@ -119,10 +214,14 @@ object Subscription {
 
     /** Новый список серверов. Проверки (страна выхода, подбор) сбрасываются, только если он поменялся. */
     private fun setNodes(ctx: Context, parsed: List<Node>) {
-        AppLog.sub("подписка обновлена: ${parsed.size} серверов")
-        val changed = parsed.map { it.name + "|" + it.server + ":" + it.port } != nodes.map { it.name + "|" + it.server + ":" + it.port }
+        AppLog.sub("подписка обновлена: ${parsed.size} серверов" + extras(ctx).size.let { if (it > 0) " (подписок: ${it + 1})" else "" })
+        val old = nodes.map { it.name + "|" + it.server + ":" + it.port }
+        val new = parsed.map { it.name + "|" + it.server + ":" + it.port }
+        // Добавились серверы в конец (новая дополнительная подписка) — старые номера на месте,
+        // проверки выходов не сбрасываем. Иначе номера сдвинулись — проверяем заново
+        val kept = new.size >= old.size && new.take(old.size) == old
         nodes = parsed
-        if (changed) resetExits(ctx)
+        if (!kept) resetExits(ctx)
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
             .putLong("subAt", System.currentTimeMillis()).apply()
     }
@@ -168,19 +267,21 @@ object Subscription {
     /** Фоновое обновление подписки — не чаще раза в ~сутки. Ошибки молча пропускаем. */
     fun refreshInBackground(ctx: Context) {
         AppSettings.load(ctx)
-        val url = AppSettings.subUrl
-        if (!url.startsWith("http")) return
+        val urls = (listOf(AppSettings.subUrl) + extras(ctx)).filter { it.startsWith("http") }
+        if (urls.isEmpty()) return
         val at = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getLong("subAt", 0)
         if (System.currentTimeMillis() - at < 20 * 60 * 60 * 1000L) return
-        AppLog.sub("фоновое ежедневное обновление подписки")
+        AppLog.sub("фоновое ежедневное обновление подписок: ${urls.size}")
         if (nodes.isEmpty()) load(ctx)
-        try {
-            update(ctx, url)
-        } catch (_: GeoBlocked) {
-            // Панель пускает только российские адреса — через сервер с выходом в России,
-            // но не в игровом режиме: там сервер посреди сессии не трогаем
-            if (BoxVpnService.isRunning && !AppSettings.gameMode) try { updateViaRuExit(ctx, url) } catch (_: Exception) {}
-        } catch (_: Exception) {
+        for (url in urls) {
+            try {
+                update(ctx, url)
+            } catch (_: GeoBlocked) {
+                // Панель пускает только российские адреса — через сервер с выходом в России,
+                // но не в игровом режиме: там сервер посреди сессии не трогаем
+                if (BoxVpnService.isRunning && !AppSettings.gameMode) try { updateViaRuExit(ctx, url) } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -260,7 +361,7 @@ object Subscription {
         file(ctx).writeText(text)
         infoFile(ctx).delete()
         info = null
-        setNodes(ctx, parsed)
+        setNodes(ctx, combined(ctx))
         return parsed.size
     }
 
@@ -320,12 +421,13 @@ object Subscription {
                     lastProblem = "панель отдала подписку в формате, который я не понял"
                     continue
                 }
-                file(ctx).writeText(body)
+                val primary = isPrimary(url)
+                (if (primary) file(ctx) else extraFile(ctx, url)).writeText(body)
                 c.getHeaderField("subscription-userinfo")?.let {
-                    infoFile(ctx).writeText(it)
-                    info = parseUserInfo(it)
+                    (if (primary) infoFile(ctx) else extraInfoFile(ctx, url)).writeText(it)
+                    if (primary) info = parseUserInfo(it)
                 }
-                setNodes(ctx, parsed)
+                setNodes(ctx, combined(ctx))
                 return parsed.size
             } catch (e: GeoBlocked) {
                 throw e

@@ -969,16 +969,53 @@ class MainActivity : AppCompatActivity() {
                 if (t.isNullOrEmpty()) toast("В буфере пусто") else input.setText(t)
             }
         })
-        Subscription.info?.let { info ->
-            val gb = (info.download + info.upload) / 1_073_741_824.0
-            val exp = if (info.expireSec > 0) " · до " + java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.US)
-                .format(java.util.Date(info.expireSec * 1000)) else ""
+        // Все подписки: основная (поле выше) и дополнительные — с удалением
+        val all = (listOf(saved).filter { it.startsWith("http") } + Subscription.extras(this))
+        lateinit var dialog: AlertDialog
+        if (all.isNotEmpty()) {
             box.addView(TextView(this).apply {
-                text = String.format(java.util.Locale.US, "Серверов: %d · израсходовано %.1f ГБ%s", Subscription.usable(this@MainActivity).size, gb, exp)
+                text = "МОИ ПОДПИСКИ"
+                textSize = 12f
+                setTextColor(Ui.MUTED)
+                letterSpacing = 0.08f
+                setPadding(0, d(14f), 0, d(4f))
             })
+            for ((i, url) in all.withIndex()) {
+                val row = LinearLayout(this).apply {
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(0, d(6f), 0, d(6f))
+                }
+                val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                col.addView(TextView(this).apply {
+                    text = AppLog.host(url) + if (i == 0 && url == saved) "  · основная" else ""
+                    textSize = 15f
+                })
+                col.addView(TextView(this).apply {
+                    text = subSummary(url)
+                    textSize = 12f
+                    setTextColor(Ui.MUTED)
+                })
+                row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(TextView(this).apply {
+                    text = "Удалить"
+                    setTextColor(Ui.RED)
+                    setPadding(d(12f), d(8f), 0, d(8f))
+                    setOnClickListener { confirmRemoveSubscription(url) { dialog.dismiss() } }
+                })
+                box.addView(row)
+            }
         }
+        box.addView(TextView(this).apply {
+            text = "+ Добавить ещё подписку"
+            setTextColor(Ui.GREEN)
+            setPadding(0, d(10f), 0, d(10f))
+            setOnClickListener {
+                dialog.dismiss()
+                showAddSubscription()
+            }
+        })
 
-        val dialog = AlertDialog.Builder(this)
+        dialog = AlertDialog.Builder(this)
             .setTitle("Подписка")
             .setView(box)
             .setPositiveButton("Сохранить и обновить") { _, _ ->
@@ -992,6 +1029,92 @@ class MainActivity : AppCompatActivity() {
         // Ссылка с токеном — не в скриншоты, запись экрана и превью «Недавних»
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
+    }
+
+    /** «142 сервера · до 18.10.2026 · 3.2 из 50 ГБ» */
+    private fun subSummary(url: String): String {
+        val n = Subscription.countFor(this, url)
+        val parts = arrayListOf("серверов: $n")
+        Subscription.infoFor(this, url)?.let { info ->
+            if (info.expireSec > 0) parts += "до " + java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.US)
+                .format(java.util.Date(info.expireSec * 1000))
+            val used = (info.download + info.upload) / 1_073_741_824.0
+            parts += if (info.total > 0) String.format(java.util.Locale.US, "%.1f из %.0f ГБ", used, info.total / 1_073_741_824.0)
+            else String.format(java.util.Locale.US, "%.1f ГБ", used)
+        }
+        return parts.joinToString(" · ")
+    }
+
+    private fun confirmRemoveSubscription(url: String, closeParent: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle("Удалить подписку?")
+            .setMessage("${AppLog.host(url)} — её серверы пропадут из списка. Ссылку можно будет добавить снова.")
+            .setPositiveButton("Удалить") { _, _ ->
+                closeParent()
+                Thread {
+                    try { Subscription.remove(applicationContext, url) } catch (e: Exception) { AppLog.err("удаление подписки", e) }
+                    runOnUiThread {
+                        toast("Подписка удалена" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else "")
+                        refresh()
+                    }
+                }.start()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    /** Ещё одна подписка: её серверы добавятся к основным в общий список. */
+    private fun showAddSubscription() {
+        val d = { v: Float -> Ui.dp(this, v) }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(d(20f), d(8f), d(20f), 0)
+        }
+        box.addView(TextView(this).apply {
+            text = "Серверы новой подписки добавятся к уже имеющимся. Автовыбор будет выбирать из всех."
+        })
+        val input = EditText(this).apply { hint = "https://…" }
+        box.addView(input)
+        box.addView(TextView(this).apply {
+            text = Ui.iconText(this@MainActivity, R.drawable.ic_paste, "Вставить из буфера", 18f)
+            setPadding(0, d(10f), 0, d(10f))
+            setTextColor(Ui.GREEN)
+            setOnClickListener {
+                val clip = getSystemService(ClipboardManager::class.java).primaryClip
+                val t = clip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString()?.trim()
+                if (t.isNullOrEmpty()) toast("В буфере пусто") else input.setText(t)
+            }
+        })
+        val dlg = AlertDialog.Builder(this)
+            .setTitle("Добавить подписку")
+            .setView(box)
+            .setPositiveButton("Добавить") { _, _ -> addSubscription(input.text.toString().trim()) }
+            .setNegativeButton("Отмена", null)
+            .create()
+        dlg.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dlg.show()
+    }
+
+    private fun addSubscription(url: String) {
+        if (!url.startsWith("http")) { toast("Нужна ссылка подписки (https://…)"); return }
+        // Основной ещё нет — новая и станет основной
+        if (!AppSettings.subUrl.startsWith("http") && Subscription.usable(this).isEmpty()) { updateSubscription(url); return }
+        val progress = AlertDialog.Builder(this).setTitle("Добавляю подписку").setMessage("Скачиваю серверы…")
+            .setCancelable(false).show()
+        openDialogs += progress
+        Thread {
+            val result = try {
+                val n = Subscription.addExtra(applicationContext, url)
+                null to "Подписка добавлена: серверов $n" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
+            } catch (e: Exception) {
+                (e.message ?: "не получилось") to ""
+            }
+            runOnUiThread {
+                progress.dismissSafe()
+                if (result.first == null) { toast(result.second); refresh() }
+                else showInfo("Подписка не добавилась", result.first!!)
+            }
+        }.start()
     }
 
     /** https://host/путь/токен → https://host/…**** (путь с токеном скрыт); не ссылка — как есть */
@@ -1014,6 +1137,10 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        if (url.trim() in Subscription.extras(this)) {
+            toast("Эта ссылка уже есть среди дополнительных подписок")
+            return
+        }
         AppSettings.subUrl = url
         AppSettings.save(this)
         val progress = AlertDialog.Builder(this).setTitle("Обновляю подписку").setMessage("Секунду…")
@@ -1030,7 +1157,14 @@ class MainActivity : AppCompatActivity() {
                     if (!BoxVpnService.isRunning) throw e
                     Subscription.updateViaRuExit(applicationContext, url) { m -> runOnUiThread { if (progress.isShowing) progress.setMessage(m) } }
                 }
-                "Готово: серверов $n" + if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
+                // Заодно — дополнительные подписки (их ошибки не мешают основной)
+                for (extra in Subscription.extras(applicationContext)) {
+                    runOnUiThread { if (progress.isShowing) progress.setMessage("Обновляю ${AppLog.host(extra)}…") }
+                    try { Subscription.update(applicationContext, extra) } catch (e: Exception) { AppLog.err("доп. подписка ${AppLog.host(extra)}", e) }
+                }
+                val total = Subscription.usable(applicationContext).size
+                "Готово: серверов $n" + (if (total > n) " (всего $total)" else "") +
+                    if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
             } catch (e: Exception) {
                 geo = e is Subscription.GeoBlocked
                 error = e.message

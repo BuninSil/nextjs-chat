@@ -54,6 +54,10 @@ object Backup {
             .put("prefs", p)
         subFile(ctx).takeIf { it.exists() }?.let { o.put("subscription", it.readText()) }
         infoFile(ctx).takeIf { it.exists() }?.let { o.put("subInfo", it.readText()) }
+        // Дополнительные подписки: ссылки — в настройках (extraSubs), здесь — их серверы
+        val extra = JSONObject()
+        for (u in Subscription.extras(ctx)) Subscription.extraFile(ctx, u).takeIf { it.exists() }?.let { extra.put(u, it.readText()) }
+        if (extra.length() > 0) o.put("extraSubscriptions", extra)
         return o.toString(1)
     }
 
@@ -125,6 +129,9 @@ object Backup {
 
         o.optString("subscription").takeIf { it.isNotBlank() }?.let { subFile(ctx).writeText(it) } ?: subFile(ctx).delete()
         o.optString("subInfo").takeIf { it.isNotBlank() }?.let { infoFile(ctx).writeText(it) } ?: infoFile(ctx).delete()
+        o.optJSONObject("extraSubscriptions")?.let { extra ->
+            for (u in extra.keys()) Subscription.extraFile(ctx, u).writeText(extra.getString(u))
+        }
 
         AppSettings.load(ctx)
         Subscription.reload(ctx)

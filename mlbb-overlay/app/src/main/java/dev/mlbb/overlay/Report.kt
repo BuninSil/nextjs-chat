@@ -61,6 +61,9 @@ object Report {
             line("Подписка", "использовано ${(i.upload + i.download) / 1_048_576} МБ из ${if (i.total > 0) "${i.total / 1_048_576} МБ" else "∞"}, " +
                 "до ${if (i.expireSec > 0) SimpleDateFormat("dd.MM.yyyy", Locale.US).format(Date(i.expireSec * 1000)) else "—"}")
         }
+        Subscription.extras(ctx).takeIf { it.isNotEmpty() }?.let { ex ->
+            line("Дополнительные подписки", ex.joinToString { "${AppLog.host(it)} (${Subscription.countFor(ctx, it)})" })
+        }
         val sel = nodes.firstOrNull { it.tag == AppSettings.selectedTag }
         line("Выбранный сервер", sel?.let { "${Ui.cleanName(it)} (${it.type})" }
             ?: if (AppSettings.selectedTag == XrayCore.BYPASS) "обход блокировок без сервера" else "—")
