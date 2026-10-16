@@ -39,8 +39,20 @@ jobs:
       - name: Wails CLI and NSIS
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS }}
-          choco install nsis -y --no-progress
-          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+          # NSIS — сборщик установщика. Каталог Chocolatey иногда не отвечает: пара попыток,
+          # потом — архив с SourceForge напрямую
+          $nsis = "C:\Program Files (x86)\NSIS"
+          for ($i = 1; $i -le 3 -and -not (Test-Path "$nsis\makensis.exe"); $i++) {
+            choco install nsis -y --no-progress
+            if (-not (Test-Path "$nsis\makensis.exe")) { Start-Sleep -Seconds 10 }
+          }
+          if (-not (Test-Path "$nsis\makensis.exe")) {
+            Invoke-WebRequest "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip" -OutFile nsis.zip -UserAgent "curl/8"
+            Expand-Archive nsis.zip -DestinationPath "$env:RUNNER_TEMP"
+            $nsis = "$env:RUNNER_TEMP\nsis-3.10"
+          }
+          if (-not (Test-Path "$nsis\makensis.exe")) { throw "NSIS не установился" }
+          $nsis | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: VPN cores (sing-box, Xray)
         run: |
