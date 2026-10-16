@@ -18,6 +18,8 @@ class ServersActivity : AppCompatActivity() {
     companion object {
         /** Идёт «Ищу самый быстрый» / «Выходы» — живёт дольше экрана */
         @Volatile private var taskRunning = false
+        /** Свёрнутые группы подписок (по ссылке) — пока жив процесс */
+        private val collapsed = HashSet<String>()
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -331,8 +333,15 @@ class ServersActivity : AppCompatActivity() {
         lateinit var ping: TextView
     }
 
+    /** Строка списка: заголовок подписки, сервер или «+ Добавить подписку» */
+    private sealed class Row {
+        class Header(val url: String, val primary: Boolean, val shown: Int) : Row()
+        class Server(val node: Subscription.Node) : Row()
+        object Add : Row()
+    }
+
     private inner class Adapter : RecyclerView.Adapter<Holder>() {
-        private var items: List<Subscription.Node> = emptyList()
+        private var rows: List<Row> = emptyList()
 
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
@@ -343,7 +352,7 @@ class ServersActivity : AppCompatActivity() {
             // Рабочие сверху; в игровом режиме среди них российские первыми
             val game = AppSettings.gameMode
             // Избранные — всегда сверху, скрытые — в самом низу
-            items = all.sortedWith(compareBy<Subscription.Node> {
+            val sorted = all.sortedWith(compareBy<Subscription.Node> {
                 when {
                     Subscription.isHidden(it) -> 2
                     Subscription.isFavorite(it) -> 0
@@ -357,10 +366,29 @@ class ServersActivity : AppCompatActivity() {
                 }
             }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
                 .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
+            // Группы по подпискам: основная, потом дополнительные в порядке добавления
+            val out = ArrayList<Row>()
+            val groups = listOf("") + Subscription.extras(this@ServersActivity)
+            for (g in groups) {
+                val list = sorted.filter { it.sub == g }
+                val total = all.count { it.sub == g }
+                val url = if (g.isEmpty()) AppSettings.subUrl else g
+                if (g.isEmpty() && list.isEmpty() && !url.startsWith("http")) continue
+                out += Row.Header(url, g.isEmpty(), total)
+                if (url !in collapsed) list.mapTo(out) { Row.Server(it) }
+            }
+            out += Row.Add
+            rows = out
             if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${items.size} серверов · пинг напрямую до сервера"
+                header.text = "${sorted.size} серверов · пинг напрямую до сервера"
             }
             notifyDataSetChanged()
+        }
+
+        override fun getItemViewType(position: Int) = when (rows[position]) {
+            is Row.Server -> 0
+            is Row.Header -> 1
+            Row.Add -> 2
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
@@ -372,26 +400,69 @@ class ServersActivity : AppCompatActivity() {
                 layoutParams = RecyclerView.LayoutParams(-1, -2).apply { bottomMargin = d(6f) }
             }
             val h = Holder(row)
-            h.flag = Ui.text(ctx, "", 24f)
+            h.flag = Ui.text(ctx, "", if (viewType == 0) 24f else 18f)
             row.addView(h.flag)
             val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(d(10f), 0, d(8f), 0) }
-            h.name = Ui.text(ctx, "", 14f)
+            h.name = Ui.text(ctx, "", if (viewType == 1) 15f else 14f, bold = viewType == 1)
             h.sub = Ui.text(ctx, "", 11f, Ui.MUTED)
             col.addView(h.name)
             col.addView(h.sub)
             row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-            h.ping = Ui.text(ctx, "", 15f, bold = true)
+            h.ping = Ui.text(ctx, "", if (viewType == 1) 22f else 15f, bold = true)
             row.addView(h.ping)
+            if (viewType == 1) (row.layoutParams as RecyclerView.LayoutParams).topMargin = d(10f)
             return h
         }
 
-        override fun getItemCount() = items.size
+        override fun getItemCount() = rows.size
 
         override fun onBindViewHolder(h: Holder, pos: Int) {
-            val n = items[pos]
+            when (val r = rows[pos]) {
+                is Row.Server -> bindServer(h, r.node)
+                is Row.Header -> bindHeader(h, r)
+                Row.Add -> {
+                    h.root.background = Ui.rounded(Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
+                    h.root.alpha = 1f
+                    h.flag.text = "+"
+                    h.flag.setTextColor(Ui.GREEN)
+                    h.name.text = "Добавить подписку"
+                    h.name.setTextColor(Ui.GREEN)
+                    h.sub.text = "ещё одна ссылка — её серверы добавятся в этот список"
+                    h.ping.text = ""
+                    h.root.setOnClickListener {
+                        SubsUi.showAdd(this@ServersActivity) { u -> SubsUi.add(this@ServersActivity, u) { reload() } }
+                    }
+                    h.root.setOnLongClickListener(null)
+                }
+            }
+        }
+
+        private fun bindHeader(h: Holder, r: Row.Header) {
+            val ctx = h.root.context
+            val open = r.url !in collapsed
+            h.root.background = Ui.rounded(Ui.SEL, Ui.dp(ctx, 12f).toFloat())
+            h.root.alpha = 1f
+            h.flag.text = if (open) "▾" else "▸"
+            h.flag.setTextColor(Ui.MUTED)
+            h.name.text = SubsUi.title(r.url) + if (r.primary && Subscription.extras(ctx).isNotEmpty()) "  · основная" else ""
+            h.name.setTextColor(Ui.TEXT)
+            h.sub.text = SubsUi.summary(ctx, r.url, r.shown)
+            h.ping.text = "⋮"
+            h.ping.setTextColor(Ui.TEXT)
+            // Тап — свернуть/развернуть, «⋮» — управление подпиской
+            h.root.setOnClickListener {
+                if (open) collapsed += r.url else collapsed -= r.url
+                reload()
+            }
+            h.ping.setOnClickListener { manage(r.url) }
+            h.root.setOnLongClickListener { manage(r.url); true }
+        }
+
+        private fun bindServer(h: Holder, n: Subscription.Node) {
             val selected = n.tag == AppSettings.selectedTag
             h.root.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             Ui.setFlag(h.flag, Ui.flagFor(n), 24f)
+            h.name.setTextColor(Ui.TEXT)
             val fav = Subscription.isFavorite(n)
             h.name.text = if (fav) Ui.iconText(h.root.context, R.drawable.ic_star, Ui.cleanName(n), 14f, 6f, tint = Ui.YELLOW)
             else Ui.cleanName(n)
@@ -410,8 +481,24 @@ class ServersActivity : AppCompatActivity() {
                 else -> "${r.medianMs} ms"
             }
             h.ping.setTextColor(if (r == null && ServerTester.results.containsKey(n.tag)) Ui.RED else Ui.pingColor(r?.medianMs))
+            h.ping.setOnClickListener(null)
+            h.ping.isClickable = false
             h.root.setOnClickListener { pick(n) }
             h.root.setOnLongClickListener { marks(n); true }
         }
+    }
+
+    /** Управление подпиской из заголовка группы: обновить или удалить. */
+    private fun manage(url: String) {
+        AppLog.ui("управление подпиской ${SubsUi.title(url)}")
+        android.app.AlertDialog.Builder(this)
+            .setTitle(SubsUi.title(url))
+            .setItems(arrayOf("Обновить", "Удалить")) { _, which ->
+                when (which) {
+                    0 -> SubsUi.update(this, url) { adapter.reload() }
+                    1 -> SubsUi.confirmRemove(this, url) { adapter.reload() }
+                }
+            }
+            .show()
     }
 }

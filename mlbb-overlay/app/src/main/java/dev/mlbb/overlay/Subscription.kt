@@ -24,6 +24,8 @@ object Subscription {
         val outbound: JSONObject,
         /** Ссылка для ядра Xray (XHTTP), если sing-box такой транспорт не умеет */
         val xrayLink: String? = null,
+        /** Из какой подписки: "" — основная, иначе ссылка дополнительной */
+        val sub: String = "",
     )
 
     data class Info(val upload: Long, val download: Long, val total: Long, val expireSec: Long)
@@ -140,11 +142,29 @@ object Subscription {
             val parsed = try { parseAll(f.readText()) } catch (_: Exception) { emptyList() }
             for (n in parsed) {
                 val tag = "n${out.size}"
-                out += n.copy(tag = tag, outbound = JSONObject(n.outbound.toString()).put("tag", tag))
+                out += n.copy(tag = tag, outbound = JSONObject(n.outbound.toString()).put("tag", tag), sub = u)
             }
         }
         return out
     }
+
+    /**
+     * Добавить подписку откуда угодно: основной ещё нет — станет основной, иначе дополнительной.
+     * Бросает исключение с понятным текстом.
+     */
+    fun add(ctx: Context, url: String): Int {
+        val u = url.trim()
+        if (!u.startsWith("http")) throw RuntimeException("нужна ссылка подписки (https://…)")
+        if (!AppSettings.subUrl.startsWith("http") && !file(ctx).exists()) {
+            AppSettings.subUrl = u
+            AppSettings.save(ctx)
+            return update(ctx, u)
+        }
+        return addExtra(ctx, u)
+    }
+
+    /** Ссылка подписки сервера: для основной — AppSettings.subUrl */
+    fun urlOf(n: Node) = n.sub.ifEmpty { AppSettings.subUrl }
 
     /** Сколько серверов в подписке (для списка в окне «Подписки») */
     fun countFor(ctx: Context, url: String): Int {
