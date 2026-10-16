@@ -15,6 +15,11 @@ import androidx.recyclerview.widget.RecyclerView
 
 /** Список серверов подписки с пингом; тап — переключиться, ↻ — перемерить все. */
 class ServersActivity : AppCompatActivity() {
+    companion object {
+        /** Идёт «Ищу самый быстрый» / «Выходы» — живёт дольше экрана */
+        @Volatile private var taskRunning = false
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private val adapter = Adapter()
     private lateinit var header: TextView
@@ -164,27 +169,45 @@ class ServersActivity : AppCompatActivity() {
             Toast.makeText(this, "Сейчас идёт замер пинга — подожди пару секунд", Toast.LENGTH_SHORT).show()
             return
         }
+        // Проверка живёт дольше экрана (ушли «назад» и вернулись) — вторую параллельно не запускаем
+        if (taskRunning) {
+            Toast.makeText(this, "Предыдущая проверка ещё идёт — подожди немного", Toast.LENGTH_SHORT).show()
+            return
+        }
         val run = {
+            taskRunning = true
             val dlg = android.app.AlertDialog.Builder(this).setTitle(title).setMessage("Секунду…")
                 .setCancelable(false)
                 .setNegativeButton("Стоп") { _, _ -> AppLog.ui("нажал «Стоп» в «$title»"); onStop() }
                 .show()
             Thread {
                 val startedHere = !BoxVpnService.isRunning
-                val say: (String) -> Unit = { m -> runOnUiThread { dlg.setMessage(m) } }
-                val result = if (startedHere) {
-                    say("Включаю VPN на время проверки…")
-                    if (Connector.startAndWait(applicationContext)) work(say)
-                    else "VPN не подключился: ${BoxVpnService.lastError ?: "неизвестная ошибка"}"
-                } else work(say)
+                val say: (String) -> Unit = { m -> runOnUiThread { if (dlg.isShowing) dlg.setMessage(m) } }
+                val result = try {
+                    if (startedHere) {
+                        say("Включаю VPN на время проверки…")
+                        if (Connector.startAndWait(applicationContext)) work(say)
+                        else "VPN не подключился: ${BoxVpnService.lastError ?: "неизвестная ошибка"}"
+                    } else work(say)
+                } catch (e: Exception) {
+                    AppLog.err("«$title»", e)
+                    "Не получилось: ${e.message ?: e.javaClass.simpleName}"
+                } finally {
+                    taskRunning = false
+                }
                 AppLog.srv("«$title» — итог: ${result.replace('\n', ' ')}")
-                if (startedHere) BoxVpnService.stop(this, manual = false)
+                if (startedHere) BoxVpnService.stop(applicationContext, manual = false)
                 runOnUiThread {
-                    if (!isFinishing) {
-                        dlg.dismiss()
+                    // Экран уже закрыт или пересоздан — окно показать некуда (раньше тут был вылет)
+                    if (isFinishing || isDestroyed) {
+                        Toast.makeText(applicationContext, result.lineSequence().first(), Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    try { if (dlg.isShowing) dlg.dismiss() } catch (_: Exception) {}
+                    try {
                         android.app.AlertDialog.Builder(this).setTitle(title).setMessage(result)
                             .setPositiveButton("Понятно", null).show()
-                    }
+                    } catch (_: Exception) {}
                     adapter.reload()
                 }
             }.start()

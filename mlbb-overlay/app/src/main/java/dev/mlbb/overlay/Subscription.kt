@@ -113,6 +113,8 @@ object Subscription {
     private val userAgents = listOf(
         "v2rayNG/1.9.16", "Happ/3.6.0", "Hiddify/2.5.7", "Karing/1.1.2.606", "sing-box/1.11.4", "v2RayTun/5.1",
         "ClashMetaForAndroid/2.11.1.Meta", "clash-verge/v2.0.3", "Streisand", "FoXray",
+        // Неизвестный панели клиент — многие тогда отдают обычный список ссылок
+        "curl/8.5.0",
     )
 
     /** Новый список серверов. Проверки (страна выхода, подбор) сбрасываются, только если он поменялся. */
@@ -216,7 +218,14 @@ object Subscription {
     private const val MAX_BODY = 5 * 1024 * 1024
 
     /** Читает не больше [MAX_BODY] байт: огромный ответ не повесит приложение и не съест память. */
-    private fun readLimited(input: java.io.InputStream, limit: Int = MAX_BODY): String {
+    private fun readLimited(raw: java.io.InputStream, limit: Int = MAX_BODY): String {
+        // Сжатие сами: панель может заявить gzip и прислать обычный текст (или наоборот) —
+        // встроенная распаковка Android на этом падала («ID1ID2: actual … != expected 0x1f8b»)
+        val peek = java.io.BufferedInputStream(raw, 64 * 1024)
+        peek.mark(2)
+        val gz = peek.read() == 0x1f && peek.read() == 0x8b
+        peek.reset()
+        val input: java.io.InputStream = if (gz) java.util.zip.GZIPInputStream(peek, 64 * 1024) else peek
         val out = java.io.ByteArrayOutputStream()
         val buf = ByteArray(64 * 1024)
         input.use {
@@ -228,6 +237,19 @@ object Subscription {
             }
         }
         return out.toString("UTF-8")
+    }
+
+    /** Что прислала панель, если серверов не нашлось — для журнала (без содержимого: там ключи). */
+    private fun formatOf(body: String): String {
+        val t = body.trimStart().take(200).lowercase()
+        return when {
+            t.startsWith("<") || t.contains("<html") -> "веб-страница (HTML)"
+            t.startsWith("[") -> "JSON-массив (конфиги Xray)"
+            t.startsWith("{") -> "JSON (без серверов sing-box)"
+            body.contains("proxies:") -> "Clash YAML"
+            t.isEmpty() -> "пусто"
+            else -> "текст, не похожий на ссылки серверов"
+        }
     }
 
     /** Подписка, вставленная текстом (ссылки серверов или base64), а не URL. */
@@ -267,6 +289,8 @@ object Subscription {
                 val c = Net.open(url.trim())
                 c.setRequestProperty("User-Agent", ua)
                 c.setRequestProperty("Accept", "*/*")
+                // Без автоматической распаковки: сжатый ответ распознаём и распаковываем сами
+                c.setRequestProperty("Accept-Encoding", "identity")
                 c.setRequestProperty("x-hwid", hwid(ctx))
                 c.setRequestProperty("x-device-os", "Android")
                 c.setRequestProperty("x-ver-os", android.os.Build.VERSION.RELEASE)
@@ -290,7 +314,8 @@ object Subscription {
                 }
                 val body = readLimited(c.inputStream)
                 val parsed = parseAll(body)
-                AppLog.sub("получено ${body.length} байт, серверов распознано ${parsed.size}")
+                AppLog.sub("получено ${body.length} байт (${ua.substringBefore('/')}), серверов распознано ${parsed.size}" +
+                    if (parsed.isEmpty()) ", формат: ${formatOf(body)}" else "")
                 if (parsed.isEmpty()) {
                     lastProblem = "панель отдала подписку в формате, который я не понял"
                     continue
