@@ -148,7 +148,10 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 	dns := obj{
 		"servers": []any{
 			obj{"tag": "remote", "address": "https://1.1.1.1/dns-query", "detour": "proxy"},
-			obj{"tag": "local", "address": "local", "detour": "direct"},
+			// Не системный DNS («local»): на Windows его запросы уходят в сам туннель, получают
+			// подменный адрес 198.18.x.x — и российские сайты «напрямую» не открывались.
+			// Яндекс DNS напрямую через сетевую карту, мимо туннеля; заодно ближайшие к РФ адреса CDN
+			obj{"tag": "local", "address": "77.88.8.8", "detour": "direct"},
 			obj{"tag": "fakeip", "address": "fakeip"},
 		},
 		"rules": []any{
