@@ -136,7 +136,9 @@ object XrayCore {
             rules.put(JSONObject().put("type", "field").put("inboundTag", JSONArray().put("in-$tag")).put("outboundTag", tag))
         }
         if (bypassPort != null) {
-            val (packets, length, interval) = BYPASS_PRESETS[AppSettings.bypassPreset.coerceIn(0, BYPASS_PRESETS.size - 1)]
+            // Параметры, найденные лабораторией обхода, — важнее заготовок
+            val (packets, length, interval) = bypassParams
+                ?: BYPASS_PRESETS[AppSettings.bypassPreset.coerceIn(0, BYPASS_PRESETS.size - 1)]
             inbounds.put(JSONObject().put("tag", "in-$BYPASS").put("listen", "127.0.0.1").put("port", bypassPort)
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
             outbounds.put(JSONObject().put("tag", BYPASS).put("protocol", "freedom")
@@ -174,6 +176,16 @@ object XrayCore {
     fun setBypassPreset(ctx: Context, preset: Int) {
         AppSettings.bypassPreset = preset
         AppSettings.save(ctx)
+        bypassParams = null
+        if (lastBypassPort != null) start(ctx, lastNodes, lastBypassPort)
+    }
+
+    /** Свои параметры дробления (packets, length, interval); null — заготовка [AppSettings.bypassPreset] */
+    @Volatile var bypassParams: Triple<String, String, String>? = null
+        private set
+
+    fun setBypassParams(ctx: Context, p: Triple<String, String, String>?) {
+        bypassParams = p
         if (lastBypassPort != null) start(ctx, lastNodes, lastBypassPort)
     }
 

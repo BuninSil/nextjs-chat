@@ -283,10 +283,12 @@ class ServersActivity : AppCompatActivity() {
                 return
             }
             AppLog.ui("выключил «Обход блокировок без сервера» — обратно на «${Ui.cleanName(back)}»")
+            prefs.edit().putBoolean("bypassWanted", false).apply()
             AppSettings.autoSelect = prefs.getBoolean("beforeBypassAuto", true)
             AppSettings.selectedTag = back.tag
         } else {
             AppLog.ui("выбрал «Обход блокировок без сервера»")
+            prefs.edit().putBoolean("bypassWanted", false).apply()
             prefs.edit().putString("beforeBypass", AppSettings.selectedTag)
                 .putBoolean("beforeBypassAuto", AppSettings.autoSelect).apply()
             AppSettings.autoSelect = false
@@ -310,6 +312,8 @@ class ServersActivity : AppCompatActivity() {
 
     private fun pick(n: Subscription.Node) {
         AppLog.ui("выбрал сервер вручную: «${Ui.cleanName(n)}» (${n.type}), автовыбор выключен")
+        // Выбрал сервер сам — возвращать на обход без спроса не надо
+        getSharedPreferences("settings", MODE_PRIVATE).edit().putBoolean("bypassWanted", false).apply()
         AppSettings.autoSelect = false
         if (BoxVpnService.isRunning) {
             Thread {
@@ -380,7 +384,8 @@ class ServersActivity : AppCompatActivity() {
             out += Row.Add
             rows = out
             if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${sorted.size} серверов · пинг напрямую до сервера"
+                header.text = "${sorted.size} серверов · пинг напрямую до сервера" +
+                    Autopilot.summary(this@ServersActivity).let { if (it.isNotEmpty()) "\n$it" else "" }
             }
             notifyDataSetChanged()
         }
@@ -474,7 +479,11 @@ class ServersActivity : AppCompatActivity() {
             val forGame = if (AppSettings.gameMode && ServerTester.isRussian(n)) " · приоритет для игры" else ""
             h.sub.text = n.type + udp + forGame + (r?.let { " · разброс ${it.jitterMs} ms" } ?: "") +
                 (sp?.let { " · ↓ " + String.format(java.util.Locale.US, "%.0f", it) + " Мбит/с" } ?: "") +
-                (exit?.let { " · выход ${GeoDb.flag(it)}" } ?: "")
+                (exit?.let { " · выход ${GeoDb.flag(it)}" } ?: "") +
+                // Опыт автопилота в этой сети: сколько раз сервер сработал из скольких
+                (Autopilot.confidence(h.root.context, n)?.let { (rate, total) ->
+                    " · в этой сети ${Math.round(rate * total)}/$total"
+                } ?: "")
             h.ping.text = when {
                 !ServerTester.results.containsKey(n.tag) -> if (ServerTester.testing) "…" else ""
                 r == null -> "✖"

@@ -80,8 +80,10 @@ object ServerTester {
         // Живы ли — проверяем все кандидаты разом, а не по очереди (раньше это и тянуло время)
         val alive = ConcurrentHashMap.newKeySet<String>()
         val pool = Executors.newFixedThreadPool(order.size.coerceIn(1, 12))
+        val nodeOf = Subscription.usable(ctx).associateBy { it.tag }
         for (tag in order) pool.execute {
-            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 3000) != null) alive.add(tag) else results.put(tag, null)
+            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 3000) != null) alive.add(tag)
+            else { results.put(tag, null); nodeOf[tag]?.let { Autopilot.record(ctx, it, ok = false) } }
         }
         pool.shutdown()
         pool.awaitTermination(6, TimeUnit.SECONDS)
@@ -94,6 +96,7 @@ object ServerTester {
                 progress(checked, candidates)
                 val mbps = SpeedTest.quickDownload()
                 AppLog.srv("скорость: «${AppLog.name(ctx, tag)}» — ${mbps?.let { String.format(java.util.Locale.US, "%.1f Мбит/с", it) } ?: "не замерилась"}")
+                nodeOf[tag]?.let { Autopilot.record(ctx, it, ok = mbps != null, mbps = mbps) }
                 if (mbps == null) continue
                 speed[tag] = mbps
                 if (tag == current) currentSpeed = mbps
@@ -139,7 +142,7 @@ object ServerTester {
      * Не первая попавшаяся: Xiaomi и др. держат мобильный интернет поднятым рядом с Wi-Fi, и пинг
      * уходил через мобильную сеть (с её белыми списками) — у серверов были кресты, хотя Wi-Fi работал.
      */
-    private fun underlying(ctx: Context): Network? {
+    fun underlying(ctx: Context): Network? {
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
         fun real(n: Network?) = n?.let { cm.getNetworkCapabilities(it) }?.let {
             it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
@@ -231,8 +234,10 @@ object ServerTester {
             // Обычный режим: VPN с выходом в России ничего не разблокирует (Telegram, YouTube…) —
             // такие серверы только запасным вариантом
             val (ru, other) = ranked.partition { tag -> byTag[tag]?.let { exitsRussia(it) } == true }
-            ranked = other + ru
+            // Автопилот: сначала то, что уже работало в этой сети, с учётом скорости
+            ranked = Autopilot.order(ctx, other, byTag) { results[it]?.medianMs } + ru
         }
+        for (n in nodes) Autopilot.recordPing(ctx, n, results[n.tag]?.medianMs)
         // Избранные пользователем — в начало, порядок внутри сохраняется
         val (fav, rest) = ranked.partition { tag -> byTag[tag]?.let { Subscription.isFavorite(it) } == true }
         return fav + rest
@@ -253,12 +258,15 @@ object ServerTester {
         val limit = if (game) 20 else maxTries
         for (tag in ranked.take(limit)) {
             if (!probe(p, tag)) { AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — не переключился"); continue }
+            val node = Subscription.usable(ctx).firstOrNull { it.tag == tag }
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {
                 AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — трафик не идёт, пропускаю")
                 results.put(tag, null)
+                node?.let { Autopilot.record(ctx, it, ok = false) }
                 continue
             }
             AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — работает")
+            node?.let { Autopilot.record(ctx, it, ok = true) }
             if (!game) { chosen = tag; break }
             if (fallback == null) fallback = tag
             // Страна выхода проверяется один раз и дальше берётся из памяти
@@ -546,6 +554,7 @@ object ServerTester {
     /** Переключить группу «abroad» в ядре под текущий выбранный сервер. */
     fun applyAbroad(ctx: Context) {
         if (AppSettings.gameMode) return // игровой режим не трогаем
+        if (AppSettings.selectedTag == XrayCore.BYPASS) return // обход — без «зарубежного» сервера
         val p = BoxVpnService.ports ?: return
         val sel = AppSettings.selectedTag
         val tag = abroadFor(ctx, sel)

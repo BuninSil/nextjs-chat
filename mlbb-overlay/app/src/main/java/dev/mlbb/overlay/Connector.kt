@@ -120,39 +120,69 @@ object Connector {
                 onReady(null)
                 rank(ctx, game) {}
             }
-            else ->
-                // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий
-                rank(ctx, game) { onReady(current()) }
+            else -> {
+                // Автопилот: в этой сети есть проверенный лидер — сразу к нему, без перебора
+                val lead = if (game) null else Autopilot.leader(ctx,
+                    Subscription.usable(ctx).filter { !ServerTester.isSeparator(it) && !ServerTester.exitsRussia(it) && it.tag != tag })
+                if (lead != null && ServerTester.alive(lead.tag)) {
+                    AppLog.conn("автопилот: сразу «${Ui.cleanName(lead)}» — лучший в ${Autopilot.networkLabel(ctx)} по опыту")
+                    ServerTester.use(ctx, lead.tag)
+                    Autopilot.record(ctx, lead, ok = true)
+                    onReady(current())
+                    rank(ctx, game) {}
+                } else {
+                    // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий
+                    rank(ctx, game) { onReady(current()) }
+                }
+            }
         }
         AppLog.conn("готово за ${System.currentTimeMillis() - t0} мс, сервер «${nodeName(ctx, AppSettings.selectedTag)}»")
         if (!game) startWatchdog(ctx)
     }
 
     /** Сайт, по которому проверяем обход: YouTube — главное, что режут */
-    private const val BYPASS_CHECK = "https://www.youtube.com/generate_204"
+    private const val BYPASS_CHECK = BypassLab.CHECK
 
     /**
      * Обход блокировок без сервера: проверяем, открывается ли YouTube. Не открывается — перебираем
      * способы (у разных провайдеров работают разные), рабочий запоминаем.
      */
     private fun checkBypass(ctx: Context): Boolean {
-        val p = BoxVpnService.ports ?: return false
-        val presets = XrayCore.BYPASS_PRESETS.indices.let { all ->
-            listOf(AppSettings.bypassPreset) + all.filter { it != AppSettings.bypassPreset }
-        }
-        for ((i, preset) in presets.withIndex()) {
-            if (!BoxVpnService.isRunning) return false
-            busyText = if (i == 0) "Проверяю обход блокировок…" else "Подбираю способ обхода: ${i + 1} из ${presets.size}…"
+        if (BoxVpnService.ports == null) return false
+        // Лучшее известное для этой сети и заготовки; долгий поиск — потом, в фоне, уже на сервере
+        val g = BypassLab.search(ctx, maxTries = 5) { busyText = it; Widget.update(ctx) }
+        return g != null
+    }
+
+    /**
+     * Обход не работает, а пользователь хотел обход: пока он на сервере, лаборатория в фоне ищет
+     * новый способ. Нашла — возвращаемся на обход и говорим об этом.
+     */
+    private fun bypassLabInBackground(ctx: Context) {
+        if (!XrayCore.available(ctx) || AppSettings.gameMode || BypassLab.running) return
+        // Xray обслуживает и XHTTP-серверы: если выбран такой — перезапуски оборвут соединения
+        val sel = Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }
+        if (sel?.xrayLink != null) { AppLog.conn("лаборатория обхода: выбран XHTTP-сервер — не запускаю, чтобы не рвать соединения"); return }
+        val net = Autopilot.networkKey(ctx)
+        val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val last = p.getLong("labAt:$net", 0)
+        if (System.currentTimeMillis() - last < 30 * 60_000L) return
+        p.edit().putLong("labAt:$net", System.currentTimeMillis()).apply()
+        Thread {
+            val g = BypassLab.search(ctx, maxTries = 18)
+            if (g == null || !BoxVpnService.isRunning) return@Thread
+            if (!p.getBoolean("bypassWanted", false) || AppSettings.selectedTag == XrayCore.BYPASS) return@Thread
+            val ports = BoxVpnService.ports ?: return@Thread
+            if (!ServerTester.selectMain(ports, XrayCore.BYPASS)) return@Thread
+            AppSettings.selectedTag = XrayCore.BYPASS
+            AppSettings.autoSelect = false
+            AppSettings.save(ctx)
+            p.edit().putBoolean("bypassWanted", false).apply()
+            AppLog.conn("лаборатория обхода: нашла способ — возвращаюсь на обход без сервера")
+            notifyBypass(ctx, "Обход блокировок снова работает",
+                "Нашёл новый способ обхода для ${Autopilot.networkLabel(ctx)} — VPN снова работает без сервера")
             Widget.update(ctx)
-            if (preset != AppSettings.bypassPreset) {
-                XrayCore.setBypassPreset(ctx, preset)
-                Thread.sleep(700)
-            }
-            val ms = ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000)
-            AppLog.conn("обход блокировок: способ ${preset + 1} — YouTube ${if (ms != null) "открылся за $ms мс" else "не открылся"}")
-            if (ms != null) return true
-        }
-        return false
+        }.start()
     }
 
     /**
@@ -167,6 +197,8 @@ object Connector {
             return
         }
         AppLog.conn("обход блокировок не работает — переключаюсь на самый быстрый сервер")
+        // Пользователь хотел обход — лаборатория поищет новый способ и вернёт его
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putBoolean("bypassWanted", true).apply()
         // Автовыбор — как был до включения обхода
         AppSettings.autoSelect = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("beforeBypassAuto", true)
         AppSettings.save(ctx)
@@ -178,8 +210,10 @@ object Connector {
         val name = nodeName(ctx, AppSettings.selectedTag)
         if (AppSettings.selectedTag != XrayCore.BYPASS && name.isNotEmpty()) {
             notifyBypass(ctx, "Обход блокировок сейчас не работает",
-                "Из-за сбоев у провайдера VPN переключился на сервер «$name» — самый быстрый из рабочих")
+                "Из-за сбоев у провайдера VPN переключился на сервер «$name» — самый быстрый из рабочих. " +
+                    "Пока ищу новый способ обхода — найду, верну")
             if (!AppSettings.gameMode) startWatchdog(ctx)
+            bypassLabInBackground(ctx)
         } else {
             notifyBypass(ctx, "Обход блокировок не работает", "И ни один сервер подписки сейчас не ответил — проверь интернет")
             if (!switched) onReady("Обход не работает, и рабочих серверов не нашлось")
@@ -301,7 +335,10 @@ object Connector {
                     }
                     continue
                 }
+                // Обход не работал, а пользователь его хочет — лаборатория иногда пробует найти новый способ
+                if (ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("bypassWanted", false)) bypassLabInBackground(ctx)
                 if (ServerTester.alive(AppSettings.selectedTag)) { fails = 0; continue }
+                Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = false) }
                 // Без сети менять сервер бесполезно
                 if (ServerTester.netKey(ctx) == "none") continue
                 AppLog.conn("сторож: сервер «${nodeName(ctx, AppSettings.selectedTag)}» не ответил (${fails + 1}-й раз)")
