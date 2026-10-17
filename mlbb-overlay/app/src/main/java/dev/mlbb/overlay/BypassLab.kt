@@ -28,7 +28,10 @@ object BypassLab {
             } catch (_: Exception) { null }
 
             fun fromTriple(t: Triple<String, String, String>): Genome {
-                fun range(s: String) = s.split('-').map { it.trim().toInt() }.let { it[0] to it.getOrElse(1) { it[0] } }
+                fun range(s: String): Pair<Int, Int> {
+                    val v = s.split('-').map { it.trim().toInt() }
+                    return v[0] to v.getOrElse(1) { v[0] }
+                }
                 val (l1, l2) = range(t.second)
                 val (i1, i2) = range(t.third)
                 return Genome(t.first, l1, l2, i1, i2).normalized()
