@@ -173,13 +173,6 @@ object XrayCore {
     }
 
     /** Сменить способ обхода на лету: перезапускаем только Xray, VPN не рвётся. */
-    fun setBypassPreset(ctx: Context, preset: Int) {
-        AppSettings.bypassPreset = preset
-        AppSettings.save(ctx)
-        bypassParams = null
-        if (lastBypassPort != null) start(ctx, lastNodes, lastBypassPort)
-    }
-
     /** Свои параметры дробления (packets, length, interval); null — заготовка [AppSettings.bypassPreset] */
     @Volatile var bypassParams: Triple<String, String, String>? = null
         private set
@@ -187,6 +180,11 @@ object XrayCore {
     fun setBypassParams(ctx: Context, p: Triple<String, String, String>?) {
         bypassParams = p
         if (lastBypassPort != null) start(ctx, lastNodes, lastBypassPort)
+    }
+
+    /** Перед запуском VPN: способ, запомненный для этой сети, — без перезапуска Xray */
+    fun presetBypassParams(p: Triple<String, String, String>?) {
+        if (p != null) bypassParams = p
     }
 
     @Synchronized

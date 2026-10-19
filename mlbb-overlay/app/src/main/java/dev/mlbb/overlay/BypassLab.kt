@@ -82,9 +82,10 @@ object BypassLab {
     /**
      * Поиск: сначала лучшее, что знаем для этой сети, и заготовки, потом эволюция — пока не
      * кончатся попытки. Возвращает лучший рабочий вариант (и запоминает его) или null.
-     * progress — для строки статуса.
+     * progress — для строки статуса. improve = false — остановиться на первом рабочем (при
+     * подключении: каждая проба перезапускает Xray, а пользователь ждёт).
      */
-    fun search(ctx: Context, maxTries: Int, progress: (String) -> Unit = {}): Genome? {
+    fun search(ctx: Context, maxTries: Int, improve: Boolean = true, progress: (String) -> Unit = {}): Genome? {
         if (running) return null
         running = true
         try {
@@ -93,7 +94,8 @@ object BypassLab {
             var best: Pair<Genome, Int>? = null
             var n = 0
             fun run(g: Genome): Int? {
-                tried[g]?.let { return it }
+                // containsKey, а не tried[g]: «не открылся» хранится как null
+                if (tried.containsKey(g)) return tried[g]
                 if (n >= maxTries || !BoxVpnService.isRunning) return null
                 n++
                 progress("Подбираю способ обхода: попытка $n из $maxTries…")
@@ -110,7 +112,8 @@ object BypassLab {
             }
             // Эволюция: есть рабочий — улучшаем его; нет — разведка (мутации заготовок и случайные)
             var stale = 0
-            while (n < maxTries && BoxVpnService.isRunning) {
+            var generated = 0
+            while (n < maxTries && BoxVpnService.isRunning && (improve || best == null) && generated++ < maxTries * 10) {
                 val b = best
                 val g = when {
                     b != null && stale >= 3 -> break

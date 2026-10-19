@@ -269,6 +269,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val xrayPorts = if (XrayCore.available(this)) {
                 nodes.filter { it.xrayLink != null }.associate { it.tag to freePort() }
             } else emptyMap()
+            // Обход: сразу способ, найденный лабораторией для этой сети
+            XrayCore.presetBypassParams(Autopilot.bypassBest(this)?.params())
             XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) }, bypassPort)
 
             if (!setupDone) {

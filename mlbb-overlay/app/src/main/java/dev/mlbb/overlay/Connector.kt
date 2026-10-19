@@ -154,7 +154,7 @@ object Connector {
     private fun checkBypass(ctx: Context): Boolean {
         if (BoxVpnService.ports == null) return false
         // Лучшее известное для этой сети и заготовки; долгий поиск — потом, в фоне, уже на сервере
-        val g = BypassLab.search(ctx, maxTries = 5) { busyText = it; Widget.update(ctx) }
+        val g = BypassLab.search(ctx, maxTries = 5, improve = false) { busyText = it; Widget.update(ctx) }
         return g != null
     }
 
@@ -208,19 +208,23 @@ object Connector {
         AppSettings.save(ctx)
         var switched = false
         rank(ctx, AppSettings.gameMode) {
-            switched = AppSettings.selectedTag != XrayCore.BYPASS
-            onReady(if (switched) "Обход не работает — переключился на «${nodeName(ctx, AppSettings.selectedTag)}»" else null)
+            // Рабочий сервер уже выбран — сообщаем сразу, не дожидаясь замера скорости
+            val name = nodeName(ctx, AppSettings.selectedTag)
+            switched = AppSettings.selectedTag != XrayCore.BYPASS && name.isNotEmpty()
+            if (switched) {
+                onReady("Обход не работает — переключился на «$name»")
+                notifyBypass(ctx, "Обход блокировок сейчас не работает",
+                    "Из-за сбоев у провайдера VPN переключился на сервер «$name» — самый быстрый из рабочих. " +
+                        "Пока ищу новый способ обхода — найду, верну")
+            }
         }
-        val name = nodeName(ctx, AppSettings.selectedTag)
-        if (AppSettings.selectedTag != XrayCore.BYPASS && name.isNotEmpty()) {
-            notifyBypass(ctx, "Обход блокировок сейчас не работает",
-                "Из-за сбоев у провайдера VPN переключился на сервер «$name» — самый быстрый из рабочих. " +
-                    "Пока ищу новый способ обхода — найду, верну")
+        if (switched) {
             if (!AppSettings.gameMode) startWatchdog(ctx)
             bypassLabInBackground(ctx)
-        } else {
+        } else if (BoxVpnService.isRunning) {
+            // (VPN выключили посреди подбора — молчим)
             notifyBypass(ctx, "Обход блокировок не работает", "И ни один сервер подписки сейчас не ответил — проверь интернет")
-            if (!switched) onReady("Обход не работает, и рабочих серверов не нашлось")
+            onReady("Обход не работает, и рабочих серверов не нашлось")
         }
     }
 

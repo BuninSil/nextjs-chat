@@ -99,11 +99,15 @@ object Autopilot {
         return nets.getOrPut(key) { Net() }.also { it.seen = System.currentTimeMillis() }
     }
 
+    /** Насколько ослаб опыт с последнего результата (за неделю — вдвое) */
+    private fun weight(s: Stat, now: Long) = if (s.at == 0L) 1.0 else Math.pow(0.5, (now - s.at) / HALF_LIFE_MS)
+
+    /** Перед новым результатом: старый опыт ослабляем и запоминаем, когда это было */
     private fun decay(s: Stat, now: Long) {
-        if (s.at == 0L) return
-        val k = Math.pow(0.5, (now - s.at) / HALF_LIFE_MS)
+        val k = weight(s, now)
         s.ok *= k
         s.fail *= k
+        s.at = now
     }
 
     /** Подключение через сервер прошло / не прошло (в этой сети). */
@@ -129,7 +133,8 @@ object Autopilot {
     /** Насколько автопилот уверен в сервере в этой сети: доля успехов и сколько раз проверяли. */
     @Synchronized
     fun confidence(ctx: Context, n: Subscription.Node): Pair<Double, Int>? {
-        val s = net(ctx, networkKey(ctx)).servers[id(n)] ?: return null
+        val key = networkKey(ctx).ifEmpty { return null }
+        val s = net(ctx, key).servers[id(n)] ?: return null
         val total = s.ok + s.fail
         if (total < 0.5) return null
         return (s.ok / total) to Math.round(total).toInt()
@@ -186,8 +191,9 @@ object Autopilot {
             // Пинг 30 мс → 1, 300 мс → ~0,3
             val pingF = ping?.let { 1.0 / (1.0 + max(0, it - 30) / 120.0) } ?: 0.6
             if (s == null) return@associateWith beta(1.0, 1.0) * pingF * 0.8
-            decay(s, now)
-            val p = beta(s.ok + 1, s.fail + 1)
+            // Для выбора опыт ослабляем на копии — сама статистика меняется только новым результатом
+            val k = weight(s, now)
+            val p = beta(s.ok * k + 1, s.fail * k + 1)
             // Скорость: 0 → 0,5; 50 Мбит/с и больше → 1
             val speedF = if (s.mbps > 0) 0.5 + 0.5 * min(1.0, s.mbps / 50) else 0.6
             p * speedF * (0.7 + 0.3 * pingF)
@@ -204,18 +210,21 @@ object Autopilot {
         val now = System.currentTimeMillis()
         return nodes.mapNotNull { n ->
             val s = servers[id(n)] ?: return@mapNotNull null
-            decay(s, now)
-            val total = s.ok + s.fail
-            if (s.ok < 2.5 || s.ok / total < 0.8) return@mapNotNull null
-            n to (s.ok / total) * (0.5 + 0.5 * min(1.0, s.mbps / 50))
+            val k = weight(s, now)
+            val ok = s.ok * k
+            val total = ok + s.fail * k
+            if (ok < 2.5 || ok / total < 0.8) return@mapNotNull null
+            n to (ok / total) * (0.5 + 0.5 * min(1.0, s.mbps / 50))
         }.maxByOrNull { it.second }?.first
     }
 
     // ------------------------------- обход блокировок -------------------------------
 
     @Synchronized
-    fun bypassBest(ctx: Context): BypassLab.Genome? =
-        net(ctx, networkKey(ctx)).bypass?.let { BypassLab.Genome.fromJson(it) }
+    fun bypassBest(ctx: Context): BypassLab.Genome? {
+        val key = networkKey(ctx).ifEmpty { return null }
+        return net(ctx, key).bypass?.let { BypassLab.Genome.fromJson(it) }
+    }
 
     @Synchronized
     fun setBypassBest(ctx: Context, g: BypassLab.Genome?, ms: Int?) {
