@@ -1081,8 +1081,7 @@ class MainActivity : AppCompatActivity() {
                     try { Subscription.update(applicationContext, extra) } catch (e: Exception) { AppLog.err("доп. подписка ${AppLog.host(extra)}", e) }
                 }
                 val total = Subscription.usable(applicationContext).size
-                "Готово: серверов $n" + (if (total > n) " (всего $total)" else "") +
-                    if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
+                "Готово: серверов $n" + (if (total > n) " (всего $total)" else "")
             } catch (e: Exception) {
                 geo = e is Subscription.GeoBlocked
                 error = e.message

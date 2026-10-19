@@ -71,8 +71,11 @@ object BypassLab {
     /** Проверить вариант: перезапуск Xray обхода с ним и запрос к YouTube. мс — открылся, null — нет. */
     private fun test(ctx: Context, g: Genome): Int? {
         val p = BoxVpnService.ports ?: return null
-        XrayCore.setBypassParams(ctx, g.params())
-        Thread.sleep(700)
+        // Этот вариант уже загружен — без перезапуска Xray (он рвёт соединения)
+        if (XrayCore.bypassParams != g.params()) {
+            XrayCore.setBypassParams(ctx, g.params())
+            Thread.sleep(700)
+        }
         return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 5000)
     }
 
@@ -85,9 +88,18 @@ object BypassLab {
      * progress — для строки статуса. improve = false — остановиться на первом рабочем (при
      * подключении: каждая проба перезапускает Xray, а пользователь ждёт).
      */
-    fun search(ctx: Context, maxTries: Int, improve: Boolean = true, progress: (String) -> Unit = {}): Genome? {
-        // Одновременно — только один поиск (сторож и фоновая лаборатория могут позвать разом)
-        if (!busy.compareAndSet(false, true)) return null
+    fun search(ctx: Context, maxTries: Int, improve: Boolean = true, wait: Boolean = false, progress: (String) -> Unit = {}): Genome? {
+        // Одновременно — только один поиск (сторож и фоновая лаборатория могут позвать разом).
+        // wait — дождаться очереди (при подключении «занято» не значит «обход не работает»)
+        if (!busy.compareAndSet(false, true)) {
+            if (!wait) return null
+            val until = System.currentTimeMillis() + 150_000
+            progress("Лаборатория обхода заканчивает поиск…")
+            while (!busy.compareAndSet(false, true)) {
+                if (System.currentTimeMillis() > until || !BoxVpnService.isRunning) return null
+                Thread.sleep(300)
+            }
+        }
         try {
             val seeds = (listOfNotNull(Autopilot.bypassBest(ctx)) + XrayCore.BYPASS_PRESETS.map { Genome.fromTriple(it) }).distinct()
             val tried = HashMap<Genome, Int?>()
@@ -129,11 +141,12 @@ object BypassLab {
             val found = best
             if (found != null) {
                 Autopilot.setBypassBest(ctx, found.first, found.second)
-                XrayCore.setBypassParams(ctx, found.first.params())
+                if (XrayCore.bypassParams != found.first.params()) XrayCore.setBypassParams(ctx, found.first.params())
                 AppLog.conn("лаборатория обхода: лучший для ${Autopilot.networkLabel(ctx)} — ${found.first} (${found.second} мс), попыток $n")
             } else {
                 // Ничего не открылось — Xray обратно на запомненный вариант (или заготовку)
-                XrayCore.setBypassParams(ctx, Autopilot.bypassBest(ctx)?.params())
+                val back = Autopilot.bypassBest(ctx)?.params()
+                if (back != null && XrayCore.bypassParams != back) XrayCore.setBypassParams(ctx, back)
                 AppLog.conn("лаборатория обхода: в ${Autopilot.networkLabel(ctx)} ни один из $n вариантов не открыл YouTube")
             }
             return found?.first

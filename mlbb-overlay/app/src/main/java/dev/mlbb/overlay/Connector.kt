@@ -133,7 +133,8 @@ object Connector {
                     ServerTester.use(ctx, lead.tag)
                     Autopilot.record(ctx, lead, ok = true)
                     onReady(current())
-                    rank(ctx, game) {}
+                    // Без «первого рабочего» — он увёл бы с лидера; только сверка скорости
+                    refine(ctx)
                 } else {
                     // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий
                     rank(ctx, game) { onReady(current()) }
@@ -153,11 +154,9 @@ object Connector {
      */
     private fun checkBypass(ctx: Context): Boolean {
         if (BoxVpnService.ports == null) return false
-        // Фоновая лаборатория ещё ищет — дождёмся (иначе решили бы, что обход не работает)
-        var waited = 0
-        while (BypassLab.running && waited < 120_000) { busyText = "Лаборатория обхода заканчивает поиск…"; Thread.sleep(500); waited += 500 }
         // Лучшее известное для этой сети и заготовки; долгий поиск — потом, в фоне, уже на сервере
-        val g = BypassLab.search(ctx, maxTries = 5, improve = false) { busyText = it; Widget.update(ctx) }
+        // wait: фоновая лаборатория ещё ищет — дождёмся её (иначе решили бы, что обход не работает)
+        val g = BypassLab.search(ctx, maxTries = 5, improve = false, wait = true) { busyText = it; Widget.update(ctx) }
         return g != null
     }
 
@@ -168,8 +167,10 @@ object Connector {
     private fun bypassLabInBackground(ctx: Context) {
         if (!XrayCore.available(ctx) || AppSettings.gameMode || BypassLab.running) return
         // Xray обслуживает и XHTTP-серверы: если выбран такой — перезапуски оборвут соединения
-        val sel = Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }
-        if (sel?.xrayLink != null) { AppLog.conn("лаборатория обхода: выбран XHTTP-сервер — не запускаю, чтобы не рвать соединения"); return }
+        val nodes = Subscription.usable(ctx)
+        val abroad = BoxVpnService.ports?.let { ClashApi.now(it.api, it.secret, "abroad") }
+        val viaXray = listOf(AppSettings.selectedTag, abroad).any { t -> nodes.firstOrNull { it.tag == t }?.xrayLink != null }
+        if (viaXray) { AppLog.conn("лаборатория обхода: трафик идёт через XHTTP-сервер — не запускаю, чтобы не рвать соединения"); return }
         val net = Autopilot.networkKey(ctx)
         val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
         val last = p.getLong("labAt:$net", 0)
@@ -179,16 +180,18 @@ object Connector {
             val g = BypassLab.search(ctx, maxTries = 18)
             if (g == null || !BoxVpnService.isRunning) return@Thread
             if (!p.getBoolean("bypassWanted", false) || AppSettings.selectedTag == XrayCore.BYPASS) return@Thread
-            val ports = BoxVpnService.ports ?: return@Thread
-            if (!ServerTester.selectMain(ports, XrayCore.BYPASS)) return@Thread
             AppSettings.selectedTag = XrayCore.BYPASS
             AppSettings.autoSelect = false
             AppSettings.save(ctx)
             p.edit().putBoolean("bypassWanted", false).apply()
-            AppLog.conn("лаборатория обхода: нашла способ — возвращаюсь на обход без сервера")
+            AppLog.conn("лаборатория обхода: нашла способ — переподключаюсь на обход без сервера")
+            // Переподключение, а не просто смена сервера: правила маршрутизации для обхода
+            // (гибрид, всё прочее — через обход) собираются только при запуске ядра
+            BoxVpnService.stop(ctx, manual = false)
+            Thread.sleep(1500)
+            connect(ctx)
             notifyBypass(ctx, "Обход блокировок снова работает",
                 "Нашёл новый способ обхода для ${Autopilot.networkLabel(ctx)} — VPN снова работает без сервера")
-            Widget.update(ctx)
         }.start()
     }
 
@@ -256,6 +259,16 @@ object Connector {
         }
     }
 
+    /** Сверка скорости без смены рабочего сервера на «первый попавшийся»: меняет, только если другой заметно быстрее. */
+    private fun refine(ctx: Context) {
+        if (!BoxVpnService.isRunning) return
+        busyText = "Меряю пинг до серверов…"
+        val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
+        if (ranked.isEmpty() || !BoxVpnService.isRunning) return
+        ServerTester.pickFastest(ctx, ranked) { done, total -> busyText = "Проверяю скорость: $done из $total" }
+        if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
+    }
+
     /** Полный подбор при работающем VPN; прогресс — в busyText. Прерывается, если VPN выключили. */
     private fun rank(ctx: Context, game: Boolean, onWorking: () -> Unit) {
         if (!BoxVpnService.isRunning) return
@@ -297,8 +310,12 @@ object Connector {
             var lastRank = System.currentTimeMillis()
             var bypassFails = 0
             var abroadFails = 0
-            while (BoxVpnService.isRunning && !AppSettings.gameMode &&
-                (AppSettings.autoSelect || AppSettings.selectedTag == XrayCore.BYPASS)
+            var okRecordedAt = 0L
+            val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            // Работает и при ручном выборе сервера, если обход ждёт возвращения (bypassWanted)
+            // isStarting — ядро перезапускается внутри сервиса (обновился список серверов): не выходим
+            while ((BoxVpnService.isRunning || BoxVpnService.isStarting) && !AppSettings.gameMode &&
+                (AppSettings.autoSelect || AppSettings.selectedTag == XrayCore.BYPASS || prefs.getBoolean("bypassWanted", false))
             ) {
                 try { Thread.sleep(30_000) } catch (_: InterruptedException) { break }
                 if (!BoxVpnService.isRunning || busy) continue
@@ -311,7 +328,14 @@ object Connector {
                         // Гибрид: жив ли сервер, через который идут Telegram и прочее. Два провала — другой
                         val abroad = ClashApi.now(p.api, p.secret, "abroad")
                         if (abroad == null || abroad == XrayCore.BYPASS) continue
-                        if (ServerTester.alive(abroad)) { abroadFails = 0; continue }
+                        if (ServerTester.alive(abroad)) {
+                            abroadFails = 0
+                            if (System.currentTimeMillis() - okRecordedAt > 10 * 60_000L) {
+                                okRecordedAt = System.currentTimeMillis()
+                                Subscription.usable(ctx).firstOrNull { it.tag == abroad }?.let { Autopilot.record(ctx, it, ok = true) }
+                            }
+                            continue
+                        }
                         Subscription.usable(ctx).firstOrNull { it.tag == abroad }?.let { Autopilot.record(ctx, it, ok = false) }
                         AppLog.conn("сторож: сервер для Telegram «${nodeName(ctx, abroad)}» не ответил (${abroadFails + 1}-й раз)")
                         if (++abroadFails < 2) continue
@@ -342,6 +366,10 @@ object Connector {
                     }
                     continue
                 }
+                // Обход не работал, а пользователь его хочет — лаборатория иногда пробует найти новый способ
+                if (prefs.getBoolean("bypassWanted", false)) bypassLabInBackground(ctx)
+                // Сервер выбран вручную — сами его не меняем
+                if (!AppSettings.autoSelect) continue
                 // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
                 // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
                 if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
@@ -368,9 +396,15 @@ object Connector {
                     }
                     continue
                 }
-                // Обход не работал, а пользователь его хочет — лаборатория иногда пробует найти новый способ
-                if (ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("bypassWanted", false)) bypassLabInBackground(ctx)
-                if (ServerTester.alive(AppSettings.selectedTag)) { fails = 0; continue }
+                if (ServerTester.alive(AppSettings.selectedTag)) {
+                    fails = 0
+                    // Успех тоже опыт (не чаще раза в 10 минут — чтобы не раздувать)
+                    if (System.currentTimeMillis() - okRecordedAt > 10 * 60_000L) {
+                        okRecordedAt = System.currentTimeMillis()
+                        Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = true) }
+                    }
+                    continue
+                }
                 Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = false) }
                 // Без сети менять сервер бесполезно
                 if (ServerTester.netKey(ctx) == "none") continue

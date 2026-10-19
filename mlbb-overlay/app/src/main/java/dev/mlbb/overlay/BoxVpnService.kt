@@ -51,6 +51,27 @@ class BoxVpnService : VpnService(), PlatformInterface {
         @Volatile var coreNetwork: Network? = null
         /** «Сменить сервер» из уведомления */
         private const val ACTION_NEXT = "dev.mlbb.overlay.BOX_NEXT"
+        private const val ACTION_RESTART = "dev.mlbb.overlay.BOX_RESTART"
+
+        /** Перезапустить ядро с новым конфигом, не выключая VPN (например, обновился список серверов). */
+        fun requestRestart(ctx: Context, reason: String) {
+            if (!isRunning && !isStarting) return
+            // Несколько изменений подряд (основная и дополнительные подписки) — один перезапуск
+            synchronized(this) {
+                restartAt = System.currentTimeMillis() + 3000
+                if (restartPending) return
+                restartPending = true
+            }
+            val app = ctx.applicationContext
+            Thread {
+                while (System.currentTimeMillis() < restartAt) Thread.sleep(300)
+                synchronized(this) { restartPending = false }
+                app.startService(Intent(app, BoxVpnService::class.java).setAction(ACTION_RESTART).putExtra("reason", reason))
+            }.start()
+        }
+
+        @Volatile private var restartPending = false
+        @Volatile private var restartAt = 0L
 
         @Volatile var isRunning = false
             private set
@@ -89,6 +110,16 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 stopSelf()
             }.start()
             return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_RESTART) {
+            val reason = intent.getStringExtra("reason") ?: "перезапуск"
+            Thread {
+                // Идёт запуск — дождёмся, потом перезапустим с актуальным списком
+                var waited = 0
+                while (isStarting && waited < 30_000) { Thread.sleep(200); waited += 200 }
+                if (isRunning) restartCore(reason)
+            }.start()
+            return START_STICKY
         }
         if (intent?.action == ACTION_NEXT) {
             if (isRunning) switchServer()

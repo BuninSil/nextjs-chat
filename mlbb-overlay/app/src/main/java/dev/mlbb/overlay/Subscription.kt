@@ -240,16 +240,27 @@ object Subscription {
         // Добавились серверы в конец (новая дополнительная подписка) — старые номера на месте,
         // проверки выходов не сбрасываем. Иначе номера сдвинулись — проверяем заново
         val kept = new.size >= old.size && new.take(old.size) == old
-        // Выбранный сервер — по сути (имя и адрес), а не по номеру: номера могли сдвинуться
-        val selId = nodes.firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.id(it) }
-        nodes = parsed
-        if (selId != null) parsed.firstOrNull { Autopilot.id(it) == selId }?.let {
-            if (it.tag != AppSettings.selectedTag) {
-                AppLog.sub("выбранный сервер «${Ui.cleanName(it)}» теперь под номером ${it.tag}")
-                AppSettings.selectedTag = it.tag
-                AppSettings.save(ctx)
-            }
+        // Выбранный сервер (и «сервер до обхода») — по сути (имя и адрес), а не по номеру: номера
+        // могли сдвинуться. Сервера больше нет — выбор сбрасывается (возьмём первый рабочий)
+        val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        fun remap(tag: String?): String? {
+            if (tag == null || tag == XrayCore.BYPASS) return tag
+            val id = nodes.firstOrNull { it.tag == tag }?.let { Autopilot.id(it) } ?: return tag
+            return parsed.firstOrNull { Autopilot.id(it) == id }?.tag ?: ""
         }
+        val newSel = remap(AppSettings.selectedTag)
+        val newBefore = remap(prefs.getString("beforeBypass", null))
+        nodes = parsed
+        if (newSel != null && newSel != AppSettings.selectedTag) {
+            AppLog.sub("выбранный сервер теперь «${if (newSel.isEmpty()) "—" else AppLog.name(ctx, newSel)}» ($newSel)")
+            AppSettings.selectedTag = newSel
+            AppSettings.save(ctx)
+        }
+        if (newBefore != null && newBefore != prefs.getString("beforeBypass", null)) prefs.edit().putString("beforeBypass", newBefore).apply()
+        // VPN включён, а список поменялся — ядро перезапускается с новым списком (иначе номера
+        // в ядре и в приложении разойдутся, а новые серверы будут недоступны)
+        // Посреди матча MLBB ядро не трогаем — применится при следующем подключении
+        if (old != new && BoxVpnService.isRunning && !MatchTracker.inMatch) BoxVpnService.requestRestart(ctx, "список серверов обновился")
         if (!kept) resetExits(ctx)
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
             .putLong("subAt", System.currentTimeMillis()).apply()

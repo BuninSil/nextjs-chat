@@ -53,6 +53,8 @@ jobs:
           }
           if (-not (Test-Path "$nsis\makensis.exe")) { throw "NSIS не установился" }
           $nsis | Out-File -FilePath $env:GITHUB_PATH -Append
+          # Код выхода неудачного choco не должен ронять шаг, если NSIS всё же нашёлся
+          $global:LASTEXITCODE = 0
 
       - name: VPN cores (sing-box, Xray)
         run: |

@@ -113,6 +113,8 @@ object Autopilot {
     /** Подключение через сервер прошло / не прошло (в этой сети). */
     @Synchronized
     fun record(ctx: Context, n: Subscription.Node, ok: Boolean, mbps: Double? = null) {
+        // Лаборатория обхода перезапускает Xray — XHTTP-серверы в это время «падают» не по своей вине
+        if (!ok && n.xrayLink != null && BypassLab.running) return
         val key = networkKey(ctx).ifEmpty { return }
         val s = net(ctx, key).servers.getOrPut(id(n)) { Stat() }
         val now = System.currentTimeMillis()

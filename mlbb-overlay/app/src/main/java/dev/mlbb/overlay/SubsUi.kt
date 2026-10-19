@@ -30,7 +30,8 @@ object SubsUi {
         return parts.joinToString(" · ")
     }
 
-    private fun applyHint() = if (BoxVpnService.isRunning) ". Переподключи VPN, чтобы применить." else ""
+    /** VPN подхватывает новый список серверов сам (ядро перезапускается) — подсказывать нечего */
+    private fun applyHint() = ""
 
     /** Долгая операция с окном прогресса; итог — всплывающим сообщением или окном ошибки. */
     private fun background(a: Activity, title: String, work: () -> String, onDone: () -> Unit) {
