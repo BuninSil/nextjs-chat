@@ -90,6 +90,10 @@ object Connector {
         if (AppSettings.selectedTag == XrayCore.BYPASS) {
             if (checkBypass(ctx)) {
                 onReady("Обход блокировок работает: YouTube открывается без сервера")
+                // Гибрид: Telegram и прочее, что обход не пробивает, — через рабочий сервер подписки
+                busyText = "Подбираю сервер для Telegram…"
+                Widget.update(ctx)
+                try { ServerTester.pickAbroadForBypass(ctx) } catch (e: Exception) { AppLog.err("сервер для Telegram в обходе", e) }
                 startWatchdog(ctx)
             } else {
                 fallbackFromBypass(ctx, onReady)

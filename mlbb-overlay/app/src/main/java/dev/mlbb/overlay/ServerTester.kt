@@ -554,13 +554,37 @@ object ServerTester {
     /** Переключить группу «abroad» в ядре под текущий выбранный сервер. */
     fun applyAbroad(ctx: Context) {
         if (AppSettings.gameMode) return // игровой режим не трогаем
-        if (AppSettings.selectedTag == XrayCore.BYPASS) return // обход — без «зарубежного» сервера
         val p = BoxVpnService.ports ?: return
         val sel = AppSettings.selectedTag
         val tag = abroadFor(ctx, sel)
         if (tag.isEmpty()) return
         if (ClashApi.select(p.api, p.secret, "abroad", tag) && tag != sel) {
-            AppLog.srv("выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «${AppLog.name(ctx, tag)}»")
+            AppLog.srv(if (sel == XrayCore.BYPASS) "обход: Telegram и другое, что обход не пробивает, — через «${AppLog.name(ctx, tag)}»"
+                else "выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «${AppLog.name(ctx, tag)}»")
         }
+    }
+
+    /**
+     * Обход без сервера (гибрид): подобрать рабочий зарубежный сервер для того, что обход не
+     * пробивает (Telegram, Instagram…). Выбранный «сервер» (обход) не меняется.
+     */
+    fun pickAbroadForBypass(ctx: Context) {
+        val p = BoxVpnService.ports ?: return
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
+        if (nodes.isEmpty()) return
+        val ranked = measure(ctx) { _, _ -> }
+        val byTag = nodes.associateBy { it.tag }
+        for (tag in ranked.take(10)) {
+            val n = byTag[tag] ?: continue
+            if (exitsRussia(n)) continue
+            val ok = ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) != null
+            Autopilot.record(ctx, n, ok)
+            if (!ok) { results.put(tag, null); continue }
+            if (ClashApi.select(p.api, p.secret, "abroad", tag)) {
+                AppLog.srv("обход: Telegram и другое, что обход не пробивает, — через «${Ui.cleanName(n)}»")
+            }
+            return
+        }
+        AppLog.srv("обход: рабочего зарубежного сервера для Telegram и др. не нашлось")
     }
 }

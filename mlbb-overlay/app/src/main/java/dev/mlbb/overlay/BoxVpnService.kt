@@ -309,9 +309,10 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 appsList = AppSettings.appsList,
                 compatStack = AppSettings.compatStack,
                 // Только обычный режим: в игровом всё через выбранный сервер, как и было
-                // Обход без сервера: всё через обход, без «зарубежного» сервера (иначе YouTube и прочее
-                // уходили бы на сервер подписки, а не в обход)
-                abroad = if (AppSettings.gameMode || bypass) null else ServerTester.abroadFor(this, selected),
+                // Обход без сервера — гибрид: YouTube и всё прочее через обход, а Telegram и другое,
+                // что обход не пробивает, — через зарубежный сервер подписки (если она есть)
+                abroad = if (AppSettings.gameMode) null
+                    else ServerTester.abroadFor(this, selected).takeIf { !bypass || it != XrayCore.BYPASS },
                 bypassPort = bypassPort,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +

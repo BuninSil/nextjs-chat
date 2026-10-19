@@ -49,6 +49,25 @@ object BoxConfig {
         "com.twitter.android", "com.discord", "com.openai.chatgpt", "com.spotify.music", "com.linkedin.android",
         "com.viber.voip", "com.snapchat.android", "com.patreon.android", "tv.twitch.android.app",
     ))
+    /**
+     * Что пробивает обход без сервера (блокировка по имени сайта): YouTube. Остальное заблокированное
+     * (Telegram, Meta, X — по IP; ChatGPT, Spotify — сами не пускают Россию) обход не вытянет —
+     * в гибридном режиме оно идёт через сервер подписки.
+     */
+    val BYPASS_PACKAGES = JSONArray(listOf(
+        "com.google.android.youtube", "com.google.android.apps.youtube.music", "app.revanced.android.youtube",
+        "app.rvx.android.youtube", "com.vanced.android.youtube",
+    ))
+    val BYPASS_DOMAINS = JSONArray(listOf(
+        "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com",
+    ))
+
+    /** Адреса Telegram: клиенты ходят на IP напрямую, без имени сайта */
+    val TELEGRAM_CIDRS = JSONArray(listOf(
+        "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22", "91.108.20.0/22", "91.108.56.0/22",
+        "149.154.160.0/20", "185.76.151.0/24", "95.161.64.0/20",
+    ))
+
     val BLOCKED_DOMAINS = JSONArray(listOf(
         "telegram.org", "telegram.me", "t.me", "telesco.pe", "tdesktop.com", "tg.dev", "telegra.ph", "graph.org",
         "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com",
@@ -194,10 +213,18 @@ object BoxConfig {
             ruleSet("ads", "geosite-category-ads-all.srs")
             rules.put(JSONObject().put("rule_set", JSONArray().put("ads")).put("action", "reject"))
         }
+        val bypassMode = selected == XrayCore.BYPASS
+        if (bypassMode && abroadTag != null) {
+            // Гибрид: YouTube — через обход (бесплатно, без трафика подписки), остальное
+            // заблокированное — через сервер ниже
+            rules.put(JSONObject().put("package_name", BYPASS_PACKAGES).put("outbound", "proxy"))
+            rules.put(JSONObject().put("domain_suffix", BYPASS_DOMAINS).put("outbound", "proxy"))
+        }
         if (abroadTag != null) {
             // Telegram, YouTube и другие заблокированные сервисы — всегда через зарубежный выход
             rules.put(JSONObject().put("package_name", BLOCKED_PACKAGES).put("outbound", "abroad"))
             rules.put(JSONObject().put("domain_suffix", BLOCKED_DOMAINS).put("outbound", "abroad"))
+            rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS).put("outbound", "abroad"))
         }
         if (abroadTag != null && !ruDirect) {
             // Российские сайты без «напрямую» — через выбранный сервер (остальное идёт через зарубежный)
@@ -252,7 +279,8 @@ object BoxConfig {
                 .put("rules", rules)
                 .put("rule_set", ruleSets)
                 // Обычный режим: всё, кроме российского, — через зарубежный выход (abroad = выбранный, если он зарубежный)
-                .put("final", if (abroadTag != null) "abroad" else "proxy")
+                // Обход: всё прочее — через обход (это напрямую); иначе — через зарубежный выход
+                .put("final", if (abroadTag != null && !bypassMode) "abroad" else "proxy")
                 .put("auto_detect_interface", true)
                 // Определение приложения по каждому соединению — только для игровых функций
                 .put("find_process", gameMode))
