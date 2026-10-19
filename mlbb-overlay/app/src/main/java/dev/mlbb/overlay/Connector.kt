@@ -307,6 +307,22 @@ object Connector {
 
     @Volatile private var watchdog: Thread? = null
 
+    /** Когда последний раз сменилась сеть (переезд, вышка, Wi-Fi ↔ мобильная) и не ждёт ли сторож */
+    @Volatile private var netChangedAt = 0L
+    @Volatile private var netKick = false
+
+    /**
+     * Сеть сменилась: в дороге каждый город и область — свой интернет и свои блокировки.
+     * Сторож проверяет обход и сервер сразу (а не через полминуты) и пару минут — чаще.
+     */
+    fun onNetworkChanged(ctx: Context, why: String) {
+        Autopilot.invalidate()
+        if (!BoxVpnService.isRunning || AppSettings.gameMode) return
+        netChangedAt = System.currentTimeMillis()
+        netKick = true
+        AppLog.conn("сторож: $why — проверю связь")
+    }
+
     /** Как часто искать сервер быстрее, пока VPN работает (обычный режим, автовыбор) */
     private const val RERANK_MS = 30 * 60 * 1000L
 
@@ -322,14 +338,52 @@ object Connector {
             var bypassFails = 0
             var abroadFails = 0
             var okRecordedAt = 0L
+            var lastNet = Autopilot.networkKey(ctx)
+            var earlyRankAt = 0L
             val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
             // Работает и при ручном выборе сервера, если обход ждёт возвращения (bypassWanted)
             // isStarting — ядро перезапускается внутри сервиса (обновился список серверов): не выходим
             while ((BoxVpnService.isRunning || BoxVpnService.isStarting) && !AppSettings.gameMode &&
                 (AppSettings.autoSelect || AppSettings.selectedTag == XrayCore.BYPASS || prefs.getBoolean("bypassWanted", false))
             ) {
-                try { Thread.sleep(30_000) } catch (_: InterruptedException) { break }
+                // Обычно — раз в 30 секунд; после смены сети — раз в 10 секунд две минуты,
+                // а о самой смене узнаём сразу (секунды на то, чтобы новая сеть поднялась)
+                try {
+                    val fast = System.currentTimeMillis() - netChangedAt < 120_000
+                    val until = System.currentTimeMillis() + if (fast) 10_000 else 30_000
+                    while (System.currentTimeMillis() < until && !netKick) Thread.sleep(500)
+                    if (netKick) {
+                        netKick = false
+                        Thread.sleep(4000)
+                    }
+                } catch (_: InterruptedException) { break }
                 if (!BoxVpnService.isRunning || busy) continue
+                val net = Autopilot.networkKey(ctx)
+                // «cell:оператор» → «cell:оператор:город» — тот же оператор, просто узнали регион
+                if (net.startsWith("$lastNet:") || lastNet.startsWith("$net:")) lastNet = net
+                if (net.isNotEmpty() && net != lastNet) {
+                    AppLog.conn("сторож: теперь ${Autopilot.networkLabel(ctx, net)}")
+                    lastNet = net
+                    fails = 0
+                    bypassFails = 0
+                    abroadFails = 0
+                    // Для этой сети (или оператора) уже знаем свой способ обхода — сразу на него:
+                    // соединения при смене сети всё равно оборвались, перезапуск Xray ничего не испортит
+                    if (AppSettings.selectedTag == XrayCore.BYPASS && !BypassLab.running) {
+                        val best = Autopilot.bypassBest(ctx)?.params()
+                        if (best != null && best != XrayCore.bypassParams) {
+                            AppLog.conn("сторож: способ обхода, запомненный для этой сети, — ${Autopilot.bypassBest(ctx)}")
+                            XrayCore.setBypassParams(ctx, best)
+                            continue
+                        }
+                    }
+                    // Новое место — может, рядом сервер быстрее: плановая проверка через пару минут, а не через полчаса
+                    // (не чаще раза в 10 минут — в дороге сеть меняется часто)
+                    if (System.currentTimeMillis() - earlyRankAt > 10 * 60_000L) {
+                        earlyRankAt = System.currentTimeMillis()
+                        lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
+                    }
+                }
                 // Обход без сервера: открывается ли YouTube. Два провала подряд (минута) — на сервер
                 if (AppSettings.selectedTag == XrayCore.BYPASS) {
                     if (ServerTester.netKey(ctx) == "none") continue

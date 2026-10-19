@@ -28,7 +28,7 @@ import kotlin.random.Random
  */
 object Autopilot {
     private const val FILE = "autopilot.json"
-    private const val MAX_NETS = 24
+    private const val MAX_NETS = 48
     private const val MAX_SERVERS = 400
     /** Старый опыт весит меньше: за неделю — вдвое */
     private const val HALF_LIFE_MS = 7 * 24 * 3600 * 1000.0
@@ -60,18 +60,29 @@ object Autopilot {
 
     fun networkKey(ctx: Context): String {
         keyCache?.let { (at, k) -> if (System.currentTimeMillis() - at < 5000) return k }
-        return computeKey(ctx).also { keyCache = System.currentTimeMillis() to it }
+        return computeKey(ctx).also {
+            keyCache = System.currentTimeMillis() to it
+            if (it.startsWith("cell:")) lastCell = it
+        }
     }
 
     private fun computeKey(ctx: Context): String {
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
         val net = ServerTester.underlying(ctx) ?: return ""
         val caps = cm.getNetworkCapabilities(net) ?: return ""
+        val lp = cm.getLinkProperties(net)
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
             val op = try { ctx.getSystemService(TelephonyManager::class.java).networkOperator } catch (_: Exception) { null }
-            return "cell:" + (op?.takeIf { it.isNotBlank() } ?: "?")
+            val base = "cell:" + (op?.takeIf { it.isNotBlank() } ?: "?")
+            // Регион: у оператора в каждой области своё оборудование и свои блокировки
+            val sig = net.toString() + "|" + (lp?.linkAddresses?.joinToString(",") { it.address.hostAddress ?: "" } ?: "")
+            val r = region
+            if (r != null && r.first == sig) return if (r.second.isEmpty()) base else "$base:${r.second}"
+            refreshRegion(ctx, net, sig)
+            // Пока регион не узнали — прежний, если сеть та же (короткий обрыв), иначе только оператор
+            return lastCell?.takeIf { it.startsWith("$base:") && r?.first?.substringBefore('|') == net.toString() } ?: base
         }
-        val lp = cm.getLinkProperties(net) ?: return "net:?"
+        lp ?: return "net:?"
         val sig = (lp.dnsServers.map { it.hostAddress } +
             lp.routes.filter { it.isDefaultRoute }.mapNotNull { it.gateway?.hostAddress }).sorted().joinToString(",")
         val kind = if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) "wifi" else "net"
@@ -79,10 +90,71 @@ object Autopilot {
             .take(5).joinToString("") { "%02x".format(it) }
     }
 
-    /** Название для журнала и экрана: «МТС (мобильная)», «Wi-Fi a1b2c3» */
+    // ------------------------------- регион мобильной сети -------------------------------
+
+    /** Подключение (сеть + её адреса) → город по внешнему IP. Новый адрес — узнаём заново. */
+    @Volatile private var region: Pair<String, String>? = null
+    @Volatile private var lastCell: String? = null
+    @Volatile private var regionTry: Pair<String, Long>? = null
+    private val regionBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Сайты, отдающие внешний IP: сначала российские (работают и при белых списках) */
+    private val IP_URLS = listOf(
+        "https://ipv4-internet.yandex.net/api/v0/ip",
+        "https://yandex.ru/internet/api/v0/ip",
+        "https://speed.cloudflare.com/cdn-cgi/trace",
+    )
+
+    private fun refreshRegion(ctx: Context, net: android.net.Network, sig: String) {
+        val t = regionTry
+        if (t != null && t.first == sig && System.currentTimeMillis() - t.second < 60_000) return
+        if (!regionBusy.compareAndSet(false, true)) return
+        regionTry = sig to System.currentTimeMillis()
+        val app = ctx.applicationContext
+        Thread {
+            try {
+                // Напрямую через саму сеть, мимо VPN — нужен IP оператора, а не сервера
+                val ip = IP_URLS.firstNotNullOfOrNull { url ->
+                    try {
+                        val c = net.openConnection(java.net.URL(url)) as java.net.HttpURLConnection
+                        c.connectTimeout = 4000
+                        c.readTimeout = 4000
+                        c.setRequestProperty("Connection", "close")
+                        val body = c.inputStream.bufferedReader().use { it.readText() }
+                        Regex("""\b(\d{1,3}(?:\.\d{1,3}){3})\b""").find(body)?.groupValues?.get(1)
+                    } catch (_: Exception) { null }
+                } ?: return@Thread // сети нет — попробуем позже
+                GeoDb.load(app)
+                val geo = GeoDb.lookup(ip)
+                val city = geo?.city.orEmpty().replace(':', ' ').trim().take(40)
+                val before = region?.second
+                region = sig to city
+                keyCache = null
+                if (city.isNotEmpty() && city != before) {
+                    AppLog.net("регион мобильной сети: $city")
+                    // Другая область — другие блокировки: сторожу проверить всё не откладывая
+                    if (before != null && "cell:" in (lastCell ?: "")) Connector.onNetworkChanged(app, "регион сменился: $city")
+                }
+            } finally {
+                regionBusy.set(false)
+            }
+        }.start()
+    }
+
+    /** Сеть сменилась — отпечаток посчитать заново */
+    fun invalidate() { keyCache = null }
+
+    /** Регион → оператор: «cell:25099:Тверь» → «cell:25099» (там опыт всех регионов разом) */
+    private fun parentOf(key: String): String? =
+        if (key.startsWith("cell:") && key.indexOf(':', 5) > 0) key.substring(0, key.indexOf(':', 5)) else null
+
+    /** Название для журнала и экрана: «МТС (мобильная, Тверь)», «Wi-Fi a1b2c3» */
     fun networkLabel(ctx: Context, key: String = networkKey(ctx)): String = when {
-        key.startsWith("cell:") -> (try { ctx.getSystemService(TelephonyManager::class.java).networkOperatorName } catch (_: Exception) { null })
-            ?.takeIf { it.isNotBlank() }?.let { "$it (мобильная)" } ?: "мобильная сеть"
+        key.startsWith("cell:") -> ((try { ctx.getSystemService(TelephonyManager::class.java).networkOperatorName } catch (_: Exception) { null })
+            ?.takeIf { it.isNotBlank() } ?: "мобильная сеть").let { op ->
+            val city = if (parentOf(key) != null) key.substring(key.indexOf(':', 5) + 1) else null
+            if (op == "мобильная сеть") op + (city?.let { ", $it" } ?: "") else "$op (мобильная${city?.let { ", $it" } ?: ""})"
+        }
         key.startsWith("wifi:") -> "Wi-Fi ${key.substringAfter(':')}"
         key.isEmpty() -> "нет сети"
         else -> "сеть ${key.substringAfter(':')}"
@@ -92,6 +164,13 @@ object Autopilot {
     fun id(n: Subscription.Node) = "${n.name}|${n.server}:${n.port}"
 
     // ------------------------------- опыт -------------------------------
+
+    /** Опыт сервера в этой сети; в новом регионе пока нет своего — опыт оператора по всем регионам */
+    private fun stat(ctx: Context, key: String, id: String): Stat? =
+        net(ctx, key).servers[id] ?: parentOf(key)?.let { nets[it]?.servers?.get(id) }
+
+    /** Ключи, куда пишется опыт: регион и оператор в целом */
+    private fun keysFor(key: String) = listOfNotNull(key, parentOf(key))
 
     @Synchronized
     private fun net(ctx: Context, key: String): Net {
@@ -116,27 +195,31 @@ object Autopilot {
         // Лаборатория обхода перезапускает Xray — XHTTP-серверы в это время «падают» не по своей вине
         if (!ok && n.xrayLink != null && BypassLab.running) return
         val key = networkKey(ctx).ifEmpty { return }
-        val s = net(ctx, key).servers.getOrPut(id(n)) { Stat() }
         val now = System.currentTimeMillis()
-        decay(s, now)
-        if (ok) s.ok += 1 else s.fail += 1
-        if (mbps != null && mbps > 0) s.mbps = if (s.mbps == 0.0) mbps else s.mbps * 0.6 + mbps * 0.4
-        s.at = now
+        for (k in keysFor(key)) {
+            val s = net(ctx, k).servers.getOrPut(id(n)) { Stat() }
+            decay(s, now)
+            if (ok) s.ok += 1 else s.fail += 1
+            if (mbps != null && mbps > 0) s.mbps = if (s.mbps == 0.0) mbps else s.mbps * 0.6 + mbps * 0.4
+            s.at = now
+        }
         saveSoon(ctx)
     }
 
     @Synchronized
     fun recordPing(ctx: Context, n: Subscription.Node, ms: Int?) {
         val key = networkKey(ctx).ifEmpty { return }
-        val s = net(ctx, key).servers[id(n)] ?: if (ms == null) return else Stat().also { net(ctx, key).servers[id(n)] = it }
-        if (ms != null) s.ping = if (s.ping == 0.0) ms.toDouble() else s.ping * 0.7 + ms * 0.3
+        for (k in keysFor(key)) {
+            val s = net(ctx, k).servers[id(n)] ?: if (ms == null) continue else Stat().also { net(ctx, k).servers[id(n)] = it }
+            if (ms != null) s.ping = if (s.ping == 0.0) ms.toDouble() else s.ping * 0.7 + ms * 0.3
+        }
     }
 
     /** Насколько автопилот уверен в сервере в этой сети: доля успехов и сколько раз проверяли. */
     @Synchronized
     fun confidence(ctx: Context, n: Subscription.Node): Pair<Double, Int>? {
         val key = networkKey(ctx).ifEmpty { return null }
-        val s = net(ctx, key).servers[id(n)] ?: return null
+        val s = stat(ctx, key, id(n)) ?: return null
         val total = s.ok + s.fail
         if (total < 0.5) return null
         return (s.ok / total) to Math.round(total).toInt()
@@ -184,11 +267,10 @@ object Autopilot {
     fun order(ctx: Context, tags: List<String>, byTag: Map<String, Subscription.Node>, pingMs: (String) -> Int?): List<String> {
         val key = networkKey(ctx)
         if (key.isEmpty()) return tags
-        val servers = net(ctx, key).servers
         val now = System.currentTimeMillis()
         val score = tags.associateWith { t ->
             val n = byTag[t] ?: return@associateWith 0.0
-            val s = servers[id(n)]
+            val s = stat(ctx, key, id(n))
             val ping = pingMs(t) ?: s?.ping?.takeIf { it > 0 }?.toInt()
             // Пинг 30 мс → 1, 300 мс → ~0,3
             val pingF = ping?.let { 1.0 / (1.0 + max(0, it - 30) / 120.0) } ?: 0.6
@@ -208,10 +290,9 @@ object Autopilot {
     fun leader(ctx: Context, nodes: List<Subscription.Node>): Subscription.Node? {
         val key = networkKey(ctx)
         if (key.isEmpty()) return null
-        val servers = net(ctx, key).servers
         val now = System.currentTimeMillis()
         return nodes.mapNotNull { n ->
-            val s = servers[id(n)] ?: return@mapNotNull null
+            val s = stat(ctx, key, id(n)) ?: return@mapNotNull null
             val k = weight(s, now)
             val ok = s.ok * k
             val total = ok + s.fail * k
@@ -225,13 +306,15 @@ object Autopilot {
     @Synchronized
     fun bypassBest(ctx: Context): BypassLab.Genome? {
         val key = networkKey(ctx).ifEmpty { return null }
-        return net(ctx, key).bypass?.let { BypassLab.Genome.fromJson(it) }
+        val o = net(ctx, key).bypass ?: parentOf(key)?.let { nets[it]?.bypass }
+        return o?.let { BypassLab.Genome.fromJson(it) }
     }
 
     @Synchronized
     fun setBypassBest(ctx: Context, g: BypassLab.Genome?, ms: Int?) {
         val key = networkKey(ctx).ifEmpty { return }
-        net(ctx, key).bypass = g?.toJson()?.put("ms", ms ?: 0)?.put("at", System.currentTimeMillis())
+        // И оператору в целом: в следующем новом регионе начнём с последнего рабочего
+        for (k in keysFor(key)) net(ctx, k).bypass = g?.toJson()?.put("ms", ms ?: 0)?.put("at", System.currentTimeMillis())
         saveSoon(ctx)
     }
 
@@ -301,8 +384,7 @@ object Autopilot {
     fun summary(ctx: Context): String {
         val key = networkKey(ctx)
         if (key.isEmpty()) return ""
-        val n = net(ctx, key)
-        val known = n.servers.values.count { it.ok + it.fail >= 1 }
+        val known = keysFor(key).flatMap { k -> net(ctx, k).servers.filterValues { it.ok + it.fail >= 1 }.keys }.toSet().size
         return "Автопилот · ${networkLabel(ctx, key)}: " + if (known == 0) "изучаю сеть" else "знает $known серв."
     }
 }

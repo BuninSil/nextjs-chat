@@ -494,6 +494,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             // Ядру сообщаем только о реальной смене сети (интерфейса): каждое такое сообщение
             // может сбросить соединения, а мобильная сеть дёргает свойства постоянно.
             private var lastKey: String? = null
+            private var lastAddrs: String? = null
             private var current: Network? = null
             private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -511,7 +512,16 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 }
                 val idx = try { JavaInterface.getByName(name)?.index ?: -1 } catch (_: Exception) { -1 }
                 val key = "$name/$idx"
-                if (key == lastKey) return
+                // Тот же интерфейс, но новый адрес: мобильная переподключилась (в дороге — часто,
+                // и уже в другом регионе). Ядру сообщать нечего, а сторожу — проверить связь
+                val addrs = lp.linkAddresses.joinToString(",") { it.address.hostAddress ?: "" }
+                val addrsChanged = lastAddrs != null && addrs != lastAddrs
+                lastAddrs = addrs
+                if (key == lastKey) {
+                    if (addrsChanged) try { Connector.onNetworkChanged(this@BoxVpnService, "сменился адрес в сети") } catch (_: Exception) {}
+                    return
+                }
+                val first = lastKey == null
                 lastKey = key
                 val caps = cm.getNetworkCapabilities(network)
                 val expensive = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
@@ -519,6 +529,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 AppLog.net("сеть сменилась: $name (${ServerTester.netKey(this@BoxVpnService)}${if (expensive) ", платная" else ""})")
                 // Автоподключение: на Wi-Fi выключить VPN, если он включался сам
                 try { AutoConnect.onNetworkChanged(this@BoxVpnService) } catch (_: Exception) {}
+                if (!first) try { Connector.onNetworkChanged(this@BoxVpnService, "сменилась сеть") } catch (_: Exception) {}
             }
 
             override fun onAvailable(network: Network) {
