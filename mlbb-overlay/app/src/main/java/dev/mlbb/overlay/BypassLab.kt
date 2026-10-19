@@ -76,8 +76,8 @@ object BypassLab {
         return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 5000)
     }
 
-    @Volatile var running = false
-        private set
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
+    val running get() = busy.get()
 
     /**
      * Поиск: сначала лучшее, что знаем для этой сети, и заготовки, потом эволюция — пока не
@@ -86,8 +86,8 @@ object BypassLab {
      * подключении: каждая проба перезапускает Xray, а пользователь ждёт).
      */
     fun search(ctx: Context, maxTries: Int, improve: Boolean = true, progress: (String) -> Unit = {}): Genome? {
-        if (running) return null
-        running = true
+        // Одновременно — только один поиск (сторож и фоновая лаборатория могут позвать разом)
+        if (!busy.compareAndSet(false, true)) return null
         try {
             val seeds = (listOfNotNull(Autopilot.bypassBest(ctx)) + XrayCore.BYPASS_PRESETS.map { Genome.fromTriple(it) }).distinct()
             val tried = HashMap<Genome, Int?>()
@@ -138,7 +138,7 @@ object BypassLab {
             }
             return found?.first
         } finally {
-            running = false
+            busy.set(false)
         }
     }
 }

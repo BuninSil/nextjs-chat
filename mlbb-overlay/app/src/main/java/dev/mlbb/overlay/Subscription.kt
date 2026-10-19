@@ -240,7 +240,16 @@ object Subscription {
         // Добавились серверы в конец (новая дополнительная подписка) — старые номера на месте,
         // проверки выходов не сбрасываем. Иначе номера сдвинулись — проверяем заново
         val kept = new.size >= old.size && new.take(old.size) == old
+        // Выбранный сервер — по сути (имя и адрес), а не по номеру: номера могли сдвинуться
+        val selId = nodes.firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.id(it) }
         nodes = parsed
+        if (selId != null) parsed.firstOrNull { Autopilot.id(it) == selId }?.let {
+            if (it.tag != AppSettings.selectedTag) {
+                AppLog.sub("выбранный сервер «${Ui.cleanName(it)}» теперь под номером ${it.tag}")
+                AppSettings.selectedTag = it.tag
+                AppSettings.save(ctx)
+            }
+        }
         if (!kept) resetExits(ctx)
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
             .putLong("subAt", System.currentTimeMillis()).apply()

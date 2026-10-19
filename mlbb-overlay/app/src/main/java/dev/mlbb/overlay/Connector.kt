@@ -153,6 +153,9 @@ object Connector {
      */
     private fun checkBypass(ctx: Context): Boolean {
         if (BoxVpnService.ports == null) return false
+        // Фоновая лаборатория ещё ищет — дождёмся (иначе решили бы, что обход не работает)
+        var waited = 0
+        while (BypassLab.running && waited < 120_000) { busyText = "Лаборатория обхода заканчивает поиск…"; Thread.sleep(500); waited += 500 }
         // Лучшее известное для этой сети и заготовки; долгий поиск — потом, в фоне, уже на сервере
         val g = BypassLab.search(ctx, maxTries = 5, improve = false) { busyText = it; Widget.update(ctx) }
         return g != null
