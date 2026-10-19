@@ -95,6 +95,11 @@ object Connector {
                 Widget.update(ctx)
                 try { ServerTester.pickAbroadForBypass(ctx) } catch (e: Exception) { AppLog.err("сервер для Telegram в обходе", e) }
                 startWatchdog(ctx)
+            } else if (!ServerTester.internetUp(ctx)) {
+                // Связи нет вообще — обход тут ни при чём; сторож проверит снова, когда сеть появится
+                AppLog.conn("обход: интернета сейчас нет — не переключаюсь, жду сеть")
+                onReady("Нет интернета — проверю обход, когда сеть появится")
+                startWatchdog(ctx)
             } else {
                 fallbackFromBypass(ctx, onReady)
             }
@@ -123,6 +128,12 @@ object Connector {
                 // Работает, но подбор устарел: пользуемся сразу, лучший ищем в фоне
                 onReady(null)
                 rank(ctx, game) {}
+            }
+            // (только обычный режим: в игровом сторожа нет, там подбор как раньше)
+            !game && !alive && !ServerTester.internetUp(ctx) -> {
+                // Связи нет вообще — подбор ничего не даст (все «не ответят»). Сторож подберёт, когда сеть вернётся
+                AppLog.conn("интернета сейчас нет — подбор отложен до появления сети")
+                onReady("Нет интернета — подключусь к рабочему серверу, когда сеть появится")
             }
             else -> {
                 // Автопилот: в этой сети есть проверенный лидер — сразу к нему, без перебора
@@ -227,8 +238,8 @@ object Connector {
         if (switched) {
             if (!AppSettings.gameMode) startWatchdog(ctx)
             bypassLabInBackground(ctx)
-        } else if (BoxVpnService.isRunning) {
-            // (VPN выключили посреди подбора — молчим)
+        } else if (BoxVpnService.isRunning && ServerTester.internetUp(ctx)) {
+            // (VPN выключили посреди подбора или пропала связь — молчим)
             notifyBypass(ctx, "Обход блокировок не работает", "И ни один сервер подписки сейчас не ответил — проверь интернет")
             onReady("Обход не работает, и рабочих серверов не нашлось")
         }
@@ -336,6 +347,7 @@ object Connector {
                             }
                             continue
                         }
+                        if (!ServerTester.internetUp(ctx)) { abroadFails = 0; continue }
                         Subscription.usable(ctx).firstOrNull { it.tag == abroad }?.let { Autopilot.record(ctx, it, ok = false) }
                         AppLog.conn("сторож: сервер для Telegram «${nodeName(ctx, abroad)}» не ответил (${abroadFails + 1}-й раз)")
                         if (++abroadFails < 2) continue
@@ -352,13 +364,14 @@ object Connector {
                         }
                         continue
                     }
+                    if (!ServerTester.internetUp(ctx)) { bypassFails = 0; continue } // связи нет — ждём
                     AppLog.conn("сторож: обход блокировок не открыл YouTube (${bypassFails + 1}-й раз)")
                     if (++bypassFails < 2) continue
                     bypassFails = 0
                     busy = true
                     try {
                         // Может, провайдер сменил тактику — сначала другие способы обхода, потом сервер
-                        if (!checkBypass(ctx)) fallbackFromBypass(ctx) {}
+                        if (!checkBypass(ctx) && ServerTester.internetUp(ctx)) fallbackFromBypass(ctx) {}
                     } finally {
                         busy = false
                         busyText = ""
@@ -405,9 +418,9 @@ object Connector {
                     }
                     continue
                 }
+                // Без интернета менять сервер бесполезно — и сервер не виноват
+                if (!ServerTester.internetUp(ctx)) { fails = 0; continue }
                 Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = false) }
-                // Без сети менять сервер бесполезно
-                if (ServerTester.netKey(ctx) == "none") continue
                 AppLog.conn("сторож: сервер «${nodeName(ctx, AppSettings.selectedTag)}» не ответил (${fails + 1}-й раз)")
                 if (++fails < 2) continue
                 fails = 0

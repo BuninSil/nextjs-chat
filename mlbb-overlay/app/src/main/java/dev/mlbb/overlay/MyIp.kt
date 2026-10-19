@@ -36,7 +36,7 @@ object MyIp {
                 ip = r.first
                 country = r.second
                 // Через VPN — это страна выхода выбранного сервера: запоминаем, пригодится подбору
-                if (k.isNotEmpty()) r.second?.let { ServerTester.rememberExit(App.ctx, k, it) }
+                if (k.isNotEmpty() && k != XrayCore.BYPASS) r.second?.let { ServerTester.rememberExit(App.ctx, k, it) }
                 // Сам адрес в журнал не пишем — он попадёт в отчёт
                 AppLog.net("мой IP: ${if (k.isEmpty()) "без VPN" else "через VPN"}, страна ${r.second ?: "?"}")
             } else {

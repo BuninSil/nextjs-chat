@@ -187,6 +187,22 @@ object ServerTester {
         null
     }
 
+    /**
+     * Есть ли вообще интернет (мимо VPN): Android подтверждает сеть и хоть один из DNS-серверов
+     * (Яндекс, Google) отвечает. Нужно, чтобы не принять «пропала связь» (дорога, лифт, за городом)
+     * за «сломался обход/сервер» — и не гонять зря подборы и уведомления.
+     */
+    fun internetUp(ctx: Context): Boolean {
+        val cm = ctx.getSystemService(ConnectivityManager::class.java)
+        val net = underlying(ctx) ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return false
+        for (ip in listOf("77.88.8.8", "8.8.8.8")) {
+            if (tcpRtt(net, InetAddress.getByName(ip), 53) != null) return true
+        }
+        return false
+    }
+
     /** Меряет пинг до всех серверов напрямую. Возвращает теги от лучшего к худшему. VPN не нужен. */
     fun measure(ctx: Context, progress: (Int, Int) -> Unit): List<String> {
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
@@ -570,6 +586,7 @@ object ServerTester {
      */
     fun pickAbroadForBypass(ctx: Context) {
         val p = BoxVpnService.ports ?: return
+        if (!internetUp(ctx)) { AppLog.srv("обход: интернета нет — сервер для Telegram подберу позже"); return }
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
         if (nodes.isEmpty()) return
         val ranked = measure(ctx) { _, _ -> }
