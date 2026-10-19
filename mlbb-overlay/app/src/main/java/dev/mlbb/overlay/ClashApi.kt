@@ -184,6 +184,15 @@ object ClashApi {
         null
     }
 
+    /** Что сейчас выбрано в селекторе group; null — такой группы нет или ядро недоступно. */
+    fun now(port: Int, secret: String, group: String): String? = try {
+        val c = open(port, "/proxies/" + java.net.URLEncoder.encode(group, "UTF-8"), secret, 2000)
+        if (c.responseCode != 200) null
+        else JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optString("now").takeIf { it.isNotEmpty() }
+    } catch (_: Exception) {
+        null
+    }
+
     /** Переключает селектор group на сервер tag. */
     fun select(port: Int, secret: String, group: String, tag: String): Boolean = try {
         val c = open(port, "/proxies/" + java.net.URLEncoder.encode(group, "UTF-8"), secret, 3000)

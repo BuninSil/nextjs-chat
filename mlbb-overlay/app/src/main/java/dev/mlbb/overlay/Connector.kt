@@ -289,6 +289,7 @@ object Connector {
             var fails = 0
             var lastRank = System.currentTimeMillis()
             var bypassFails = 0
+            var abroadFails = 0
             while (BoxVpnService.isRunning && !AppSettings.gameMode &&
                 (AppSettings.autoSelect || AppSettings.selectedTag == XrayCore.BYPASS)
             ) {
@@ -298,7 +299,28 @@ object Connector {
                 if (AppSettings.selectedTag == XrayCore.BYPASS) {
                     if (ServerTester.netKey(ctx) == "none") continue
                     val p = BoxVpnService.ports ?: continue
-                    if (ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000) != null) { bypassFails = 0; continue }
+                    if (ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000) != null) {
+                        bypassFails = 0
+                        // Гибрид: жив ли сервер, через который идут Telegram и прочее. Два провала — другой
+                        val abroad = ClashApi.now(p.api, p.secret, "abroad")
+                        if (abroad == null || abroad == XrayCore.BYPASS) continue
+                        if (ServerTester.alive(abroad)) { abroadFails = 0; continue }
+                        Subscription.usable(ctx).firstOrNull { it.tag == abroad }?.let { Autopilot.record(ctx, it, ok = false) }
+                        AppLog.conn("сторож: сервер для Telegram «${nodeName(ctx, abroad)}» не ответил (${abroadFails + 1}-й раз)")
+                        if (++abroadFails < 2) continue
+                        abroadFails = 0
+                        busy = true
+                        try {
+                            busyText = "Сервер для Telegram не отвечает — ищу другой…"
+                            Widget.update(ctx)
+                            ServerTester.pickAbroadForBypass(ctx)
+                        } finally {
+                            busy = false
+                            busyText = ""
+                            Widget.update(ctx)
+                        }
+                        continue
+                    }
                     AppLog.conn("сторож: обход блокировок не открыл YouTube (${bypassFails + 1}-й раз)")
                     if (++bypassFails < 2) continue
                     bypassFails = 0
