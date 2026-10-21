@@ -160,6 +160,16 @@ object Connector {
     private const val BYPASS_CHECK = BypassLab.CHECK
 
     /**
+     * Открывается ли YouTube через обход. Один медленный ответ — ещё не провал (по журналам
+     * обход работал, а проверка раз в несколько минут не укладывалась в 5 секунд): переспрашиваем.
+     */
+    private fun bypassOk(p: BoxConfig.Ports): Boolean {
+        if (ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000) != null) return true
+        try { Thread.sleep(2000) } catch (_: InterruptedException) { return false }
+        return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 8000) != null
+    }
+
+    /**
      * Обход блокировок без сервера: проверяем, открывается ли YouTube. Не открывается — перебираем
      * способы (у разных провайдеров работают разные), рабочий запоминаем.
      */
@@ -175,13 +185,21 @@ object Connector {
      * Обход не работает, а пользователь хотел обход: пока он на сервере, лаборатория в фоне ищет
      * новый способ. Нашла — возвращаемся на обход и говорим об этом.
      */
+    @Volatile private var xhttpSkipLogged = 0L
+
     private fun bypassLabInBackground(ctx: Context) {
         if (!XrayCore.available(ctx) || AppSettings.gameMode || BypassLab.running) return
         // Xray обслуживает и XHTTP-серверы: если выбран такой — перезапуски оборвут соединения
         val nodes = Subscription.usable(ctx)
         val abroad = BoxVpnService.ports?.let { ClashApi.now(it.api, it.secret, "abroad") }
         val viaXray = listOf(AppSettings.selectedTag, abroad).any { t -> nodes.firstOrNull { it.tag == t }?.xrayLink != null }
-        if (viaXray) { AppLog.conn("лаборатория обхода: трафик идёт через XHTTP-сервер — не запускаю, чтобы не рвать соединения"); return }
+        if (viaXray) {
+            if (System.currentTimeMillis() - xhttpSkipLogged > 10 * 60_000L) {
+                xhttpSkipLogged = System.currentTimeMillis()
+                AppLog.conn("лаборатория обхода: трафик идёт через XHTTP-сервер — не запускаю, чтобы не рвать соединения")
+            }
+            return
+        }
         val net = Autopilot.networkKey(ctx)
         val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
         val last = p.getLong("labAt:$net", 0)
@@ -211,6 +229,8 @@ object Connector {
      * быстрый сервер подписки — тем же подбором, что и обычно, — и сообщаем уведомлением.
      */
     private fun fallbackFromBypass(ctx: Context, onReady: (String?) -> Unit) {
+        // VPN выключили, пока проверяли обход, — это не «обход не работает»
+        if (!BoxVpnService.isRunning) return
         if (Subscription.usable(ctx).none { !ServerTester.isSeparator(it) }) {
             AppLog.conn("обход не работает, а серверов в подписке нет — переключать не на что")
             notifyBypass(ctx, "Обход блокировок не работает", "Провайдер режет и так. Добавь подписку — VPN сможет переключаться на серверы сам")
@@ -388,7 +408,7 @@ object Connector {
                 if (AppSettings.selectedTag == XrayCore.BYPASS) {
                     if (ServerTester.netKey(ctx) == "none") continue
                     val p = BoxVpnService.ports ?: continue
-                    if (ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, BYPASS_CHECK, 5000) != null) {
+                    if (bypassOk(p)) {
                         bypassFails = 0
                         // Гибрид: жив ли сервер, через который идут Telegram и прочее. Два провала — другой
                         val abroad = ClashApi.now(p.api, p.secret, "abroad")

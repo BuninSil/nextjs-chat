@@ -81,6 +81,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         /** Скорость загрузки сейчас, байт/с (обновляется раз в 2 секунды) — для спидометра на главном. */
         @Volatile var downBps = 0.0
         @Volatile var ports: BoxConfig.Ports? = null
+        /** Когда ядро последний раз поднялось — первые секунды после запуска обход ещё «прогревается» */
+        @Volatile var upAt = 0L
             private set
 
         private var setupDone = false
@@ -357,6 +359,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             box = service
             ports = p
             isRunning = true
+            upAt = System.currentTimeMillis()
             AppLog.vpn("VPN работает")
             Widget.update(this)
             startTicker()

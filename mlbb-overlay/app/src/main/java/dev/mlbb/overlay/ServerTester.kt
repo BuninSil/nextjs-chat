@@ -105,7 +105,8 @@ object ServerTester {
         } finally {
             probe(p, AppSettings.selectedTag)
         }
-        AppLog.srv("по скорости: лучший «${best?.let { AppLog.name(ctx, it) }}» ${String.format(java.util.Locale.US, "%.1f", bestSpeed)} Мбит/с")
+        AppLog.srv(best?.let { "по скорости: лучший «${AppLog.name(ctx, it)}» ${String.format(java.util.Locale.US, "%.1f", bestSpeed)} Мбит/с" }
+            ?: "по скорости: ни один сервер не скачал тестовый файл")
         val cur = currentSpeed
         if (best != null && best != current && cur != null && cur >= bestSpeed * 0.75) {
             AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${String.format(java.util.Locale.US, "%.1f", cur)} Мбит/с, разница небольшая")

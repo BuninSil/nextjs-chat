@@ -125,8 +125,10 @@ object Autopilot {
                     } catch (_: Exception) { null }
                 } ?: return@Thread // сети нет — попробуем позже
                 GeoDb.load(app)
-                val geo = GeoDb.lookup(ip)
-                val city = geo?.city.orEmpty().replace(':', ' ').trim().take(40)
+                // Город — по базе DB-IP; базы нет (в режиме «Fast VPN» её не скачивают) — по блоку
+                // адресов: у мобильных операторов свои блоки адресов в каждом регионе
+                val city = GeoDb.lookup(ip)?.city.orEmpty().replace(':', ' ').trim().take(40)
+                    .ifEmpty { "IP " + ip.split('.').take(2).joinToString(".") + ".x" }
                 val before = region?.second
                 region = sig to city
                 keyCache = null

@@ -69,14 +69,21 @@ object BypassLab {
         Genome(if (Random.nextBoolean()) a.packets else b.packets, a.lenMin, maxOf(a.lenMin, b.lenMax), b.ivMin, maxOf(b.ivMin, a.ivMax)).normalized()
 
     /** Проверить вариант: перезапуск Xray обхода с ним и запрос к YouTube. мс — открылся, null — нет. */
-    private fun test(ctx: Context, g: Genome): Int? {
+    private fun test(ctx: Context, g: Genome, retry: Boolean = false): Int? {
         val p = BoxVpnService.ports ?: return null
+        // Сразу после запуска VPN первые запросы через обход не проходят (сеть и DNS ещё
+        // поднимаются) — по журналам рабочий способ «не открывался» и VPN уходил на сервер зря
+        val warm = BoxVpnService.upAt + 6000 - System.currentTimeMillis()
+        if (warm > 0) Thread.sleep(warm)
         // Этот вариант уже загружен — без перезапуска Xray (он рвёт соединения)
         if (XrayCore.bypassParams != g.params()) {
             XrayCore.setBypassParams(ctx, g.params())
             Thread.sleep(700)
         }
-        return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 5000)
+        ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 5000)?.let { return it }
+        if (!retry) return null
+        Thread.sleep(1500)
+        return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 8000)
     }
 
     private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -111,7 +118,9 @@ object BypassLab {
                 if (n >= maxTries || !BoxVpnService.isRunning) return null
                 n++
                 progress("Подбираю способ обхода: попытка $n из $maxTries…")
-                val ms = test(ctx, g)
+                // Первый — запомненный для сети или уже загруженный: ему второй шанс, прежде чем
+                // перебирать другие (каждый другой — перезапуск Xray и обрыв соединений)
+                val ms = test(ctx, g, retry = n == 1)
                 tried[g] = ms
                 AppLog.conn("лаборатория обхода: $g — " + (ms?.let { "YouTube открылся за $it мс" } ?: "не открылся"))
                 if (ms != null && (best == null || ms < best!!.second)) best = g to ms
