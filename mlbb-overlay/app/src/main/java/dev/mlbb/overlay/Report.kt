@@ -67,6 +67,7 @@ object Report {
         val sel = nodes.firstOrNull { it.tag == AppSettings.selectedTag }
         line("Выбранный сервер", sel?.let { "${Ui.cleanName(it)} (${it.type})" }
             ?: if (AppSettings.selectedTag == XrayCore.BYPASS) "обход блокировок без сервера" else "—")
+        if (TelegramRoute.state.isNotEmpty()) line("Telegram", TelegramRoute.state)
         // Только названия, тип, пинг и страна выхода — без адресов и ключей
         sb.append("Замеры (лучшие 15):\n")
         nodes.mapNotNull { n -> ServerTester.results[n.tag]?.let { n to it } }

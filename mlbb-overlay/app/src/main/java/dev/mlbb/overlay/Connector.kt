@@ -94,6 +94,8 @@ object Connector {
                 busyText = "Подбираю сервер для Telegram…"
                 Widget.update(ctx)
                 try { ServerTester.pickAbroadForBypass(ctx) } catch (e: Exception) { AppLog.err("сервер для Telegram в обходе", e) }
+                TelegramRoute.preset(ctx)
+                Thread { try { TelegramRoute.apply(ctx) } catch (_: Exception) {} }.start()
                 startWatchdog(ctx)
             } else if (!ServerTester.internetUp(ctx)) {
                 // Связи нет вообще — обход тут ни при чём; сторож проверит снова, когда сеть появится
@@ -153,7 +155,12 @@ object Connector {
             }
         }
         AppLog.conn("готово за ${System.currentTimeMillis() - t0} мс, сервер «${nodeName(ctx, AppSettings.selectedTag)}»")
-        if (!game) startWatchdog(ctx)
+        if (!game) {
+            // Telegram: если в этой сети он открыт напрямую — пустим без сервера (в фоне, не задерживая)
+            TelegramRoute.preset(ctx)
+            Thread { try { TelegramRoute.apply(ctx) } catch (_: Exception) {} }.start()
+            startWatchdog(ctx)
+        }
     }
 
     /** Сайт, по которому проверяем обход: YouTube — главное, что режут */
@@ -428,6 +435,7 @@ object Connector {
                             continue
                         }
                     }
+                    Thread { try { TelegramRoute.apply(ctx) } catch (_: Exception) {} }.start()
                     // Новое место — может, рядом сервер быстрее: плановая проверка через пару минут, а не через полчаса
                     // (не чаще раза в 10 минут — в дороге сеть меняется часто)
                     if (System.currentTimeMillis() - earlyRankAt > 10 * 60_000L) {

@@ -665,6 +665,8 @@ object ServerTester {
             AppLog.srv(if (sel == XrayCore.BYPASS) "обход: Telegram и другое, что обход не пробивает, — через «${AppLog.name(ctx, tag)}»"
                 else "выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «${AppLog.name(ctx, tag)}»")
         }
+        // Telegram, когда он не напрямую, идёт через тот же заграничный сервер
+        if (ClashApi.now(p.api, p.secret, "tg") != "direct") ClashApi.select(p.api, p.secret, "tg", tag)
     }
 
     /**

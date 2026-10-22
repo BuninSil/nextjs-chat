@@ -62,10 +62,25 @@ object BoxConfig {
         "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com",
     ))
 
-    /** Адреса Telegram: клиенты ходят на IP напрямую, без имени сайта */
+    /** Приложения Telegram — отдельно: у них свой маршрут (см. [TelegramRoute]) */
+    val TG_PACKAGES = JSONArray(listOf(
+        "org.telegram.messenger", "org.telegram.messenger.web", "org.telegram.messenger.beta", "org.telegram.plus",
+        "org.thunderdog.challegram", "tw.nekomimi.nekogram", "xyz.nextalone.nagram", "com.radolyn.ayugram",
+        "uz.unnarsx.cherrygram", "com.exteragram.messenger", "ir.ilmili.telegraph",
+    ))
+    val TG_DOMAINS = JSONArray(listOf(
+        "telegram.org", "telegram.me", "t.me", "telesco.pe", "tdesktop.com", "tg.dev", "telegra.ph", "graph.org",
+    ))
+
+    /** Адреса Telegram (IPv4): клиенты ходят на IP напрямую, без имени сайта */
     val TELEGRAM_CIDRS = JSONArray(listOf(
         "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22", "91.108.20.0/22", "91.108.56.0/22",
         "149.154.160.0/20", "185.76.151.0/24", "95.161.64.0/20",
+    ))
+
+    /** Адреса Telegram (IPv6): у части операторов открыты, даже когда IPv4 закрыт */
+    val TELEGRAM_CIDRS6 = JSONArray(listOf(
+        "2001:67c:4e8::/48", "2001:b28:f23c::/48", "2001:b28:f23d::/48", "2001:b28:f23f::/48", "2a0a:f280::/32",
     ))
 
     val BLOCKED_DOMAINS = JSONArray(listOf(
@@ -162,6 +177,16 @@ object BoxConfig {
                     .put("outbounds", tags).put("default", abroadTag)
                     .put("interrupt_exist_connections", false)
             )
+            // «tg» — куда идёт Telegram: заграничный сервер (по умолчанию) или напрямую, если в этой
+            // сети его адреса открыты. Переключается на лету ([TelegramRoute]), без перезапуска ядра.
+            val tgMembers = JSONArray()
+            for (i in 0 until tags.length()) tgMembers.put(tags.getString(i))
+            tgMembers.put("direct")
+            outbounds.put(
+                JSONObject().put("type", "selector").put("tag", "tg")
+                    .put("outbounds", tgMembers).put("default", abroadTag)
+                    .put("interrupt_exist_connections", false)
+            )
         }
         // «lowping» — звонки, игры и прочий UDP: им важен пинг, а не скорость скачивания.
         // Только обычный режим с сервером (в обходе и игровом режиме — всё как было)
@@ -210,6 +235,14 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+        if (abroadTag != null) {
+            // Telegram — по своему маршруту «tg». Его адреса в IPv6 (если у оператора есть IPv6) —
+            // сразу напрямую: это ставим до общего отклонения IPv6 ниже.
+            rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS6).put("outbound", "direct"))
+            rules.put(JSONObject().put("domain_suffix", TG_DOMAINS).put("outbound", "tg"))
+            rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS).put("outbound", "tg"))
+        }
+        rules
             // IPv6 не проксируем (у многих серверов его нет): отказ — и приложение сразу идёт по IPv4
             .put(JSONObject().put("ip_version", 6).put("action", "reject"))
         if (selected == XrayCore.BYPASS) {
@@ -255,10 +288,10 @@ object BoxConfig {
             rules.put(JSONObject().put("domain_suffix", BYPASS_DOMAINS).put("outbound", "proxy"))
         }
         if (abroadTag != null) {
-            // Telegram, YouTube и другие заблокированные сервисы — всегда через зарубежный выход
+            // YouTube, Meta, X и другие заблокированные сервисы — через зарубежный выход
+            // (Telegram разведён выше по маршруту «tg»)
             rules.put(JSONObject().put("package_name", BLOCKED_PACKAGES).put("outbound", "abroad"))
             rules.put(JSONObject().put("domain_suffix", BLOCKED_DOMAINS).put("outbound", "abroad"))
-            rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS).put("outbound", "abroad"))
         }
         if (abroadTag != null && !ruDirect) {
             // Российские сайты без «напрямую» — через выбранный сервер (остальное идёт через зарубежный)
