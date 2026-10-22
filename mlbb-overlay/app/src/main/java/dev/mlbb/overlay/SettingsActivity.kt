@@ -428,9 +428,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun tgProxy() {
         val dlg = android.app.AlertDialog.Builder(this)
             .setTitle("Прокси для Telegram")
-            .setMessage("Прокси держат посторонние люди — это резерв на случай, когда Telegram не открывается иначе. Переписку они не видят.
-
-Подобрать рабочий?")
+            .setMessage("Прокси держат посторонние люди — это резерв на случай, когда Telegram не открывается иначе. Переписку они не видят.\n\nПодобрать рабочий?")
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Подобрать") { _, _ ->
                 val progress = android.app.AlertDialog.Builder(this)
