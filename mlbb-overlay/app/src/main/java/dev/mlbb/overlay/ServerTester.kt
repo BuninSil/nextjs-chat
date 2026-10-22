@@ -270,7 +270,9 @@ object ServerTester {
 
     /** Меряет пинг до всех серверов напрямую. Возвращает теги от лучшего к худшему. VPN не нужен. */
     fun measure(ctx: Context, progress: (Int, Int) -> Unit): List<String> {
-        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) }
+        // Резервные бесплатные серверы в обычный перебор не берём — они подключаются только
+        // как крайний вариант, через [pickReserve]; иначе каждый замер пинговал бы их зря
+        val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) || Subscription.isReserve(it) }
         val net = underlying(ctx)
         val game = AppSettings.gameMode
         loadExits(ctx)
@@ -386,6 +388,37 @@ object ServerTester {
         lowTag = null
         if (standby == best) standby = null
         applyAbroad(ctx)
+        return best
+    }
+
+    /**
+     * Крайний случай: ни один сервер подписки не работает, а пользователь включил резерв.
+     * Берём бесплатные публичные серверы ([Subscription.reserveNodes]), проверяем их разом и
+     * подключаемся к первому живому. Возвращает тег резервного сервера или null.
+     */
+    fun pickReserve(ctx: Context): String? {
+        if (!AppSettings.freeReserve) return null
+        val p = BoxVpnService.ports ?: return null
+        Subscription.refreshReserve(ctx) // обновит список, если устарел; свежий не трогает
+        val reserve = Subscription.usable(ctx).filter { Subscription.isReserve(it) }
+        if (reserve.isEmpty()) { AppLog.srv("резерв: список бесплатных серверов пуст"); return null }
+        AppLog.srv("резерв: проверяю ${reserve.size} бесплатных серверов")
+        val live = ConcurrentHashMap.newKeySet<String>()
+        val pool = Executors.newFixedThreadPool(reserve.size.coerceIn(1, 12))
+        for (n in reserve) pool.execute { if (delayMs(n.tag, 4000) != null) live.add(n.tag) }
+        pool.shutdown(); pool.awaitTermination(12, TimeUnit.SECONDS)
+        // Из живых — самый быстрый по пингу (меряем ещё раз, их уже немного)
+        val best = live.minByOrNull { delayMs(it, 3000) ?: Int.MAX_VALUE } ?: run {
+            AppLog.srv("резерв: ни один бесплатный сервер не ответил")
+            probe(p, AppSettings.selectedTag)
+            return null
+        }
+        selectMain(p, best)
+        AppSettings.selectedTag = best
+        AppSettings.save(ctx)
+        lowTag = null
+        applyAbroad(ctx)
+        AppLog.srv("резерв: подключил бесплатный сервер «${AppLog.name(ctx, best)}»")
         return best
     }
 

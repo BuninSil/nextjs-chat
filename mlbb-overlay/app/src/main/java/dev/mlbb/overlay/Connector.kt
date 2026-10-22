@@ -321,6 +321,15 @@ object Connector {
         // Сначала — первый рабочий (в игре — с выходом в России): интернет есть уже через секунды
         busyText = if (game) "Ищу сервер с выходом в России…" else "Проверяю сервер…"
         ServerTester.pickWorking(ctx, ranked)
+        // Ни один сервер подписки не ответил, а резерв включён — крайний вариант: бесплатный сервер
+        if (!game && !ServerTester.alive(AppSettings.selectedTag) && AppSettings.freeReserve && ServerTester.internetUp(ctx)) {
+            busyText = "Серверы не отвечают — пробую резервные…"
+            Widget.update(ctx)
+            ServerTester.pickReserve(ctx)?.let {
+                notifyBypass(ctx, "Включён резервный сервер",
+                    "Серверы подписки сейчас не отвечают — подключил бесплатный публичный сервер. Как только подписка заработает, вернусь на неё.")
+            }
+        }
         onWorking()
         Widget.update(ctx)
         // Обычный режим: дальше в фоне — самый быстрый по скорости
@@ -500,6 +509,12 @@ object Connector {
                     rerankSoon = false
                     lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
                 }
+                // Сейчас на бесплатном резерве — чаще проверяем, не ожила ли подписка, чтобы вернуться
+                if (Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Subscription.isReserve(it) } == true &&
+                    System.currentTimeMillis() - lastRank > 2 * 60_000L
+                ) {
+                    lastRank = 0L
+                }
                 // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
                 // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
                 if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
@@ -595,6 +610,18 @@ object Connector {
                         VpnLog.add("автопереподключение: ${nodeName(ctx, AppSettings.selectedTag)}")
                         // Новый запасной и сервер для звонков — подбором по скорости через пару минут
                         lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
+                    }
+                    // Ни один сервер подписки не ожил, а резерв включён — крайний вариант
+                    if (BoxVpnService.isRunning && !ServerTester.alive(AppSettings.selectedTag) &&
+                        AppSettings.freeReserve && ServerTester.internetUp(ctx)
+                    ) {
+                        busyText = "Серверы не отвечают — пробую резервные…"
+                        Widget.update(ctx)
+                        ServerTester.pickReserve(ctx)?.let {
+                            VpnLog.add("резервный сервер: ${nodeName(ctx, AppSettings.selectedTag)}")
+                            notifyBypass(ctx, "Включён резервный сервер",
+                                "Серверы подписки сейчас не отвечают — подключил бесплатный публичный сервер. Как только подписка заработает, вернусь на неё.")
+                        }
                     }
                 } finally {
                     busy = false

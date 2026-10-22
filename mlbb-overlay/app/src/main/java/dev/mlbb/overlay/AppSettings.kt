@@ -56,6 +56,8 @@ object AppSettings {
     @Volatile var ruDirect = true
     /** Блокировать рекламу и трекеры */
     @Volatile var adBlock = false
+    /** Резерв: бесплатные публичные серверы, когда ничего другого не работает */
+    @Volatile var freeReserve = false
     /**
      * Режим совместимости: весь трафик через стек gVisor вместо системного. Для прошивок,
      * где ядру не дают привязать обработчик TCP к VPN-интерфейсу (через VPN ничего не грузится).
@@ -126,6 +128,7 @@ object AppSettings {
         appsMode = p.getInt("appsMode", APPS_ALL)
         appsList = p.getStringSet("appsList", emptySet())?.toSet() ?: emptySet()
         adBlock = p.getBoolean("adBlock", false)
+        freeReserve = p.getBoolean("freeReserve", false)
         compatStack = p.getBoolean("compatStack", false)
         battleDnd = p.getBoolean("battleDnd", true)
         bypassPreset = p.getInt("bypassPreset", 0)
@@ -179,6 +182,7 @@ object AppSettings {
             .putInt("appsMode", appsMode)
             .putStringSet("appsList", HashSet(appsList))
             .putBoolean("adBlock", adBlock)
+            .putBoolean("freeReserve", freeReserve)
             .putBoolean("compatStack", compatStack)
             .putBoolean("battleDnd", battleDnd)
             .putInt("bypassPreset", bypassPreset)

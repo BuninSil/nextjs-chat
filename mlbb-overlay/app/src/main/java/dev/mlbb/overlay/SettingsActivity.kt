@@ -149,6 +149,13 @@ class SettingsActivity : AppCompatActivity() {
                 AppSettings.compatStack = it; vpnChanged = true
             })
             addView(divider())
+            addView(switchRow("Резерв: бесплатные публичные серверы",
+                "Когда ничего другого не работает. Их держат посторонние люди — используется в последнюю очередь",
+                AppSettings.freeReserve) {
+                AppSettings.freeReserve = it; vpnChanged = true
+                if (it) Thread { try { Subscription.refreshReserve(applicationContext, force = true) } catch (_: Exception) {} }.start()
+            })
+            addView(divider())
             addView(linkRow("Прокси для Telegram",
                 "Если Telegram не открывается ни напрямую, ни через сервер — подобрать рабочий публичный прокси") {
                 tgProxy()

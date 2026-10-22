@@ -544,8 +544,9 @@ class MainActivity : AppCompatActivity() {
                     val r = ServerTester.results[n.tag]
                     Ui.setFlag(serverFlag, Ui.flagFor(n))
                     serverName.text = Ui.cleanName(n)
-                    serverSub.text = "${n.type}" + (if (AppSettings.autoSelect) " · автовыбор" else "") +
-                        " · ${Subscription.usable(this).size} серверов"
+                    serverSub.text = if (Subscription.isReserve(n)) "резервный бесплатный сервер · пока подписка не ответит"
+                        else "${n.type}" + (if (AppSettings.autoSelect) " · автовыбор" else "") +
+                            " · ${Subscription.usable(this).count { !Subscription.isReserve(it) }} серверов"
                     serverPing.text = r?.let { "${it.medianMs} ms" } ?: ""
                     serverPing.setTextColor(Ui.pingColor(r?.medianMs))
                 }

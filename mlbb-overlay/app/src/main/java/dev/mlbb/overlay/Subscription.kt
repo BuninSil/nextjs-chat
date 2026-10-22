@@ -26,6 +26,8 @@ object Subscription {
         val xrayLink: String? = null,
         /** Из какой подписки: "" — основная, иначе ссылка дополнительной */
         val sub: String = "",
+        /** Исходная ссылка сервера (vless://…) — нужна, чтобы пересохранить серверы в файл */
+        val raw: String = "",
     )
 
     data class Info(val upload: Long, val download: Long, val total: Long, val expireSec: Long)
@@ -145,6 +147,8 @@ object Subscription {
                 out += n.copy(tag = tag, outbound = JSONObject(n.outbound.toString()).put("tag", tag), sub = u)
             }
         }
+        // Резервные бесплатные серверы (если включены) — в конец, со своими тегами r0, r1…
+        out += reserveNodes(ctx)
         return out
     }
 
@@ -165,6 +169,80 @@ object Subscription {
 
     /** Ссылка подписки сервера: для основной — AppSettings.subUrl */
     fun urlOf(n: Node) = n.sub.ifEmpty { AppSettings.subUrl }
+
+    // ------------------------- резерв: бесплатные публичные серверы -------------------------
+
+    /** Пометка резервного сервера в поле [Node.sub] */
+    const val RESERVE = "reserve"
+    private const val RESERVE_MAX = 25
+
+    fun isReserve(n: Node) = n.sub == RESERVE
+    private fun reserveFile(ctx: Context) = File(ctx.filesDir, "subscription-reserve.txt")
+
+    /** Открытые списки бесплатных серверов (строки vless://, trojan://… или base64) */
+    private val RESERVE_SOURCES = listOf(
+        "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
+        "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
+        "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt",
+    )
+
+    /** Давно ли обновляли резерв (чтобы не дёргать GitHub на каждое подключение) */
+    private fun reserveFresh(ctx: Context): Boolean {
+        val f = reserveFile(ctx)
+        return f.exists() && System.currentTimeMillis() - f.lastModified() < 12 * 3600_000L
+    }
+
+    /**
+     * Обновить список резервных серверов (если устарел). Берём несколько открытых списков,
+     * оставляем серверы, которые понимает это устройство, и не больше [RESERVE_MAX] штук.
+     * Сами серверы в общий пул не лезут — они подключаются только через [ServerTester.pickReserve].
+     */
+    fun refreshReserve(ctx: Context, force: Boolean = false): Int {
+        if (!force && reserveFresh(ctx)) return reserveNodes(ctx).size
+        val xray = XrayCore.available(ctx)
+        val seen = LinkedHashSet<String>()
+        val picked = ArrayList<Node>()
+        for (url in RESERVE_SOURCES) {
+            try {
+                val c = Net.open(url.trim())
+                c.setRequestProperty("User-Agent", "v2rayNG/1.9.0")
+                c.setRequestProperty("Accept-Encoding", "identity")
+                if (c.responseCode != 200) continue
+                val body = readLimited(c.inputStream, 512 * 1024)
+                for (n in parseAll(body)) {
+                    if (n.xrayLink != null && !xray) continue
+                    val id = n.server + ":" + n.port
+                    if (seen.add(id)) picked += n
+                    if (picked.size >= RESERVE_MAX * 3) break
+                }
+            } catch (e: Exception) {
+                AppLog.err("резерв: список ${AppLog.host(url)} не загрузился", e)
+            }
+            if (picked.size >= RESERVE_MAX * 3) break
+        }
+        if (picked.isEmpty()) {
+            AppLog.sub("резерв: не удалось загрузить ни один список")
+            return reserveNodes(ctx).size
+        }
+        // Перемешиваем и берём часть: списки огромные, проверять тысячи серверов незачем
+        val chosen = picked.shuffled().take(RESERVE_MAX)
+        reserveFile(ctx).writeText(chosen.joinToString("\n") { it.raw }.ifEmpty { "" })
+        AppLog.sub("резерв: обновлён, серверов ${chosen.size}")
+        setNodes(ctx, combined(ctx))
+        return chosen.size
+    }
+
+    /** Резервные серверы из файла (с меткой [RESERVE]); пусто, если резерв выключен или не загружен */
+    fun reserveNodes(ctx: Context): List<Node> {
+        if (!AppSettings.freeReserve) return emptyList()
+        val f = reserveFile(ctx)
+        if (!f.exists()) return emptyList()
+        val parsed = try { parseAll(f.readText()) } catch (_: Exception) { return emptyList() }
+        return parsed.mapIndexed { i, n ->
+            val tag = "r$i"
+            n.copy(tag = tag, outbound = JSONObject(n.outbound.toString()).put("tag", tag), sub = RESERVE)
+        }
+    }
 
     /** Сколько серверов в подписке (для списка в окне «Подписки») */
     fun countFor(ctx: Context, url: String): Int {
@@ -536,7 +614,7 @@ object Subscription {
             val l = line.trim()
             if (l.isEmpty()) continue
             try {
-                parse(l, "n${out.size}")?.let { out.add(it) }
+                parse(l, "n${out.size}")?.let { out.add(it.copy(raw = l)) }
             } catch (_: Exception) {
                 // кривые строки пропускаем, остальные серверы важнее
             }

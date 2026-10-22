@@ -351,7 +351,9 @@ class ServersActivity : AppCompatActivity() {
 
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
-            val all = Subscription.usable(this@ServersActivity, includeHidden = showHidden).filterNot { ServerTester.isSeparator(it) }
+            // Резервные бесплатные серверы в списке не показываем — они включаются сами, в крайнем случае
+            val all = Subscription.usable(this@ServersActivity, includeHidden = showHidden)
+                .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) }
             val hiddenCount = Subscription.usable(this@ServersActivity, includeHidden = true).count { Subscription.isHidden(it) }
             hiddenToggle.visibility = if (hiddenCount > 0) android.view.View.VISIBLE else android.view.View.GONE
             hiddenToggle.text = if (showHidden) "Убрать скрытые из списка" else "Показать скрытые ($hiddenCount)"
