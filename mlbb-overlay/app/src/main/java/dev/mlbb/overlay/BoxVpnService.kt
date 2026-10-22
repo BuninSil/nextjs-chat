@@ -338,7 +338,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val abroad = if (AppSettings.gameMode) null
                 else ServerTester.abroadFor(this, selected).takeIf { !bypass || it != XrayCore.BYPASS }
             val lowPing = if (AppSettings.autoSelect) ServerTester.lowTag else null
-            val config = BoxConfig.build(
+            val cacheFile = File(filesDir, "box-cache.db")
+            fun config(cachePath: String) = BoxConfig.build(
                 nodes, selected, p, packageName,
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
                 gameMode = AppSettings.gameMode,
@@ -352,14 +353,24 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 abroad = abroad,
                 bypassPort = bypassPort,
                 lowPing = lowPing,
-                cachePath = File(filesDir, "box-cache.db").path,
+                cachePath = cachePath,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
                 "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
                 "стек ${if (AppSettings.compatStack) "gvisor (совместимость)" else "mixed"}")
-            val service = Libbox.newService(config, this)
-            service.start()
+            var first: BoxService? = null
+            val service = try {
+                Libbox.newService(config(cacheFile.path), this).also { first = it; it.start() }
+            } catch (e: Exception) {
+                // Кэш занят или повреждён — не повод оставаться без VPN: стираем и запускаем без него
+                AppLog.err("ядро не запустилось с кэшем — пробую без него", e)
+                try { first?.close() } catch (_: Exception) {}
+                try { tunPfd?.close() } catch (_: Exception) {}
+                tunPfd = null
+                cacheFile.delete()
+                Libbox.newService(config(""), this).also { it.start() }
+            }
             box = service
             ports = p
             isRunning = true
