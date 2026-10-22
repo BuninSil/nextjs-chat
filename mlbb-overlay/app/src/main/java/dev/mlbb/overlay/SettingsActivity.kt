@@ -149,6 +149,11 @@ class SettingsActivity : AppCompatActivity() {
                 AppSettings.compatStack = it; vpnChanged = true
             })
             addView(divider())
+            addView(linkRow("Прокси для Telegram",
+                "Если Telegram не открывается ни напрямую, ни через сервер — подобрать рабочий публичный прокси") {
+                tgProxy()
+            })
+            addView(divider())
             appsRow = linkRow("Приложения через VPN", appsSummary(), { appsSub = it }) {
                 vpnChanged = true
                 startActivity(android.content.Intent(this@SettingsActivity, AppsActivity::class.java))
@@ -411,6 +416,29 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // ------------------------------ элементы ------------------------------
+
+    /** Подобрать живой MTProto-прокси и открыть его в Telegram (крайний случай, см. [TgProxy]). */
+    private fun tgProxy() {
+        val dlg = android.app.AlertDialog.Builder(this)
+            .setTitle("Прокси для Telegram")
+            .setMessage("Прокси держат посторонние люди — это резерв на случай, когда Telegram не открывается иначе. Переписку они не видят.
+
+Подобрать рабочий?")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Подобрать") { _, _ ->
+                val progress = android.app.AlertDialog.Builder(this)
+                    .setTitle("Прокси для Telegram").setMessage("Беру список прокси…").setCancelable(false).show()
+                TgProxy.findAndOpen(applicationContext,
+                    progress = { msg -> runOnUiThread { if (msg.isNotEmpty() && progress.isShowing) progress.setMessage(msg) } },
+                    onDone = { ok -> runOnUiThread {
+                        try { if (progress.isShowing) progress.dismiss() } catch (_: Exception) {}
+                        if (ok) Toast.makeText(this, "Нашёл прокси — подтверди подключение в Telegram", Toast.LENGTH_LONG).show()
+                        else Toast.makeText(this, "Рабочий прокси не нашёлся — попробуй позже или поменяй сеть", Toast.LENGTH_LONG).show()
+                    } })
+            }
+            .create()
+        dlg.show()
+    }
 
     private fun section(title: String) = Ui.text(this, title.uppercase(), 12f, Ui.MUTED, bold = true).apply {
         setPadding(d(4f), d(22f), 0, d(8f))
