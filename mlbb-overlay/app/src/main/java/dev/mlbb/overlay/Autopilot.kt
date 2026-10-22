@@ -39,7 +39,20 @@ object Autopilot {
         var mbps: Double = 0.0,
         var ping: Double = 0.0,
         var at: Long = 0L,
+        /** То же по времени суток (ночь, утро, день, вечер): многие серверы вечером, в час пик, хуже */
+        val po: DoubleArray = DoubleArray(4),
+        val pf: DoubleArray = DoubleArray(4),
     )
+
+    /** Часть суток: 0 — ночь (0–6), 1 — утро, 2 — день, 3 — вечер (18–24) */
+    private fun period(now: Long): Int =
+        java.util.Calendar.getInstance().apply { timeInMillis = now }.get(java.util.Calendar.HOUR_OF_DAY) / 6
+
+    /** Успехи и провалы с учётом этой части суток: её опыт весит втрое (ослабленный на k) */
+    private fun okFail(s: Stat, k: Double, now: Long): Pair<Double, Double> {
+        val b = period(now)
+        return (s.ok + 2 * s.po[b]) * k to (s.fail + 2 * s.pf[b]) * k
+    }
 
     private class Net(
         val servers: HashMap<String, Stat> = HashMap(),
@@ -188,6 +201,7 @@ object Autopilot {
         val k = weight(s, now)
         s.ok *= k
         s.fail *= k
+        for (i in 0 until 4) { s.po[i] *= k; s.pf[i] *= k }
         s.at = now
     }
 
@@ -202,6 +216,7 @@ object Autopilot {
             val s = net(ctx, k).servers.getOrPut(id(n)) { Stat() }
             decay(s, now)
             if (ok) s.ok += 1 else s.fail += 1
+            if (ok) s.po[period(now)] += 1 else s.pf[period(now)] += 1
             if (mbps != null && mbps > 0) s.mbps = if (s.mbps == 0.0) mbps else s.mbps * 0.6 + mbps * 0.4
             s.at = now
         }
@@ -278,8 +293,8 @@ object Autopilot {
             val pingF = ping?.let { 1.0 / (1.0 + max(0, it - 30) / 120.0) } ?: 0.6
             if (s == null) return@associateWith beta(1.0, 1.0) * pingF * 0.8
             // Для выбора опыт ослабляем на копии — сама статистика меняется только новым результатом
-            val k = weight(s, now)
-            val p = beta(s.ok * k + 1, s.fail * k + 1)
+            val (ok, fail) = okFail(s, weight(s, now), now)
+            val p = beta(ok + 1, fail + 1)
             // Скорость: 0 → 0,5; 50 Мбит/с и больше → 1
             val speedF = if (s.mbps > 0) 0.5 + 0.5 * min(1.0, s.mbps / 50) else 0.6
             p * speedF * (0.7 + 0.3 * pingF)
@@ -296,9 +311,11 @@ object Autopilot {
         return nodes.mapNotNull { n ->
             val s = stat(ctx, key, id(n)) ?: return@mapNotNull null
             val k = weight(s, now)
-            val ok = s.ok * k
-            val total = ok + s.fail * k
-            if (ok < 2.5 || ok / total < 0.8) return@mapNotNull null
+            // Лидер — по опыту вообще (не меньше трёх удач), но и в эту часть суток без провалов
+            if (s.ok * k < 2.5) return@mapNotNull null
+            val (ok, fail) = okFail(s, k, now)
+            val total = ok + fail
+            if (ok / total < 0.8) return@mapNotNull null
             n to (ok / total) * (0.5 + 0.5 * min(1.0, s.mbps / 50))
         }.maxByOrNull { it.second }?.first
     }
@@ -336,7 +353,10 @@ object Autopilot {
                 val sv = no.optJSONObject("servers") ?: JSONObject()
                 for (id in sv.keys()) {
                     val a = sv.getJSONArray(id)
-                    n.servers[id] = Stat(a.optDouble(0), a.optDouble(1), a.optDouble(2), a.optDouble(3), a.optLong(4))
+                    val st = Stat(a.optDouble(0), a.optDouble(1), a.optDouble(2), a.optDouble(3), a.optLong(4))
+                    // Части суток — с версии 1.0.161; в старом файле их нет (нули)
+                    for (i in 0 until 4) { st.po[i] = a.optDouble(5 + i, 0.0); st.pf[i] = a.optDouble(9 + i, 0.0) }
+                    n.servers[id] = st
                 }
                 nets[k] = n
             }
@@ -369,7 +389,8 @@ object Autopilot {
                 n.servers.entries.sortedBy { it.value.at }.take(n.servers.size - MAX_SERVERS).forEach { n.servers.remove(it.key) }
             }
             val sv = JSONObject()
-            for ((id, s) in n.servers) sv.put(id, JSONArray().put(s.ok).put(s.fail).put(s.mbps).put(s.ping).put(s.at))
+            for ((id, s) in n.servers) sv.put(id, JSONArray().put(s.ok).put(s.fail).put(s.mbps).put(s.ping).put(s.at)
+                .apply { s.po.forEach { put(Math.round(it * 1000) / 1000.0) }; s.pf.forEach { put(Math.round(it * 1000) / 1000.0) } })
             o.put(k, JSONObject().put("seen", n.seen).put("servers", sv).apply { n.bypass?.let { put("bypass", it) } })
         }
         try {

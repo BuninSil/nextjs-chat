@@ -121,6 +121,10 @@ object BoxConfig {
         abroad: String? = null,
         /** Порт Xray для обхода блокировок без сервера (null — нет Xray) */
         bypassPort: Int? = null,
+        /** Сервер с самым низким пингом — для звонков и игр (UDP); null — как у [abroad] */
+        lowPing: String? = null,
+        /** Файл кэша ядра (DNS FakeIP между перезапусками); пусто — без кэша */
+        cachePath: String = "",
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -156,6 +160,18 @@ object BoxConfig {
             outbounds.put(
                 JSONObject().put("type", "selector").put("tag", "abroad")
                     .put("outbounds", tags).put("default", abroadTag)
+                    .put("interrupt_exist_connections", false)
+            )
+        }
+        // «lowping» — звонки, игры и прочий UDP: им важен пинг, а не скорость скачивания.
+        // Только обычный режим с сервером (в обходе и игровом режиме — всё как было)
+        val bypassMode = selected == XrayCore.BYPASS
+        val lowTag = if (abroadTag == null || bypassMode) null
+            else lowPing?.takeIf { l -> (0 until tags.length()).any { tags.getString(it) == l } } ?: abroadTag
+        if (lowTag != null) {
+            outbounds.put(
+                JSONObject().put("type", "selector").put("tag", "lowping")
+                    .put("outbounds", tags).put("default", lowTag)
                     .put("interrupt_exist_connections", false)
             )
         }
@@ -213,7 +229,25 @@ object BoxConfig {
             ruleSet("ads", "geosite-category-ads-all.srs")
             rules.put(JSONObject().put("rule_set", JSONArray().put("ads")).put("action", "reject"))
         }
-        val bypassMode = selected == XrayCore.BYPASS
+        if (lowTag != null) {
+            // QUIC (UDP 443) через сервер: у VLESS/Trojan UDP идёт хуже TCP — видео грузится
+            // медленнее и рвётся. Отклоняем — браузер и YouTube сразу переходят на TCP.
+            // Российские сайты напрямую не трогаем: им QUIC не мешает.
+            val quic = JSONObject().put("network", "udp").put("port", 443)
+            if (ruDirect) {
+                rules.put(JSONObject().put("type", "logical").put("mode", "and")
+                    .put("rules", JSONArray().put(quic)
+                        .put(JSONObject().put("domain_suffix", RU_SUFFIXES).put("invert", true)))
+                    .put("action", "reject"))
+            } else {
+                rules.put(JSONObject(quic.toString()).put("action", "reject"))
+            }
+            // Звонки, игры и прочий UDP (кроме DNS и времени) — через сервер с самым низким пингом
+            rules.put(JSONObject().put("type", "logical").put("mode", "and")
+                .put("rules", JSONArray().put(JSONObject().put("network", "udp"))
+                    .put(JSONObject().put("port", JSONArray().put(53).put(123).put(443)).put("invert", true)))
+                .put("outbound", "lowping"))
+        }
         if (bypassMode && abroadTag != null) {
             // Гибрид: YouTube — через обход (бесплатно, без трафика подписки), остальное
             // заблокированное — через сервер ниже
@@ -287,7 +321,14 @@ object BoxConfig {
             .put("experimental", JSONObject()
                 .put("clash_api", JSONObject()
                     .put("external_controller", "127.0.0.1:${ports.api}")
-                    .put("secret", ports.secret)))
+                    .put("secret", ports.secret))
+                .apply {
+                    // Кэш: адреса FakeIP переживают переподключение — приложения, запомнившие
+                    // адрес, не ждут, пока сами переспросят DNS (в дороге переподключений много).
+                    // Выбор серверов ядро тоже запоминает — после запуска его ставим заново (BoxVpnService)
+                    if (cachePath.isNotEmpty()) put("cache_file", JSONObject()
+                        .put("enabled", true).put("path", cachePath).put("store_fakeip", true))
+                })
             .toString()
     }
 }

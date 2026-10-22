@@ -332,6 +332,12 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 AppSettings.selectedTag = selected
                 AppSettings.save(this)
             }
+            // Только обычный режим: в игровом всё через выбранный сервер, как и было
+            // Обход без сервера — гибрид: YouTube и всё прочее через обход, а Telegram и другое,
+            // что обход не пробивает, — через зарубежный сервер подписки (если она есть)
+            val abroad = if (AppSettings.gameMode) null
+                else ServerTester.abroadFor(this, selected).takeIf { !bypass || it != XrayCore.BYPASS }
+            val lowPing = if (AppSettings.autoSelect) ServerTester.lowTag else null
             val config = BoxConfig.build(
                 nodes, selected, p, packageName,
                 onlyGame = AppSettings.onlyGame, battleDirect = AppSettings.battleDirect,
@@ -343,12 +349,10 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 appsMode = AppSettings.appsMode,
                 appsList = AppSettings.appsList,
                 compatStack = AppSettings.compatStack,
-                // Только обычный режим: в игровом всё через выбранный сервер, как и было
-                // Обход без сервера — гибрид: YouTube и всё прочее через обход, а Telegram и другое,
-                // что обход не пробивает, — через зарубежный сервер подписки (если она есть)
-                abroad = if (AppSettings.gameMode) null
-                    else ServerTester.abroadFor(this, selected).takeIf { !bypass || it != XrayCore.BYPASS },
+                abroad = abroad,
                 bypassPort = bypassPort,
+                lowPing = lowPing,
+                cachePath = File(filesDir, "box-cache.db").path,
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
@@ -361,6 +365,16 @@ class BoxVpnService : VpnService(), PlatformInterface {
             isRunning = true
             upAt = System.currentTimeMillis()
             AppLog.vpn("VPN работает")
+            // Ядро помнит выбор серверов с прошлого запуска (кэш) — ставим нынешний явно:
+            // номера серверов после обновления подписки могли сменить смысл
+            Thread {
+                ClashApi.select(p.api, p.secret, "proxy", selected)
+                ClashApi.select(p.api, p.secret, "probe", selected)
+                if (abroad != null) {
+                    ClashApi.select(p.api, p.secret, "abroad", abroad)
+                    ClashApi.select(p.api, p.secret, "lowping", lowPing?.takeIf { t -> usable.any { it.tag == t } } ?: abroad)
+                }
+            }.start()
             Widget.update(this)
             startTicker()
             // Оверлей и лог: читаем соединения игры у своего же ядра

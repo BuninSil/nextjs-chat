@@ -343,6 +343,31 @@ object Connector {
         AppLog.conn("сторож: $why — проверю связь")
     }
 
+    /** Мгновенное переключение на горячий запасной; полный подбор (новый запасной) — через пару минут. */
+    private fun switchToStandby(ctx: Context, tag: String, why: String) {
+        ServerTester.standby = null
+        if (!ServerTester.use(ctx, tag)) return
+        AppLog.conn("сторож: $why — сразу на запасной «${nodeName(ctx, tag)}»")
+        VpnLog.add("на запасной сервер: ${nodeName(ctx, tag)}")
+        Subscription.usable(ctx).firstOrNull { it.tag == tag }?.let { Autopilot.record(ctx, it, ok = true) }
+        Widget.update(ctx)
+        // Звонки и игры шли через упавший? — пусть идут через новый, пока подбор не найдёт лучший
+        ServerTester.lowTag?.let { low -> if (ServerTester.delayMs(low) == null) { ServerTester.lowTag = null; ServerTester.applyAbroad(ctx) } }
+        rerankSoon = true
+    }
+
+    /** Сервер для звонков и игр жив? Нет — звонки через выбранный, пока подбор не найдёт другой. */
+    private fun checkLowPing(ctx: Context) {
+        val low = ServerTester.lowTag ?: return
+        if (low == AppSettings.selectedTag || ServerTester.delayMs(low) != null) return
+        AppLog.conn("сторож: сервер для звонков и игр «${nodeName(ctx, low)}» не отвечает — звонки через выбранный")
+        ServerTester.lowTag = null
+        ServerTester.applyAbroad(ctx)
+    }
+
+    /** Переключились на запасной — сторож запустит подбор через пару минут (найти новый запасной) */
+    @Volatile private var rerankSoon = false
+
     /** Как часто искать сервер быстрее, пока VPN работает (обычный режим, автовыбор) */
     private const val RERANK_MS = 30 * 60 * 1000L
 
@@ -360,6 +385,12 @@ object Connector {
             var okRecordedAt = 0L
             var lastNet = Autopilot.networkKey(ctx)
             var earlyRankAt = 0L
+            // Качество: обычный пинг выбранного сервера и сколько проверок подряд он намного хуже
+            var qTag = ""
+            var qBase = 0.0
+            var qSlow = 0
+            var qSwitchAt = 0L
+            var standbyAt = 0L
             val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
             // Работает и при ручном выборе сервера, если обход ждёт возвращения (bypassWanted)
             // isStarting — ядро перезапускается внутри сервиса (обновился список серверов): не выходим
@@ -457,6 +488,10 @@ object Connector {
                 if (prefs.getBoolean("bypassWanted", false)) bypassLabInBackground(ctx)
                 // Сервер выбран вручную — сами его не меняем
                 if (!AppSettings.autoSelect) continue
+                if (rerankSoon) {
+                    rerankSoon = false
+                    lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
+                }
                 // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
                 // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
                 if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
@@ -483,19 +518,63 @@ object Connector {
                     }
                     continue
                 }
-                if (ServerTester.alive(AppSettings.selectedTag)) {
+                val sel = AppSettings.selectedTag
+                // Один медленный ответ — ещё не провал: переспрашиваем с запасом
+                val ms = ServerTester.delayMs(sel) ?: run {
+                    try { Thread.sleep(2000) } catch (_: InterruptedException) { return@Thread }
+                    ServerTester.delayMs(sel, 6000)
+                }
+                if (ms != null) {
                     fails = 0
                     // Успех тоже опыт (не чаще раза в 10 минут — чтобы не раздувать)
                     if (System.currentTimeMillis() - okRecordedAt > 10 * 60_000L) {
                         okRecordedAt = System.currentTimeMillis()
-                        Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = true) }
+                        Subscription.usable(ctx).firstOrNull { it.tag == sel }?.let { Autopilot.record(ctx, it, ok = true) }
+                    }
+                    // Сервер жив, но стал тормозить (вечером в час пик это обычное дело): пинг в разы хуже
+                    // обычного три проверки подряд — переезжаем. Во время скачивания пинг растёт сам — не считаем
+                    if (qTag != sel) { qTag = sel; qBase = ms.toDouble(); qSlow = 0 }
+                    val slow = ms > maxOf(qBase * 3, qBase + 250)
+                    if (!slow) {
+                        qSlow = 0
+                        qBase = if (ms < qBase) ms.toDouble() else qBase * 0.9 + ms * 0.1
+                    } else if (BoxVpnService.downBps < 1_500_000) {
+                        qSlow++
+                        AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — пинг $ms мс вместо обычных ~${qBase.toInt()} (${qSlow}-й раз)")
+                    }
+                    if (qSlow >= 3 && System.currentTimeMillis() - qSwitchAt > 10 * 60_000L) {
+                        qSlow = 0
+                        qSwitchAt = System.currentTimeMillis()
+                        val sb = ServerTester.standby
+                        val sbMs = sb?.let { ServerTester.delayMs(it) }
+                        if (sb != null && sbMs != null && sbMs < ms / 2) {
+                            switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» тормозит ($ms мс)")
+                        } else {
+                            // Запасного нет или он не лучше — полная проверка серверов на следующем круге
+                            AppLog.conn("сторож: запасной не лучше — ищу сервер побыстрее")
+                            lastRank = 0L
+                        }
+                        continue
+                    }
+                    // Раз в 5 минут: жив ли запасной и сервер для звонков
+                    if (System.currentTimeMillis() - standbyAt > 5 * 60_000L) {
+                        standbyAt = System.currentTimeMillis()
+                        ServerTester.refreshStandby(ctx)
+                        checkLowPing(ctx)
                     }
                     continue
                 }
                 // Без интернета менять сервер бесполезно — и сервер не виноват
                 if (!ServerTester.internetUp(ctx)) { fails = 0; continue }
-                Subscription.usable(ctx).firstOrNull { it.tag == AppSettings.selectedTag }?.let { Autopilot.record(ctx, it, ok = false) }
-                AppLog.conn("сторож: сервер «${nodeName(ctx, AppSettings.selectedTag)}» не ответил (${fails + 1}-й раз)")
+                Subscription.usable(ctx).firstOrNull { it.tag == sel }?.let { Autopilot.record(ctx, it, ok = false) }
+                AppLog.conn("сторож: сервер «${nodeName(ctx, sel)}» не ответил (${fails + 1}-й раз)")
+                // Есть живой запасной — переключаемся сразу, за секунду, без полного подбора
+                val sb = ServerTester.standby
+                if (sb != null && sb != sel && ServerTester.delayMs(sb) != null) {
+                    fails = 0
+                    switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» не отвечает")
+                    continue
+                }
                 if (++fails < 2) continue
                 fails = 0
                 busy = true
@@ -506,6 +585,8 @@ object Connector {
                     if (ranked.isNotEmpty() && BoxVpnService.isRunning) {
                         ServerTester.pickWorking(ctx, ranked)
                         VpnLog.add("автопереподключение: ${nodeName(ctx, AppSettings.selectedTag)}")
+                        // Новый запасной и сервер для звонков — подбором по скорости через пару минут
+                        lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
                     }
                 } finally {
                     busy = false

@@ -60,6 +60,54 @@ object ServerTester {
         return ok
     }
 
+    /** Звонки, игры и прочий UDP — через этот сервер (самый низкий пинг из рабочих); null — как «abroad» */
+    @Volatile var lowTag: String? = null
+
+    /** Горячий запасной: второй рабочий сервер, уже проверенный, — на него переключаемся за секунду */
+    @Volatile var standby: String? = null
+
+    /** Пинг до интернета через сервер (мс) или null — не отвечает. Трафик пользователя не трогает. */
+    fun delayMs(tag: String, timeoutMs: Int = 3000): Int? {
+        val p = BoxVpnService.ports ?: return null
+        return ClashApi.delay(p.api, p.secret, tag, CHECK_URL, timeoutMs)
+    }
+
+    /**
+     * Найти горячий запасной: первый живой из лучших по пингу (кроме выбранного; в обычном
+     * режиме — с выходом за границей). Проверка идёт прямо через сервер, без переключений.
+     */
+    fun refreshStandby(ctx: Context) {
+        val sel = AppSettings.selectedTag
+        val byTag = Subscription.usable(ctx).filterNot { isSeparator(it) }.associateBy { it.tag }
+        val ranked = results.ranked().ifEmpty { byTag.keys.toList() }
+        for (t in ranked.take(8)) {
+            if (t == sel) continue
+            val n = byTag[t] ?: continue
+            if (!AppSettings.gameMode && exitsRussia(n)) continue
+            if (delayMs(t) == null) { results.put(t, null); continue }
+            if (standby != t) AppLog.srv("запасной сервер: «${Ui.cleanName(n)}»")
+            standby = t
+            return
+        }
+        standby = null
+    }
+
+    /**
+     * Звонки и игры — через сервер с самым низким пингом из живых (с выходом за границей);
+     * скачивание и видео — через выбранный, самый быстрый по скорости.
+     */
+    fun pickLowPing(ctx: Context, alive: Collection<String>) {
+        if (AppSettings.gameMode || !AppSettings.autoSelect || AppSettings.selectedTag == XrayCore.BYPASS) return
+        val p = BoxVpnService.ports ?: return
+        val byTag = Subscription.usable(ctx).associateBy { it.tag }
+        val best = alive.filter { t -> byTag[t]?.let { !exitsRussia(it) && it.xrayLink == null } == true }
+            .minByOrNull { results[it]?.medianMs ?: Int.MAX_VALUE } ?: return
+        if (ClashApi.select(p.api, p.secret, "lowping", best)) {
+            if (lowTag != best) AppLog.srv("звонки и игры: через «${AppLog.name(ctx, best)}» — самый низкий пинг (${results[best]?.medianMs} ms)")
+            lowTag = best
+        }
+    }
+
     /** Скорость загрузки через сервер (tag -> Мбит/с), из короткого замера. */
     val speed = ConcurrentHashMap<String, Double>()
 
@@ -70,6 +118,23 @@ object ServerTester {
      * замер шумный, и без этого сервер прыгал бы туда-сюда.
      */
     fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
+        val alive = ConcurrentHashMap.newKeySet<String>()
+        val chosen = pickFastestInner(ctx, ranked, candidates, progress, alive)
+        if (chosen != null && BoxVpnService.isRunning) {
+            pickLowPing(ctx, alive)
+            // Запасной — лучший из живых после выбранного (уже проверены только что)
+            val byTag = Subscription.usable(ctx).associateBy { it.tag }
+            val next = ranked.firstOrNull { t -> t != chosen && t in alive && byTag[t]?.let { !exitsRussia(it) } == true }
+            if (next != null && next != standby) AppLog.srv("запасной сервер: «${AppLog.name(ctx, next)}»")
+            standby = next
+        }
+        return chosen
+    }
+
+    private fun pickFastestInner(
+        ctx: Context, ranked: List<String>, candidates: Int, progress: (Int, Int) -> Unit,
+        alive: MutableSet<String>,
+    ): String? {
         val p = BoxVpnService.ports ?: return null
         val current = AppSettings.selectedTag
         var checked = 0
@@ -78,7 +143,6 @@ object ServerTester {
         var currentSpeed: Double? = null
         val order = (listOf(current).filter { t -> ranked.contains(t) } + ranked.filter { it != current }).take(candidates * 2)
         // Живы ли — проверяем все кандидаты разом, а не по очереди (раньше это и тянуло время)
-        val alive = ConcurrentHashMap.newKeySet<String>()
         val pool = Executors.newFixedThreadPool(order.size.coerceIn(1, 12))
         val nodeOf = Subscription.usable(ctx).associateBy { it.tag }
         for (tag in order) pool.execute {
@@ -301,6 +365,9 @@ object ServerTester {
         selectMain(p, best)
         AppSettings.selectedTag = best
         AppSettings.save(ctx)
+        // Сервер для звонков мог и упасть — пока через новый, самый низкий пинг найдёт подбор по скорости
+        lowTag = null
+        if (standby == best) standby = null
         applyAbroad(ctx)
         return best
     }
@@ -575,6 +642,8 @@ object ServerTester {
         val sel = AppSettings.selectedTag
         val tag = abroadFor(ctx, sel)
         if (tag.isEmpty()) return
+        // Сервер выбран вручную (или автовыбор ещё не мерил) — звонки и игры через него же
+        if (!AppSettings.autoSelect || lowTag == null) { lowTag = null; ClashApi.select(p.api, p.secret, "lowping", tag) }
         if (ClashApi.select(p.api, p.secret, "abroad", tag) && tag != sel) {
             AppLog.srv(if (sel == XrayCore.BYPASS) "обход: Telegram и другое, что обход не пробивает, — через «${AppLog.name(ctx, tag)}»"
                 else "выбран сервер с выходом в России — Telegram, YouTube и др. пойдут через «${AppLog.name(ctx, tag)}»")
