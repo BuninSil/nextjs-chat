@@ -80,7 +80,9 @@ object BypassLab {
             XrayCore.setBypassParams(ctx, g.params())
             Thread.sleep(700)
         }
-        ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 5000)?.let { return it }
+        // Рабочий обход открывает YouTube за 1-2 с; перебор вариантов — с коротким ожиданием,
+        // запомненному (retry) — полный запас, он чаще всего и рабочий
+        ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, if (retry) 5000 else 3000)?.let { return it }
         if (!retry) return null
         Thread.sleep(1500)
         return ClashApi.delay(p.api, p.secret, XrayCore.BYPASS, CHECK, 8000)

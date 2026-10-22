@@ -145,6 +145,12 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 		rules = append(rules, obj{"rule_set": []string{"ru"}, "outbound": "direct"})
 	}
 
+	dnsRules := []any{obj{"outbound": "any", "server": "local"}}
+	if s.AdBlock {
+		// Реклама — отказ уже на DNS: программа сразу понимает, что адреса нет, и не ждёт
+		dnsRules = append(dnsRules, obj{"rule_set": []string{"ads"}, "action": "reject"})
+	}
+	dnsRules = append(dnsRules, obj{"query_type": []string{"A", "AAAA"}, "server": "fakeip"})
 	dns := obj{
 		"servers": []any{
 			obj{"tag": "remote", "address": "https://1.1.1.1/dns-query", "detour": "proxy"},
@@ -154,10 +160,7 @@ func buildBoxConfig(list []Node, selected string, p Ports, xrayPorts map[string]
 			obj{"tag": "local", "address": "77.88.8.8", "detour": "direct"},
 			obj{"tag": "fakeip", "address": "fakeip"},
 		},
-		"rules": []any{
-			obj{"outbound": "any", "server": "local"},
-			obj{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
-		},
+		"rules": dnsRules,
 		"fakeip":            obj{"enabled": true, "inet4_range": "198.18.0.0/15"},
 		"independent_cache": true,
 		"final":             "remote",

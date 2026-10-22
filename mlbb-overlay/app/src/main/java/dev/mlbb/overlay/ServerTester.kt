@@ -337,7 +337,24 @@ object ServerTester {
         // Игровой режим: нужен выход в России — иначе игра считает, что ты за границей,
         // и кидает на зарубежный сервер. Проверяем до 20 кандидатов, обычный режим — до первого рабочего.
         val limit = if (game) 20 else maxTries
-        for (tag in ranked.take(limit)) {
+        val order = ranked.take(limit)
+        // Обычный режим: живы ли кандидаты — проверяем все разом (через проверку пинга, без переключения
+        // трафика), а не по очереди с перебором. Раньше каждый сервер отнимал до 4 секунд, набегало до минуты.
+        if (!game) {
+            val live = ConcurrentHashMap.newKeySet<String>()
+            val pool = Executors.newFixedThreadPool(order.size.coerceIn(1, 12))
+            for (tag in order) pool.execute { if (delayMs(tag, 3000) != null) live.add(tag) }
+            pool.shutdown(); pool.awaitTermination(5, TimeUnit.SECONDS)
+            val nodeOf = Subscription.usable(ctx).associateBy { it.tag }
+            for (tag in order) {
+                val ok = tag in live
+                if (!ok) results.put(tag, null)
+                nodeOf[tag]?.let { Autopilot.record(ctx, it, ok = ok) }
+                if (ok && chosen == null) chosen = tag
+            }
+            AppLog.srv(chosen?.let { "подбор: «${AppLog.name(ctx, it)}» — работает (живых ${live.size} из ${order.size})" } ?: "подбор: рабочих серверов не нашлось")
+        }
+        for (tag in if (game) order else emptyList()) {
             if (!probe(p, tag)) { AppLog.srv("подбор: «${AppLog.name(ctx, tag)}» — не переключился"); continue }
             val node = Subscription.usable(ctx).firstOrNull { it.tag == tag }
             if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 4000) == null) {

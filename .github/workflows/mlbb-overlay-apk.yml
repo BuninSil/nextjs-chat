@@ -32,6 +32,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Блок рекламы: свежий список при каждой сборке (не скачался — остаётся тот, что в репозитории)
+      - name: Fresh ad block list
+        continue-on-error: true
+        run: bash tools/build-ads.sh app/src/main/assets/rules/geosite-category-ads-all.srs
+
       - name: Build debug APK
         run: |
           chmod +x gradlew

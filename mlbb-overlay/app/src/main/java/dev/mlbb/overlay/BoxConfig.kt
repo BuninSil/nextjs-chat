@@ -298,6 +298,10 @@ object BoxConfig {
                 .put(JSONObject().put("tag", "fakeip").put("address", "fakeip")))
             .put("rules", JSONArray()
                 .put(JSONObject().put("outbound", "any").put("server", "local"))
+                .apply {
+                    // Реклама — отказ уже на DNS: приложение сразу понимает, что адреса нет, и не ждёт
+                    if (adBlock && rulesPath.isNotEmpty()) put(JSONObject().put("rule_set", JSONArray().put("ads")).put("action", "reject"))
+                }
                 .put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fakeip")))
             .put("fakeip", JSONObject().put("enabled", true).put("inet4_range", "198.18.0.0/15"))
             .put("independent_cache", true)
