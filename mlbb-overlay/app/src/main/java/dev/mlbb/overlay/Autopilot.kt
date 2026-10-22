@@ -216,7 +216,8 @@ object Autopilot {
             val s = net(ctx, k).servers.getOrPut(id(n)) { Stat() }
             decay(s, now)
             if (ok) s.ok += 1 else s.fail += 1
-            if (ok) s.po[period(now)] += 1 else s.pf[period(now)] += 1
+            val b = period(now)
+            if (ok) { s.po[b] = s.po[b] + 1 } else { s.pf[b] = s.pf[b] + 1 }
             if (mbps != null && mbps > 0) s.mbps = if (s.mbps == 0.0) mbps else s.mbps * 0.6 + mbps * 0.4
             s.at = now
         }
