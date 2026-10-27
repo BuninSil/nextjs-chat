@@ -73,6 +73,20 @@ object ServerTester {
     }
 
     /**
+     * Честная задержка через туннель: несколько запросов к generate_204 ЧЕРЕЗ этот сервер (а не
+     * TCP до фронта CDN — тот у всех ~30 мс и ничего не говорит). Возвращает медиану, разброс и
+     * число потерь; null — сервер не ответил ни разу. Трафик пользователя не трогает (Clash API
+     * тестирует конкретный outbound, не переключая селектор).
+     */
+    private fun realDelay(p: BoxConfig.Ports, tag: String, samples: Int = 3, timeoutMs: Int = 2200): Triple<Int, Int, Int>? {
+        val ms = ArrayList<Int>(samples)
+        repeat(samples) { if (BoxVpnService.isRunning) ClashApi.delay(p.api, p.secret, tag, CHECK_URL, timeoutMs)?.let { ms.add(it) } }
+        if (ms.isEmpty()) return null
+        ms.sort()
+        return Triple(ms[ms.size / 2], ms.last() - ms.first(), samples - ms.size)
+    }
+
+    /**
      * Найти горячий запасной: первый живой из лучших по пингу (кроме выбранного; в обычном
      * режиме — с выходом за границей). Проверка идёт прямо через сервер, без переключений.
      */
@@ -117,71 +131,79 @@ object ServerTester {
      * Текущий сервер меряется тоже и меняется, только если другой заметно быстрее: короткий
      * замер шумный, и без этого сервер прыгал бы туда-сюда.
      */
-    fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
-        val alive = ConcurrentHashMap.newKeySet<String>()
-        val chosen = pickFastestInner(ctx, ranked, candidates, progress, alive)
-        if (chosen != null && BoxVpnService.isRunning) {
-            pickLowPing(ctx, alive)
-            // Запасной — лучший из живых после выбранного (уже проверены только что)
-            val byTag = Subscription.usable(ctx).associateBy { it.tag }
-            val next = ranked.firstOrNull { t -> t != chosen && t in alive && byTag[t]?.let { !exitsRussia(it) } == true }
-            if (next != null && next != standby) AppLog.srv("запасной сервер: «${AppLog.name(ctx, next)}»")
-            standby = next
-        }
-        return chosen
-    }
+    // Гистерезис: не дёргаем сервер из-за одного удачного замера соседа — переключаемся, только
+    // когда кандидат заметно быстрее два замера подряд.
+    @Volatile private var switchCandidate: String? = null
+    @Volatile private var switchCount = 0
 
-    private fun pickFastestInner(
-        ctx: Context, ranked: List<String>, candidates: Int, progress: (Int, Int) -> Unit,
-        alive: MutableSet<String>,
-    ): String? {
+    /**
+     * Выбор по честной задержке. Среди текущего и топ-кандидатов (ranked — уже по задержке) берём
+     * самый быстрый по реальному RTT. Текущий меняем, только если другой стабильно (два замера)
+     * быстрее на 20%+ И не дохлый по скорости (порог 5 Мбит/с). Скорость — только порог «живой»,
+     * выбор идёт по задержке: раньше выбирали по скорости, а она упиралась в потолок канала и все
+     * серверы казались одинаковыми.
+     */
+    fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
         val p = BoxVpnService.ports ?: return null
         val current = AppSettings.selectedTag
-        var checked = 0
-        var best: String? = null
-        var bestSpeed = 0.0
-        var currentSpeed: Double? = null
-        val order = (listOf(current).filter { t -> ranked.contains(t) } + ranked.filter { it != current }).take(candidates * 2)
-        // Живы ли — проверяем все кандидаты разом, а не по очереди (раньше это и тянуло время)
-        val pool = Executors.newFixedThreadPool(order.size.coerceIn(1, 12))
         val nodeOf = Subscription.usable(ctx).associateBy { it.tag }
-        for (tag in order) pool.execute {
-            if (ClashApi.delay(p.api, p.secret, tag, CHECK_URL, 3000) != null) alive.add(tag)
+        val cand = (listOf(current).filter { ranked.contains(it) } + ranked.filter { it != current }).take(candidates)
+        // Свежая реальная задержка текущего и кандидатов — разом
+        val delay = ConcurrentHashMap<String, Int>()
+        val pool = Executors.newFixedThreadPool(cand.size.coerceIn(1, 8))
+        val n = AtomicInteger()
+        for (tag in cand) pool.execute {
+            val d = realDelay(p, tag, samples = 3)
+            if (d != null) { delay[tag] = d.first; results.put(tag, Result(d.first, d.second, d.first + d.second / 2 + d.third * 400)) }
             else { results.put(tag, null); nodeOf[tag]?.let { Autopilot.record(ctx, it, ok = false) } }
+            progress(n.incrementAndGet(), cand.size)
         }
         pool.shutdown()
-        pool.awaitTermination(6, TimeUnit.SECONDS)
-        try {
-            for (tag in order) {
-                if (checked >= candidates || !BoxVpnService.isRunning) break
-                if (tag !in alive) continue
-                if (!probe(p, tag)) continue
-                checked++
-                progress(checked, candidates)
-                val mbps = SpeedTest.quickDownload()
-                AppLog.srv("скорость: «${AppLog.name(ctx, tag)}» — ${mbps?.let { String.format(java.util.Locale.US, "%.1f Мбит/с", it) } ?: "не замерилась"}")
-                nodeOf[tag]?.let { Autopilot.record(ctx, it, ok = mbps != null, mbps = mbps) }
-                if (mbps == null) continue
-                speed[tag] = mbps
-                if (tag == current) currentSpeed = mbps
-                if (mbps > bestSpeed) { bestSpeed = mbps; best = tag }
-            }
-        } finally {
-            probe(p, AppSettings.selectedTag)
+        pool.awaitTermination(15, TimeUnit.SECONDS)
+        if (!BoxVpnService.isRunning) return null
+        val alive = delay.keys
+        // Запасной и сервер для звонков/игр — из живых, по задержке
+        pickLowPing(ctx, alive)
+        ranked.firstOrNull { t -> t != current && t in alive && nodeOf[t]?.let { !exitsRussia(it) } == true }?.let {
+            if (it != standby) AppLog.srv("запасной сервер: «${AppLog.name(ctx, it)}» (${delay[it]} мс)")
+            standby = it
         }
-        AppLog.srv(best?.let { "по скорости: лучший «${AppLog.name(ctx, it)}» ${String.format(java.util.Locale.US, "%.1f", bestSpeed)} Мбит/с" }
-            ?: "по скорости: ни один сервер не скачал тестовый файл")
-        val cur = currentSpeed
-        if (best != null && best != current && cur != null && cur >= bestSpeed * 0.75) {
-            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${String.format(java.util.Locale.US, "%.1f", cur)} Мбит/с, разница небольшая")
+        val best = alive.minByOrNull { delay[it] ?: Int.MAX_VALUE }
+        if (best == null) { AppLog.srv("подбор: ни один сервер не ответил через туннель"); return pickWorking(ctx, ranked) }
+        val curD = delay[current]
+        // Текущий жив и не сильно хуже лучшего — остаёмся
+        if (current in alive && curD != null && (best == current || (delay[best] ?: 0) > curD * 0.8)) {
+            switchCandidate = null; switchCount = 0
+            nodeOf[current]?.let { Autopilot.record(ctx, it, ok = true) }
+            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — $curD мс (лучший «${AppLog.name(ctx, best)}» ${delay[best]} мс, разница мала)")
             return current
         }
-        val chosen = best ?: return pickWorking(ctx, ranked)
-        selectMain(p, chosen)
-        AppSettings.selectedTag = chosen
+        // Лучший заметно быстрее — подтверждаем вторым замером, прежде чем уводить
+        if (best != switchCandidate) { switchCandidate = best; switchCount = 1 } else switchCount++
+        if (switchCount < 2 && current in alive) {
+            AppLog.srv("«${AppLog.name(ctx, best)}» быстрее (${delay[best]} мс против $curD мс) — подтверждаю в следующий замер")
+            return current
+        }
+        // Порог «живой по скорости»: не уводить на быстрый по пингу, но дохлый по полосе
+        if (probe(p, best)) {
+            val mbps = SpeedTest.quickDownload()
+            nodeOf[best]?.let { Autopilot.record(ctx, it, ok = mbps != null, mbps = mbps) }
+            speed[best] = mbps ?: 0.0
+            probe(p, current)
+            if (mbps != null && mbps < 5.0 && current in alive) {
+                AppLog.srv("«${AppLog.name(ctx, best)}» быстрый по пингу, но медленный (${String.format(java.util.Locale.US, "%.1f", mbps)} Мбит/с) — остаюсь на «${AppLog.name(ctx, current)}»")
+                switchCandidate = null; switchCount = 0
+                return current
+            }
+        }
+        selectMain(p, best)
+        AppSettings.selectedTag = best
         AppSettings.save(ctx)
+        switchCandidate = null; switchCount = 0
+        if (standby == best) standby = null
         applyAbroad(ctx)
-        return chosen
+        AppLog.srv("переключаю на «${AppLog.name(ctx, best)}» — ${delay[best]} мс" + (speed[best]?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, ", %.0f Мбит/с", it) } ?: ""))
+        return best
     }
 
     @Volatile
@@ -268,41 +290,55 @@ object ServerTester {
         return false
     }
 
-    /** Меряет пинг до всех серверов напрямую. Возвращает теги от лучшего к худшему. VPN не нужен. */
+    /**
+     * Меряет задержку до всех серверов. Если VPN поднят — честно, через туннель до generate_204
+     * (реальный RTT), иначе — приблизительно, по TCP до сервера (VPN ещё не запущен). Возвращает
+     * теги от лучшего к худшему.
+     */
     fun measure(ctx: Context, progress: (Int, Int) -> Unit): List<String> {
         // Резервные бесплатные серверы в обычный перебор не берём — они подключаются только
         // как крайний вариант, через [pickReserve]; иначе каждый замер пинговал бы их зря
         val nodes = Subscription.usable(ctx).filterNot { isSeparator(it) || Subscription.isReserve(it) }
         val net = underlying(ctx)
         val game = AppSettings.gameMode
+        val p = BoxVpnService.ports
         loadExits(ctx)
         testing = true
         results.clear()
         val done = AtomicInteger()
-        val pool = Executors.newFixedThreadPool(16)
+        val pool = Executors.newFixedThreadPool(if (p != null) 20 else 16)
         for (n in nodes) {
             pool.execute {
-                val addr = try {
-                    (net?.getAllByName(n.server) ?: InetAddress.getAllByName(n.server))
-                        .firstOrNull { it is Inet4Address }
-                } catch (_: Exception) {
-                    null
+                val r: Result? = if (p != null) {
+                    // Честно: задержка через туннель (2 замера на сервер — быстрее при полном переборе)
+                    realDelay(p, n.tag, samples = 2)?.let { (median, jitter, lost) ->
+                        var score = median + jitter / 2 + lost * 400
+                        if (game && isRussian(n)) score -= RU_BONUS
+                        if (game && n.nativeUdp) score -= UDP_BONUS
+                        Result(median, jitter, score)
+                    }
+                } else {
+                    // VPN не поднят — приблизительно, по TCP до самого сервера
+                    val addr = try {
+                        (net?.getAllByName(n.server) ?: InetAddress.getAllByName(n.server))
+                            .firstOrNull { it is Inet4Address }
+                    } catch (_: Exception) { null }
+                    val samples = if (addr == null) emptyList() else (1..3).mapNotNull { tcpRtt(net, addr, n.port) }
+                    if (samples.isEmpty()) null else {
+                        val best = samples.min()
+                        val jitter = samples.max() - best
+                        var score = best + jitter / 2
+                        if (game && isRussian(n)) score -= RU_BONUS
+                        if (game && n.nativeUdp) score -= UDP_BONUS
+                        Result(best, jitter, score)
+                    }
                 }
-                val samples = if (addr == null) emptyList()
-                else (1..3).mapNotNull { tcpRtt(net, addr, n.port) }
-                results.put(n.tag, if (samples.isNotEmpty()) {
-                    val best = samples.min()
-                    val jitter = samples.max() - best
-                    var score = best + jitter / 2
-                    if (game && isRussian(n)) score -= RU_BONUS
-                    if (game && n.nativeUdp) score -= UDP_BONUS
-                    Result(best, jitter, score)
-                } else null)
+                results.put(n.tag, r)
                 progress(done.incrementAndGet(), nodes.size)
             }
         }
         pool.shutdown()
-        pool.awaitTermination(60, TimeUnit.SECONDS)
+        pool.awaitTermination(80, TimeUnit.SECONDS)
         testing = false
         val byTag = nodes.associateBy { it.tag }
         var ranked = results.ranked()

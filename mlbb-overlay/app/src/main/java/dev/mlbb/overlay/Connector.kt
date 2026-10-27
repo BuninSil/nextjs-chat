@@ -125,7 +125,12 @@ object Connector {
             game && alive && goodForGame ->
                 // Игровой режим: сервер выбирается один раз и дальше не меняется — иначе пинг скакал бы
                 onReady(current())
-            alive && !stale -> onReady(current())
+            alive && !stale -> {
+                // Сервер свежий и живой — подключаемся к нему сразу, но не вслепую: в фоне сверяем
+                // с лучшими кандидатами по честной задержке и переключаемся, если кто-то стабильно быстрее
+                onReady(current())
+                if (!game && AppSettings.autoSelect) Thread { try { quickRefine(ctx) } catch (_: Exception) {} }.start()
+            }
             alive && goodForGame -> {
                 // Работает, но подбор устарел: пользуемся сразу, лучший ищем в фоне
                 onReady(null)
@@ -295,6 +300,20 @@ object Connector {
         } catch (e: Exception) {
             AppLog.err("уведомление об обходе", e)
         }
+    }
+
+    /**
+     * Быстрая сверка при подключении: не переиспользуем старый сервер вслепую, а сравниваем его с
+     * несколькими лучшими по опыту кандидатами по честной задержке (в фоне, не задерживая запуск).
+     */
+    private fun quickRefine(ctx: Context) {
+        if (!BoxVpnService.isRunning || AppSettings.gameMode || !AppSettings.autoSelect) return
+        val byTag = Subscription.usable(ctx)
+            .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) }
+            .associateBy { it.tag }
+        if (byTag.isEmpty()) return
+        val order = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
+        ServerTester.pickFastest(ctx, order, candidates = 4)
     }
 
     /** Сверка скорости без смены рабочего сервера на «первый попавшийся»: меняет, только если другой заметно быстрее. */
