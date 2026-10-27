@@ -431,11 +431,15 @@ object Connector {
             var okRecordedAt = 0L
             var lastNet = Autopilot.networkKey(ctx)
             var earlyRankAt = 0L
-            // Качество: обычный пинг выбранного сервера и сколько проверок подряд он намного хуже
+            // Качество выбранного сервера. База — медиана ХОРОШИХ замеров за ~30 мин (плохие в неё не
+            // попадают, иначе при плавной деградации база ползёт вверх и сторож не срабатывает). Окно —
+            // последние 5 замеров; переключаемся, если 3 из 5 плохих ИЛИ 2 подряд. Таймаут — тоже плохой.
             var qTag = ""
             var qBase = 0.0
-            var qSlow = 0
+            val qGood = ArrayDeque<Pair<Long, Int>>()   // (время, мс) хороших замеров
+            val qWin = ArrayDeque<Pair<Int, Boolean>>()  // последние 5: (мс, плохой ли)
             var qSwitchAt = 0L
+            var planLogAt = 0L
             var standbyAt = 0L
             val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
             // Работает и при ручном выборе сервера, если обход ждёт возвращения (bypassWanted)
@@ -464,6 +468,8 @@ object Connector {
                     fails = 0
                     bypassFails = 0
                     abroadFails = 0
+                    // Другая сеть — свой пинг: окно и базу качества обнуляем (reseed на следующем замере)
+                    qTag = ""
                     // Для этой сети (или оператора) уже знаем свой способ обхода — сразу на него:
                     // соединения при смене сети всё равно оборвались, перезапуск Xray ничего не испортит
                     if (AppSettings.selectedTag == XrayCore.BYPASS && !BypassLab.running) {
@@ -591,41 +597,55 @@ object Connector {
                         okRecordedAt = System.currentTimeMillis()
                         Subscription.usable(ctx).firstOrNull { it.tag == sel }?.let { Autopilot.record(ctx, it, ok = true) }
                     }
-                    // Сервер жив, но стал тормозить (вечером в час пик это обычное дело): пинг в разы
-                    // хуже обычного ДВА замера подряд (замер раз в ~20-30 с) — переезжаем. Хороший замер
-                    // между ними обнуляет счётчик (значит был случайный спайк). Во время скачивания пинг
-                    // растёт сам — такие замеры не считаем ни плохими, ни хорошими.
-                    if (qTag != sel) { qTag = sel; qBase = ms.toDouble(); qSlow = 0 }
-                    val slow = ms > maxOf(qBase * 3, qBase + 250)
-                    if (!slow) {
-                        qSlow = 0
-                        qBase = if (ms < qBase) ms.toDouble() else qBase * 0.9 + ms * 0.1
-                    } else if (BoxVpnService.downBps < 1_500_000) {
-                        qSlow++
-                        AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — пинг $ms мс вместо обычных ~${qBase.toInt()} (${qSlow}-й раз подряд)" +
-                            if (qSlow >= 2) " → переключаю" else "")
+                    // Новый сервер — чистим окно и базу; базу берём из замера при выборе (честная задержка)
+                    val tNow = System.currentTimeMillis()
+                    if (qTag != sel) {
+                        qTag = sel; qGood.clear(); qWin.clear()
+                        qBase = (ServerTester.results[sel]?.medianMs ?: ms).toDouble()
                     }
-                    // Два плохих замера подряд — уходим (раньше ждали три и выходило никогда).
-                    if (qSlow >= 2 && System.currentTimeMillis() - qSwitchAt > 3 * 60_000L) {
-                        qSlow = 0
-                        qSwitchAt = System.currentTimeMillis()
-                        val sb = ServerTester.standby
-                        val sbMs = sb?.let { ServerTester.delayMs(it) }
-                        if (sb != null && sbMs != null && sbMs < ms * 0.8) {
-                            switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» тормозит ($ms мс), запасной $sbMs мс")
-                        } else {
-                            // Запасного нет или он не лучше — полный подбор по честной задержке сейчас же
-                            AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит ($ms мс) — ищу сервер побыстрее")
-                            lastRank = 0L
+                    // Во время скачивания/видео (>1,5 МБ/с) пинг растёт сам — такой замер не учитываем вовсе
+                    if (BoxVpnService.downBps < 1_500_000) {
+                        // Плохо = в 2+ раза или на 150 мс хуже базы, либо просто выше 800 мс (абсолютный потолок)
+                        val slow = ms > maxOf(qBase * 2, qBase + 150) || ms > 800
+                        qWin.addLast(ms to slow)
+                        while (qWin.size > 5) qWin.removeFirst()
+                        if (!slow) {
+                            // Хороший замер — в базу (медиана хороших за 30 мин); плохие в базу не идут
+                            qGood.addLast(tNow to ms)
+                            while (qGood.isNotEmpty() && tNow - qGood.first().first > 30 * 60_000L) qGood.removeFirst()
+                            qBase = qGood.map { it.second }.sorted().let { if (it.isEmpty()) ms.toDouble() else it[it.size / 2].toDouble() }
                         }
-                        continue
+                        val bad = qWin.count { it.second }
+                        val twoInRow = qWin.size >= 2 && qWin.last().second && qWin.elementAt(qWin.size - 2).second
+                        val trigger = (bad >= 3 || twoInRow) && tNow - qSwitchAt > 3 * 60_000L
+                        if (slow) {
+                            val badList = qWin.filter { it.second }.joinToString(", ") { "${it.first}" }
+                            AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — $ms мс при базе ~${qBase.toInt()} (плохих $bad из ${qWin.size}: $badList)" +
+                                if (trigger) " → переключаю" else "")
+                        }
+                        if (trigger) {
+                            qSwitchAt = tNow; qWin.clear()
+                            val sb = ServerTester.standby
+                            val sbMs = sb?.let { ServerTester.delayMs(it) }
+                            if (sb != null && sbMs != null && sbMs < ms * 0.8) {
+                                switchToStandby(ctx, sb, "тормозит ($bad из 5 плохих при базе ~${qBase.toInt()} мс)")
+                            } else {
+                                AppLog.conn("сторож: запасного быстрее нет — полный подбор сейчас")
+                                lastRank = 0L
+                            }
+                            continue
+                        }
                     }
-                    // Раз в 5 минут: жив ли запасной, сервер для звонков и сервер для Telegram/YouTube
+                    // Раз в 5 минут: жив ли запасной, сервер для звонков и сервер для Telegram/YouTube,
+                    // и одной строкой — что сторож жив (сервер, база, окно), чтобы это было видно в отчёте
                     if (System.currentTimeMillis() - standbyAt > 5 * 60_000L) {
                         standbyAt = System.currentTimeMillis()
                         ServerTester.refreshStandby(ctx)
                         checkLowPing(ctx)
                         ServerTester.ensureAbroadAlive(ctx)
+                        AppLog.conn("сторож жив: «${nodeName(ctx, sel)}» $ms мс, база ~${qBase.toInt()} мс, окно [" +
+                            qWin.joinToString(" ") { if (it.second) "✗${it.first}" else "ok" } + "]" +
+                            (ServerTester.standby?.let { ", запасной «${nodeName(ctx, it)}»" } ?: ""))
                     }
                     continue
                 }
