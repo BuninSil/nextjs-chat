@@ -55,7 +55,10 @@ object Report {
 
         sb.append("\n--- VPN ---\n")
         line("Подключён", BoxVpnService.isRunning)
-        line("Последняя ошибка", BoxVpnService.lastError ?: CaptureVpnService.lastError ?: MonitorService.lastError ?: "нет")
+        // Если явной ошибки запуска нет — берём последнюю ошибку из журнала (ядро пишет их в CORE)
+        line("Последняя ошибка", BoxVpnService.lastError ?: CaptureVpnService.lastError ?: MonitorService.lastError
+            ?: lastLogError() ?: "нет")
+        line("Сеть сейчас", Autopilot.summary(ctx).ifBlank { ServerTester.netKey(ctx) })
         val nodes = Subscription.usable(ctx, includeHidden = true)
         line("Серверов в подписке", nodes.size)
         Subscription.info?.let { i ->
@@ -69,15 +72,16 @@ object Report {
         line("Выбранный сервер", sel?.let { "${Ui.cleanName(it)} (${it.type})" }
             ?: if (AppSettings.selectedTag == XrayCore.BYPASS) "обход блокировок без сервера" else "—")
         if (TelegramRoute.state.isNotEmpty()) line("Telegram", TelegramRoute.state)
-        // Только названия, тип, пинг и страна выхода — без адресов и ключей
-        sb.append("Замеры (лучшие 15):\n")
-        nodes.mapNotNull { n -> ServerTester.results[n.tag]?.let { n to it } }
-            .sortedBy { it.second.score }.take(15)
-            .forEach { (n, r) ->
-                sb.append("  ${Ui.cleanName(n)} · ${n.type} · ${r.medianMs} ms ±${r.jitterMs}" +
-                    (ServerTester.exitCountry[n.tag]?.let { " · выход $it" } ?: "") +
-                    (ServerTester.speed[n.tag]?.let { String.format(Locale.US, " · %.0f Мбит/с", it) } ?: "") + "\n")
-            }
+        // Задержка через туннель, тип и страна выхода — без адресов и ключей. Показываем сколько есть (до 15).
+        val measured = nodes.mapNotNull { n -> ServerTester.results[n.tag]?.let { n to it } }.sortedBy { it.second.score }
+        sb.append("Замеры по задержке через туннель (${minOf(measured.size, 15)} из ${measured.size}):\n")
+        measured.take(15).forEach { (n, r) ->
+            sb.append("  ${Ui.cleanName(n)} · ${n.type} · ${r.medianMs} ms ±${r.jitterMs}" +
+                (ServerTester.exitCountry[n.tag]?.let { " · выход $it" } ?: "") +
+                (ServerTester.speed[n.tag]?.takeIf { it > 0 }?.let { String.format(Locale.US, " · %.0f Мбит/с", it) } ?: "") + "\n")
+        }
+        ServerTester.standby?.let { line("Запасной сервер", AppLog.name(ctx, it)) }
+        if (ServerTester.lowTag != null) line("Сервер для звонков/игр", AppLog.name(ctx, ServerTester.lowTag!!))
         val dead = nodes.count { ServerTester.results.containsKey(it.tag) && ServerTester.results[it.tag] == null }
         line("Не ответили", dead)
 
@@ -87,7 +91,7 @@ object Report {
         sb.append("Категории: UI — нажатия и экраны, SET — настройки, VPN, CONN — подключение, SRV — замеры серверов, ")
         sb.append("SUB — подписка, UPD — обновления, AUTO — автоподключение, NET — сеть, TILE — плитка/виджет, ")
         sb.append("SPEED — тест скорости, CORE — VPN-ядро, ERR — ошибки\n\n")
-        sb.append(redact(AppLog.all()).ifBlank { "(пусто)" }).append('\n')
+        sb.append(collapse(redact(stripAnsi(AppLog.all()))).ifBlank { "(пусто)" }).append('\n')
 
         CrashReport.last(ctx)?.let {
             sb.append("\n--- Последнее падение ---\n").append(it).append('\n')
@@ -132,4 +136,43 @@ object Report {
     /** Старые журналы (до исправления) могли содержать значение поля secret — вырезаем */
     private fun redact(log: String): String =
         log.replace(Regex("""(поле «secret» = ).*"""), "$1(скрыто)")
+
+    /** Цветовые коды ядра (ESC[..m) в текстовом отчёте только мешают — убираем */
+    private fun stripAnsi(s: String): String = s.replace(Regex("\u001B\\[[0-9;]*m"), "")
+
+    /** Время в начале строки журнала («10-25 19:16:50.826 ») — чтобы сравнивать строки по смыслу */
+    private val TS = Regex("""^\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\s+""")
+
+    /**
+     * Схлопывает подряд идущие одинаковые по смыслу строки (ядро плюётся одной ошибкой десятками
+     * раз): остаётся первая с пометкой «×N», чтобы в журнале было видно суть, а не мусор.
+     */
+    private fun collapse(log: String): String {
+        val lines = log.split('\n')
+        val out = StringBuilder()
+        var prevKey: String? = null
+        var first = ""
+        var count = 0
+        fun flush() {
+            if (count == 0) return
+            out.append(first)
+            if (count > 1) out.append("   ×$count")
+            out.append('\n')
+        }
+        for (l in lines) {
+            val key = l.replaceFirst(TS, "")
+            if (key == prevKey) count++
+            else { flush(); prevKey = key; first = l; count = 1 }
+        }
+        flush()
+        return out.toString().trimEnd('\n')
+    }
+
+    /** Последняя строка журнала, похожая на ошибку — для шапки отчёта, когда явной ошибки запуска нет */
+    private fun lastLogError(): String? =
+        stripAnsi(AppLog.all()).split('\n').lastOrNull { l ->
+            val u = l.uppercase()
+            (u.contains("ERROR") || u.contains("[ERR]") || u.contains(" FAILED") || u.contains("ПАНИКА")) &&
+                !u.contains("0 ERROR")
+        }?.replaceFirst(TS, "")?.take(200)
 }

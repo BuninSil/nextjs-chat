@@ -235,6 +235,11 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
+            // Частный DNS Android (DoT, порт 853) — мимо туннеля: внутри он стучался на адрес самого
+            // туннеля и отваливался по таймауту. Так он резолвит сам, а наш DNS не мешает.
+            .put(JSONObject().put("port", 853).put("outbound", "direct"))
+            // cloudflared/WARP (служебный канал на 7844) через WS-сервер рвётся каждые ~1.5 с — направляем напрямую
+            .put(JSONObject().put("port", 7844).put("outbound", "direct"))
         if (abroadTag != null) {
             // Telegram — по своему маршруту «tg». Его адреса в IPv6 (если у оператора есть IPv6) —
             // сразу напрямую: это ставим до общего отклонения IPv6 ниже.

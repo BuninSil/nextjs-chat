@@ -118,6 +118,20 @@ object Autopilot {
         "https://speed.cloudflare.com/cdn-cgi/trace",
     )
 
+    /** Публичный ли IPv4 — не loopback/приватный/служебный (их отдавать как «внешний IP» нельзя) */
+    private fun isPublicIp(ip: String): Boolean {
+        val o = ip.split('.').mapNotNull { it.toIntOrNull() }
+        if (o.size != 4 || o.any { it !in 0..255 }) return false
+        return when {
+            o[0] == 10 || o[0] == 127 || o[0] == 0 -> false
+            o[0] == 192 && o[1] == 168 -> false
+            o[0] == 172 && o[1] in 16..31 -> false
+            o[0] == 169 && o[1] == 254 -> false
+            o[0] == 100 && o[1] in 64..127 -> false // CGNAT оператора — тоже не внешний
+            else -> true
+        }
+    }
+
     private fun refreshRegion(ctx: Context, net: android.net.Network, sig: String) {
         val t = regionTry
         if (t != null && t.first == sig && System.currentTimeMillis() - t.second < 60_000) return
@@ -134,7 +148,9 @@ object Autopilot {
                         c.readTimeout = 4000
                         c.setRequestProperty("Connection", "close")
                         val body = c.inputStream.bufferedReader().use { it.readText() }
-                        Regex("""\b(\d{1,3}(?:\.\d{1,3}){3})\b""").find(body)?.groupValues?.get(1)
+                        // Берём первый ПУБЛИЧНЫЙ адрес: раньше ловили loopback/служебный (регион «IP 127.0.x»)
+                        Regex("""\b(\d{1,3}(?:\.\d{1,3}){3})\b""").findAll(body)
+                            .map { it.groupValues[1] }.firstOrNull { isPublicIp(it) }
                     } catch (_: Exception) { null }
                 } ?: return@Thread // сети нет — попробуем позже
                 GeoDb.load(app)
