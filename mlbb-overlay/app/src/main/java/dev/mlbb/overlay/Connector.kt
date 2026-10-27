@@ -164,6 +164,13 @@ object Connector {
             // Telegram: если в этой сети он открыт напрямую — пустим без сервера (в фоне, не задерживая)
             TelegramRoute.preset(ctx)
             Thread { try { TelegramRoute.apply(ctx) } catch (_: Exception) {} }.start()
+            // Диагностика: проходит ли cloudflared (7844) напрямую в этой сети — чтобы видеть, режут ли его
+            Thread {
+                try {
+                    if (!ServerTester.directReach(ctx, "198.41.192.7", 7844))
+                        AppLog.conn("cloudflared: порт 7844 напрямую не прошёл (если не пользуешься WARP/cloudflared — неважно)")
+                } catch (_: Exception) {}
+            }.start()
             startWatchdog(ctx)
         }
     }
@@ -313,7 +320,10 @@ object Connector {
             .associateBy { it.tag }
         if (byTag.isEmpty()) return
         val order = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
-        ServerTester.pickFastest(ctx, order, candidates = 4)
+        // firstWins: при ручном подключении переключаемся с первого же замера, если кандидат на 20%+
+        // быстрее — иначе второй замер был бы только на плановой проверке через полчаса, и «выключил-включил»
+        // держалось бы за старый сервер
+        ServerTester.pickFastest(ctx, order, candidates = 4, firstWins = true)
     }
 
     /** Сверка скорости без смены рабочего сервера на «первый попавшийся»: меняет, только если другой заметно быстрее. */
@@ -322,7 +332,8 @@ object Connector {
         busyText = "Меряю пинг до серверов…"
         val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
         if (ranked.isEmpty() || !BoxVpnService.isRunning) return
-        ServerTester.pickFastest(ctx, ranked) { done, total -> busyText = "Проверяю скорость: $done из $total" }
+        // Это путь подключения (лидер) — переключаемся с первого замера, не ждём второй
+        ServerTester.pickFastest(ctx, ranked, firstWins = true) { done, total -> busyText = "Проверяю скорость: $done из $total" }
         if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
     }
 
@@ -351,9 +362,9 @@ object Connector {
         }
         onWorking()
         Widget.update(ctx)
-        // Обычный режим: дальше в фоне — самый быстрый по скорости
+        // Обычный режим: дальше — самый быстрый по задержке (путь подключения, с первого замера)
         if (!game && BoxVpnService.isRunning) {
-            ServerTester.pickFastest(ctx, ranked) { done, total -> busyText = "Проверяю скорость: $done из $total" }
+            ServerTester.pickFastest(ctx, ranked, firstWins = true) { done, total -> busyText = "Проверяю скорость: $done из $total" }
         }
         if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
     }
@@ -580,8 +591,10 @@ object Connector {
                         okRecordedAt = System.currentTimeMillis()
                         Subscription.usable(ctx).firstOrNull { it.tag == sel }?.let { Autopilot.record(ctx, it, ok = true) }
                     }
-                    // Сервер жив, но стал тормозить (вечером в час пик это обычное дело): пинг в разы хуже
-                    // обычного три проверки подряд — переезжаем. Во время скачивания пинг растёт сам — не считаем
+                    // Сервер жив, но стал тормозить (вечером в час пик это обычное дело): пинг в разы
+                    // хуже обычного ДВА замера подряд (замер раз в ~20-30 с) — переезжаем. Хороший замер
+                    // между ними обнуляет счётчик (значит был случайный спайк). Во время скачивания пинг
+                    // растёт сам — такие замеры не считаем ни плохими, ни хорошими.
                     if (qTag != sel) { qTag = sel; qBase = ms.toDouble(); qSlow = 0 }
                     val slow = ms > maxOf(qBase * 3, qBase + 250)
                     if (!slow) {
@@ -589,7 +602,8 @@ object Connector {
                         qBase = if (ms < qBase) ms.toDouble() else qBase * 0.9 + ms * 0.1
                     } else if (BoxVpnService.downBps < 1_500_000) {
                         qSlow++
-                        AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — пинг $ms мс вместо обычных ~${qBase.toInt()} (${qSlow}-й раз)")
+                        AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — пинг $ms мс вместо обычных ~${qBase.toInt()} (${qSlow}-й раз подряд)" +
+                            if (qSlow >= 2) " → переключаю" else "")
                     }
                     // Два плохих замера подряд — уходим (раньше ждали три и выходило никогда).
                     if (qSlow >= 2 && System.currentTimeMillis() - qSwitchAt > 3 * 60_000L) {

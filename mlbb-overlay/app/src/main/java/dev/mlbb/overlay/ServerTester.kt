@@ -143,7 +143,7 @@ object ServerTester {
      * выбор идёт по задержке: раньше выбирали по скорости, а она упиралась в потолок канала и все
      * серверы казались одинаковыми.
      */
-    fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
+    fun pickFastest(ctx: Context, ranked: List<String>, candidates: Int = 6, firstWins: Boolean = false, progress: (Int, Int) -> Unit = { _, _ -> }): String? {
         val p = BoxVpnService.ports ?: return null
         val current = AppSettings.selectedTag
         val nodeOf = Subscription.usable(ctx).associateBy { it.tag }
@@ -178,11 +178,15 @@ object ServerTester {
             AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — $curD мс (лучший «${AppLog.name(ctx, best)}» ${delay[best]} мс, разница мала)")
             return current
         }
-        // Лучший заметно быстрее — подтверждаем вторым замером, прежде чем уводить
-        if (best != switchCandidate) { switchCandidate = best; switchCount = 1 } else switchCount++
-        if (switchCount < 2 && current in alive) {
-            AppLog.srv("«${AppLog.name(ctx, best)}» быстрее (${delay[best]} мс против $curD мс) — подтверждаю в следующий замер")
-            return current
+        // Лучший заметно быстрее. При ручном подключении (firstWins) переключаемся сразу, с первого
+        // замера — пользователь нажал «Подключить» и ждёт лучший сервер. При ФОНОВОЙ плановой проверке
+        // требуем подтверждения во втором замере подряд, чтобы не дёргаться из-за случайного спайка.
+        if (!firstWins) {
+            if (best != switchCandidate) { switchCandidate = best; switchCount = 1 } else switchCount++
+            if (switchCount < 2 && current in alive) {
+                AppLog.srv("«${AppLog.name(ctx, best)}» быстрее (${delay[best]} мс против $curD мс) — подтверждаю в следующий замер")
+                return current
+            }
         }
         // Порог «живой по скорости»: не уводить на быстрый по пингу, но дохлый по полосе
         if (probe(p, best)) {
@@ -263,16 +267,20 @@ object ServerTester {
         return cm.allNetworks.any { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true }
     }
 
-    private fun tcpRtt(net: Network?, addr: InetAddress, port: Int): Int? = try {
+    private fun tcpRtt(net: Network?, addr: InetAddress, port: Int, timeoutMs: Int = 1500): Int? = try {
         Socket().use { s ->
             try { net?.bindSocket(s) } catch (_: Exception) {}
             val t = System.nanoTime()
-            s.connect(InetSocketAddress(addr, port), 1500)
+            s.connect(InetSocketAddress(addr, port), timeoutMs)
             ((System.nanoTime() - t) / 1_000_000).toInt().coerceAtLeast(1)
         }
     } catch (_: Exception) {
         null
     }
+
+    /** Достучаться ли напрямую (мимо туннеля) до host:port — для диагностики маршрутов (7844 и т.п.) */
+    fun directReach(ctx: Context, host: String, port: Int, timeoutMs: Int = 2500): Boolean =
+        tcpRtt(underlying(ctx), InetAddress.getByName(host), port, timeoutMs) != null
 
     /**
      * Есть ли вообще интернет (мимо VPN): Android подтверждает сеть и хоть один из DNS-серверов

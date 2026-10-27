@@ -235,9 +235,11 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff").put("timeout", "100ms"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
             .put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
-            // Частный DNS Android (DoT, порт 853) — мимо туннеля: внутри он стучался на адрес самого
-            // туннеля и отваливался по таймауту. Так он резолвит сам, а наш DNS не мешает.
-            .put(JSONObject().put("port", 853).put("outbound", "direct"))
+            // Частный DNS Android (DoT, порт 853): он стучался на адрес самого туннеля и висел 5 с по
+            // таймауту (direct туда тоже не достучится, да и был бы утечкой DNS мимо VPN). Быстрый отказ —
+            // и Android в режиме «автоматически» (opportunistic) сразу откатывается на обычный DNS,
+            // который мы перехватываем в туннеле.
+            .put(JSONObject().put("port", 853).put("action", "reject"))
             // cloudflared/WARP (служебный канал на 7844) через WS-сервер рвётся каждые ~1.5 с — направляем напрямую
             .put(JSONObject().put("port", 7844).put("outbound", "direct"))
         if (abroadTag != null) {
