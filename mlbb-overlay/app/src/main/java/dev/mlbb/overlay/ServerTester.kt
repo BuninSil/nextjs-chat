@@ -282,6 +282,12 @@ object ServerTester {
     fun directReach(ctx: Context, host: String, port: Int, timeoutMs: Int = 2500): Boolean =
         tcpRtt(underlying(ctx), InetAddress.getByName(host), port, timeoutMs) != null
 
+    /** Медиана трёх свежих замеров задержки через туннель — устойчивая база для сторожа (не один «удачный») */
+    fun baseline3(tag: String): Int? {
+        val p = BoxVpnService.ports ?: return null
+        return realDelay(p, tag, samples = 3)?.first
+    }
+
     /**
      * Есть ли вообще интернет (мимо VPN): Android подтверждает сеть и хоть один из DNS-серверов
      * (Яндекс, Google) отвечает. Нужно, чтобы не принять «пропала связь» (дорога, лифт, за городом)

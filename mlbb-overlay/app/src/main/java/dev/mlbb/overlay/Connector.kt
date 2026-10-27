@@ -436,10 +436,13 @@ object Connector {
             // последние 5 замеров; переключаемся, если 3 из 5 плохих ИЛИ 2 подряд. Таймаут — тоже плохой.
             var qTag = ""
             var qBase = 0.0
+            var qFloor = 0.0                             // пол базы — медиана 3 замеров при выборе сервера
             val qGood = ArrayDeque<Pair<Long, Int>>()   // (время, мс) хороших замеров
             val qWin = ArrayDeque<Pair<Int, Boolean>>()  // последние 5: (мс, плохой ли)
+            var qStuck = 0                               // сработок подряд, когда переключиться не на что
+            val qSwitches = ArrayDeque<Long>()           // времена переключений сторожа за ~15 мин
+            var qPauseUntil = 0L                         // пауза переключений по качеству (нестабильная сеть)
             var qSwitchAt = 0L
-            var planLogAt = 0L
             var standbyAt = 0L
             val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
             // Работает и при ручном выборе сервера, если обход ждёт возвращения (bypassWanted)
@@ -600,8 +603,10 @@ object Connector {
                     // Новый сервер — чистим окно и базу; базу берём из замера при выборе (честная задержка)
                     val tNow = System.currentTimeMillis()
                     if (qTag != sel) {
-                        qTag = sel; qGood.clear(); qWin.clear()
-                        qBase = (ServerTester.results[sel]?.medianMs ?: ms).toDouble()
+                        qTag = sel; qGood.clear(); qWin.clear(); qStuck = 0
+                        // База — медиана 3 свежих замеров (не один «удачный»); она же пол базы
+                        qBase = (ServerTester.baseline3(sel) ?: ServerTester.results[sel]?.medianMs ?: ms).toDouble()
+                        qFloor = qBase
                     }
                     // Во время скачивания/видео (>1,5 МБ/с) пинг растёт сам — такой замер не учитываем вовсе
                     if (BoxVpnService.downBps < 1_500_000) {
@@ -610,28 +615,60 @@ object Connector {
                         qWin.addLast(ms to slow)
                         while (qWin.size > 5) qWin.removeFirst()
                         if (!slow) {
-                            // Хороший замер — в базу (медиана хороших за 30 мин); плохие в базу не идут
+                            // Хороший замер — в базу (медиана хороших за 30 мин); плохие в базу не идут.
+                            // База не опускается ниже пола (медианы 3 замеров при выборе), иначе случайные
+                            // сверхнизкие пинги занижали бы базу и всё казалось бы «медленным».
                             qGood.addLast(tNow to ms)
                             while (qGood.isNotEmpty() && tNow - qGood.first().first > 30 * 60_000L) qGood.removeFirst()
-                            qBase = qGood.map { it.second }.sorted().let { if (it.isEmpty()) ms.toDouble() else it[it.size / 2].toDouble() }
+                            val gm = qGood.map { it.second }.sorted().let { if (it.isEmpty()) ms.toDouble() else it[it.size / 2].toDouble() }
+                            qBase = maxOf(gm, qFloor)
                         }
                         val bad = qWin.count { it.second }
                         val twoInRow = qWin.size >= 2 && qWin.last().second && qWin.elementAt(qWin.size - 2).second
-                        val trigger = (bad >= 3 || twoInRow) && tNow - qSwitchAt > 3 * 60_000L
+                        val trigger = (bad >= 3 || twoInRow) && tNow > qPauseUntil && tNow - qSwitchAt > 3 * 60_000L
                         if (slow) {
                             val badList = qWin.filter { it.second }.joinToString(", ") { "${it.first}" }
                             AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — $ms мс при базе ~${qBase.toInt()} (плохих $bad из ${qWin.size}: $badList)" +
-                                if (trigger) " → переключаю" else "")
+                                if (trigger) " → проверяю кандидатов" else "")
                         }
                         if (trigger) {
-                            qSwitchAt = tNow; qWin.clear()
-                            val sb = ServerTester.standby
-                            val sbMs = sb?.let { ServerTester.delayMs(it) }
-                            if (sb != null && sbMs != null && sbMs < ms * 0.8) {
-                                switchToStandby(ctx, sb, "тормозит ($bad из 5 плохих при базе ~${qBase.toInt()} мс)")
+                            // Просела ли вся сеть? Меряем свежим real delay запасной и 2 лучших кандидата
+                            // и переключаемся, только если кандидат быстрее текущего хотя бы на 30%.
+                            val foreign = Subscription.usable(ctx)
+                                .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) || it.tag == sel }
+                            val order = Autopilot.order(ctx, foreign.map { it.tag }, foreign.associateBy { it.tag }) { ServerTester.results[it]?.medianMs }
+                            val cands = (listOfNotNull(ServerTester.standby.takeIf { it != sel }) + order).distinct().take(3)
+                            val cd = cands.associateWith { ServerTester.delayMs(it) }  // по одному свежему замеру
+                            val bestEntry = cd.entries.filter { it.value != null }.minByOrNull { it.value!! }
+                            val bestTag = bestEntry?.key
+                            val bestMs = bestEntry?.value ?: Int.MAX_VALUE
+                            if (bestTag != null && bestMs < ms * 0.7) {
+                                qSwitchAt = tNow; qStuck = 0; qWin.clear()
+                                qSwitches.addLast(tNow)
+                                while (qSwitches.isNotEmpty() && tNow - qSwitches.first() > 15 * 60_000L) qSwitches.removeFirst()
+                                if (qSwitches.size >= 3) {
+                                    qPauseUntil = tNow + 10 * 60_000L
+                                    AppLog.conn("сторож: частые переключения (${qSwitches.size} за 15 мин) — сеть нестабильна, пауза 10 мин")
+                                }
+                                if (bestTag == ServerTester.standby) switchToStandby(ctx, bestTag, "тормозит ($ms мс), запасной $bestMs мс")
+                                else {
+                                    ServerTester.use(ctx, bestTag)
+                                    AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит ($ms мс) → «${nodeName(ctx, bestTag)}» ($bestMs мс)")
+                                    VpnLog.add("смена по качеству: ${nodeName(ctx, bestTag)}")
+                                    rerankSoon = true
+                                }
                             } else {
-                                AppLog.conn("сторож: запасного быстрее нет — полный подбор сейчас")
-                                lastRank = 0L
+                                // Кандидаты не лучше — просела вся сеть, дёргаться бессмысленно, остаёмся
+                                qStuck++
+                                AppLog.conn("сторож: тормозит «${nodeName(ctx, sel)}» ($ms мс), но кандидаты не лучше (" +
+                                    cd.entries.joinToString(", ") { "${nodeName(ctx, it.key)} ${it.value ?: "—"} мс" } + ") — остаюсь")
+                                if (qStuck >= 3) {
+                                    // Замкнутый круг: пересчитываем базу по окну как есть, чтобы отлипнуть
+                                    qBase = qWin.map { it.first }.sorted().let { if (it.isEmpty()) qBase else it[it.size / 2].toDouble() }
+                                    qFloor = minOf(qFloor, qBase)
+                                    qStuck = 0; qWin.clear()
+                                    AppLog.conn("сторож: кандидаты давно не лучше — пересчитал базу по факту: ~${qBase.toInt()} мс")
+                                }
                             }
                             continue
                         }
