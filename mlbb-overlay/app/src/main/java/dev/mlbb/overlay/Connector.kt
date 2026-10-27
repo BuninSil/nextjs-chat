@@ -464,9 +464,16 @@ object Connector {
                         }
                     }
                     Thread { try { TelegramRoute.apply(ctx) } catch (_: Exception) {} }.start()
-                    // Новое место — может, рядом сервер быстрее: плановая проверка через пару минут, а не через полчаса
-                    // (не чаще раза в 10 минут — в дороге сеть меняется часто)
-                    if (System.currentTimeMillis() - earlyRankAt > 10 * 60_000L) {
+                    // Новая сеть часто убивает прежний сервер (на мобильной живы только «Обход»-сервера).
+                    // Если выбранный сервер на ней уже не отвечает, а интернет есть — подбираем сразу,
+                    // не дожидаясь плановой проверки (раньше 2 минуты висели сплошные refused).
+                    if (AppSettings.autoSelect && AppSettings.selectedTag != XrayCore.BYPASS &&
+                        !ServerTester.alive(AppSettings.selectedTag) && ServerTester.internetUp(ctx)
+                    ) {
+                        AppLog.conn("сторож: на новой сети «${nodeName(ctx, AppSettings.selectedTag)}» не отвечает — подбираю сразу")
+                        lastRank = 0L
+                    } else if (System.currentTimeMillis() - earlyRankAt > 10 * 60_000L) {
+                        // Прежний жив — просто перепроверим, нет ли рядом быстрее, через пару минут
                         earlyRankAt = System.currentTimeMillis()
                         lastRank = minOf(lastRank, System.currentTimeMillis() - RERANK_MS + 2 * 60_000L)
                     }
@@ -584,32 +591,36 @@ object Connector {
                         qSlow++
                         AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — пинг $ms мс вместо обычных ~${qBase.toInt()} (${qSlow}-й раз)")
                     }
-                    if (qSlow >= 3 && System.currentTimeMillis() - qSwitchAt > 10 * 60_000L) {
+                    // Два плохих замера подряд — уходим (раньше ждали три и выходило никогда).
+                    if (qSlow >= 2 && System.currentTimeMillis() - qSwitchAt > 3 * 60_000L) {
                         qSlow = 0
                         qSwitchAt = System.currentTimeMillis()
                         val sb = ServerTester.standby
                         val sbMs = sb?.let { ServerTester.delayMs(it) }
-                        if (sb != null && sbMs != null && sbMs < ms / 2) {
-                            switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» тормозит ($ms мс)")
+                        if (sb != null && sbMs != null && sbMs < ms * 0.8) {
+                            switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» тормозит ($ms мс), запасной $sbMs мс")
                         } else {
-                            // Запасного нет или он не лучше — полная проверка серверов на следующем круге
-                            AppLog.conn("сторож: запасной не лучше — ищу сервер побыстрее")
+                            // Запасного нет или он не лучше — полный подбор по честной задержке сейчас же
+                            AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит ($ms мс) — ищу сервер побыстрее")
                             lastRank = 0L
                         }
                         continue
                     }
-                    // Раз в 5 минут: жив ли запасной и сервер для звонков
+                    // Раз в 5 минут: жив ли запасной, сервер для звонков и сервер для Telegram/YouTube
                     if (System.currentTimeMillis() - standbyAt > 5 * 60_000L) {
                         standbyAt = System.currentTimeMillis()
                         ServerTester.refreshStandby(ctx)
                         checkLowPing(ctx)
+                        ServerTester.ensureAbroadAlive(ctx)
                     }
                     continue
                 }
-                // Без интернета менять сервер бесполезно — и сервер не виноват
-                if (!ServerTester.internetUp(ctx)) { fails = 0; continue }
+                // Сервер не ответил. Проверяем интернет напрямую, мимо туннеля: если он есть —
+                // это мёртвый сервер (а не «пропала связь»), и тянуть незачем.
+                val netUp = ServerTester.internetUp(ctx)
+                if (!netUp) { fails = 0; continue }
                 Subscription.usable(ctx).firstOrNull { it.tag == sel }?.let { Autopilot.record(ctx, it, ok = false) }
-                AppLog.conn("сторож: сервер «${nodeName(ctx, sel)}» не ответил (${fails + 1}-й раз)")
+                AppLog.conn("сторож: «${nodeName(ctx, sel)}» не ответил, а интернет есть — сервер мёртв, меняю")
                 // Есть живой запасной — переключаемся сразу, за секунду, без полного подбора
                 val sb = ServerTester.standby
                 if (sb != null && sb != sel && ServerTester.delayMs(sb) != null) {
@@ -617,7 +628,7 @@ object Connector {
                     switchToStandby(ctx, sb, "«${nodeName(ctx, sel)}» не отвечает")
                     continue
                 }
-                if (++fails < 2) continue
+                // Интернет подтверждён, сервер мёртв, запасного нет — полный подбор сразу, без «второго раза»
                 fails = 0
                 busy = true
                 try {

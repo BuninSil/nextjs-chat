@@ -282,12 +282,14 @@ object ServerTester {
     fun internetUp(ctx: Context): Boolean {
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
         val net = underlying(ctx) ?: return false
-        val caps = cm.getNetworkCapabilities(net) ?: return false
-        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return false
-        for (ip in listOf("77.88.8.8", "8.8.8.8")) {
-            if (tcpRtt(net, InetAddress.getByName(ip), 53) != null) return true
+        // Прямая проверка мимо туннеля: несколько адресов и портов (у некоторых операторов 53 закрыт,
+        // а 443 работает). Хоть один ответ — интернет есть, и тогда «сервер не ответил» = мёртвый сервер.
+        val probes = listOf("77.88.8.8" to 53, "1.1.1.1" to 443, "8.8.8.8" to 53, "77.88.8.8" to 443)
+        for ((ip, port) in probes) {
+            if (tcpRtt(net, InetAddress.getByName(ip), port) != null) return true
         }
-        return false
+        // Ни один адрес не ответил, но Android уверен, что сеть рабочая — доверяем ему (а не считаем «нет сети»)
+        return cm.getNetworkCapabilities(net)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
     }
 
     /**
@@ -736,6 +738,25 @@ object ServerTester {
         }
         // Telegram, когда он не напрямую, идёт через тот же заграничный сервер
         if (ClashApi.now(p.api, p.secret, "tg") != "direct") ClashApi.select(p.api, p.secret, "tg", tag)
+    }
+
+    /**
+     * Жив ли сервер, через который идут Telegram, YouTube и прочее заблокированное (группа «abroad»).
+     * Если умер — переключаем на живой зарубежный, иначе эти сервисы лежат, а никто не проверяет
+     * (в обычном режиме abroad раньше не отслеживался — телега могла висеть мёртвой).
+     */
+    fun ensureAbroadAlive(ctx: Context) {
+        if (AppSettings.gameMode) return
+        val p = BoxVpnService.ports ?: return
+        val cur = ClashApi.now(p.api, p.secret, "abroad") ?: return
+        if (cur == AppSettings.selectedTag || delayMs(cur) != null) return // жив или это сам выбранный сервер
+        val byTag = Subscription.usable(ctx).filterNot { isSeparator(it) }.associateBy { it.tag }
+        val repl = (results.ranked() + byTag.keys).distinct().firstOrNull { t ->
+            t != cur && byTag[t]?.let { !exitsRussia(it) } == true && delayMs(t) != null
+        } ?: return
+        ClashApi.select(p.api, p.secret, "abroad", repl)
+        if (ClashApi.now(p.api, p.secret, "tg") != "direct") ClashApi.select(p.api, p.secret, "tg", repl)
+        AppLog.srv("сервер для Telegram/YouTube «${AppLog.name(ctx, cur)}» не отвечает — переключил на «${AppLog.name(ctx, repl)}»")
     }
 
     /**
