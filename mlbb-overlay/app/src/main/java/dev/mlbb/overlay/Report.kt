@@ -100,6 +100,7 @@ object Report {
     }
 
     @Volatile private var building = false
+    @Volatile private var lastShowAt = 0L
 
     /** Копия для буфера: шапка + хвост журнала (~150 КБ), чтобы влезть в лимит Binder (~1 МБ) */
     private fun forClipboard(text: String): String {
@@ -111,7 +112,12 @@ object Report {
 
     /** Собрать отчёт и показать окно: отправить файлом, скопировать или закрыть. */
     fun show(a: Activity) {
-        if (building) { android.widget.Toast.makeText(a, "Отчёт уже собирается…", android.widget.Toast.LENGTH_SHORT).show(); return }
+        // Дебаунс по времени: два быстрых нажатия (в логе 0.6 с) не должны запускать сборку дважды
+        val now = System.currentTimeMillis()
+        if (building || now - lastShowAt < 2000) {
+            android.widget.Toast.makeText(a, "Отчёт уже собирается…", android.widget.Toast.LENGTH_SHORT).show(); return
+        }
+        lastShowAt = now
         building = true
         AppLog.ui("нажал «Сообщить о проблеме» — собираю отчёт")
         val text = try { build(a) } catch (e: Exception) { "Не удалось собрать отчёт: ${e.message}" }
