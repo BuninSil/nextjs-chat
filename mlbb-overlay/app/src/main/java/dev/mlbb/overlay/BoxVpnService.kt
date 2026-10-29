@@ -103,13 +103,15 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private val cm by lazy { getSystemService(ConnectivityManager::class.java) }
 
     /** Есть ли у текущей (не-VPN) сети глобальный IPv6-адрес — тогда поднимаем v6-маршрут в туннель */
-    private fun hasNetworkV6(): Boolean = try {
-        val net = ServerTester.underlying(this) ?: return false
-        cm.getLinkProperties(net)?.linkAddresses?.any {
-            val a = it.address
-            a is java.net.Inet6Address && !a.isLinkLocalAddress && !a.isLoopbackAddress && !a.isAnyLocalAddress
-        } == true
-    } catch (_: Exception) { false }
+    private fun hasNetworkV6(): Boolean {
+        return try {
+            val net = ServerTester.underlying(this) ?: return false
+            cm.getLinkProperties(net)?.linkAddresses?.any {
+                val a = it.address
+                a is java.net.Inet6Address && !a.isLinkLocalAddress && !a.isLoopbackAddress && !a.isAnyLocalAddress
+            } == true
+        } catch (_: Exception) { false }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
