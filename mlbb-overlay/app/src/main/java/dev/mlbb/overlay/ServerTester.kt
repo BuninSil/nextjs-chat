@@ -174,35 +174,41 @@ object ServerTester {
             if (it != standby) AppLog.srv("запасной сервер: «${AppLog.name(ctx, it)}» (${delay[it]} мс)")
             standby = it
         }
-        val best = alive.minByOrNull { delay[it] ?: Int.MAX_VALUE }
-        if (best == null) { AppLog.srv("подбор: ни один сервер не ответил через туннель"); return pickWorking(ctx, ranked) }
-        val curD = delay[current]
-        // Текущий жив и не сильно хуже лучшего — остаёмся
-        if (current in alive && curD != null && (best == current || (delay[best] ?: 0) > curD * 0.8)) {
-            switchCandidate = null; switchCount = 0
-            nodeOf[current]?.let { Autopilot.record(ctx, it, ok = true) }
-            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — $curD мс (лучший «${AppLog.name(ctx, best)}» ${delay[best]} мс, разница мала)")
-            return current
-        }
-        // Лучший заметно быстрее. При ручном подключении (firstWins) переключаемся сразу, с первого
-        // замера — пользователь нажал «Подключить» и ждёт лучший сервер. При ФОНОВОЙ плановой проверке
-        // требуем подтверждения во втором замере подряд, чтобы не дёргаться из-за случайного спайка.
-        if (!firstWins) {
-            if (best != switchCandidate) { switchCandidate = best; switchCount = 1 } else switchCount++
-            if (switchCount < 2 && current in alive) {
-                AppLog.srv("«${AppLog.name(ctx, best)}» быстрее (${delay[best]} мс против $curD мс) — подтверждаю в следующий замер")
-                return current
+        if (alive.isEmpty()) { AppLog.srv("подбор: ни один сервер не ответил через туннель"); return pickWorking(ctx, ranked) }
+        // Комбинированный скор: скорость (главное) × пинг × стабильность. По одному пингу выбирался
+        // сервер с низкой задержкой, но 1 Мбит/с (как в логе); по одной скорости — упиралось в потолок
+        // канала. Свежий тест скорости гоняем только для текущего и 3 лучших по пингу (мобильный трафик),
+        // остальным берём запомненную скорость.
+        val byDelay = alive.sortedBy { delay[it] ?: Int.MAX_VALUE }
+        for (t in (listOf(current).filter { it in alive } + byDelay).distinct().take(3)) {
+            if (!BoxVpnService.isRunning) break
+            if (probe(p, t)) {
+                val mb = SpeedTest.quickDownload()
+                if (mb != null) speed[t] = mb
+                nodeOf[t]?.let { Autopilot.record(ctx, it, ok = mb != null, mbps = mb) }
             }
         }
-        // Порог «живой по скорости»: не уводить на быстрый по пингу, но дохлый по полосе
-        if (probe(p, best)) {
-            val mbps = SpeedTest.quickDownload()
-            nodeOf[best]?.let { Autopilot.record(ctx, it, ok = mbps != null, mbps = mbps) }
-            speed[best] = mbps ?: 0.0
-            probe(p, current)
-            if (mbps != null && mbps < 5.0 && current in alive) {
-                AppLog.srv("«${AppLog.name(ctx, best)}» быстрый по пингу, но медленный (${String.format(java.util.Locale.US, "%.1f", mbps)} Мбит/с) — остаюсь на «${AppLog.name(ctx, current)}»")
-                switchCandidate = null; switchCount = 0
+        probe(p, current)
+        fun pingF(t: String): Double { val d = delay[t] ?: return 0.5; return 1.0 / (1.0 + maxOf(0, d - 50) / 150.0) }
+        fun stab(t: String): Double = nodeOf[t]?.let { Autopilot.confidence(ctx, it)?.let { c -> 0.5 + 0.5 * c.first } } ?: 0.9
+        fun score(t: String): Double = (speed[t] ?: 0.0) * pingF(t) * stab(t)
+        // Серверы выше порога 3 Мбит/с — если такие есть; иначе из всех живых
+        val pool = alive.filter { (speed[it] ?: 0.0) >= 3.0 }.ifEmpty { alive.toList() }
+        val best = pool.maxByOrNull { score(it) } ?: return pickWorking(ctx, ranked)
+        fun mb(t: String) = speed[t]?.let { String.format(java.util.Locale.US, "%.0f Мбит/с", it) } ?: "—"
+        // Текущий жив и его скор не сильно ниже лучшего (в пределах 25%) — остаёмся
+        if (current in alive && score(best) <= score(current) * 1.25) {
+            switchCandidate = null; switchCount = 0
+            nodeOf[current]?.let { Autopilot.record(ctx, it, ok = true) }
+            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${delay[current]} мс, ${mb(current)} (лучший «${AppLog.name(ctx, best)}» не выгоднее)")
+            return current
+        }
+        // Лучший заметно выгоднее. Ручное подключение (firstWins) — сразу; фоновая плановая проверка —
+        // только после подтверждения во втором замере подряд, чтобы не дёргаться из-за спайка.
+        if (!firstWins && current in alive) {
+            if (best != switchCandidate) { switchCandidate = best; switchCount = 1 } else switchCount++
+            if (switchCount < 2) {
+                AppLog.srv("«${AppLog.name(ctx, best)}» выгоднее (${delay[best]} мс, ${mb(best)}) — подтверждаю в следующий замер")
                 return current
             }
         }
@@ -212,7 +218,7 @@ object ServerTester {
         switchCandidate = null; switchCount = 0
         if (standby == best) standby = null
         applyAbroad(ctx)
-        AppLog.srv("переключаю на «${AppLog.name(ctx, best)}» — ${delay[best]} мс" + (speed[best]?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, ", %.0f Мбит/с", it) } ?: ""))
+        AppLog.srv("переключаю на «${AppLog.name(ctx, best)}» — ${delay[best]} мс, ${mb(best)}")
         return best
     }
 
