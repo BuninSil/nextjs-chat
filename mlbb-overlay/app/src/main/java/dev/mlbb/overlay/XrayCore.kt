@@ -151,7 +151,8 @@ object XrayCore {
         }
         outbounds.put(JSONObject().put("tag", "direct").put("protocol", "freedom"))
         val config = JSONObject()
-            .put("log", JSONObject().put("loglevel", "warning"))
+            // access: "none" — не писать строки «accepted tcp … [in-nX -> nX]» на каждое соединение (шум)
+            .put("log", JSONObject().put("loglevel", "warning").put("access", "none"))
             .put("dns", dns(ctx))
             .put("inbounds", inbounds)
             .put("outbounds", outbounds)
