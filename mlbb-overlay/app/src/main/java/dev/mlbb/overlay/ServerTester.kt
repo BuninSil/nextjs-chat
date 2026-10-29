@@ -90,13 +90,19 @@ object ServerTester {
      * Найти горячий запасной: первый живой из лучших по пингу (кроме выбранного; в обычном
      * режиме — с выходом за границей). Проверка идёт прямо через сервер, без переключений.
      */
+    /** Тот же физический сервер (один хост:порт) — чтобы запасной не оказался копией текущего */
+    private fun sameHost(a: Subscription.Node?, b: Subscription.Node?) =
+        a != null && b != null && a.server == b.server && a.port == b.port
+
     fun refreshStandby(ctx: Context) {
         val sel = AppSettings.selectedTag
         val byTag = Subscription.usable(ctx).filterNot { isSeparator(it) }.associateBy { it.tag }
+        val selNode = byTag[sel]
         val ranked = results.ranked().ifEmpty { byTag.keys.toList() }
         for (t in ranked.take(8)) {
             if (t == sel) continue
             val n = byTag[t] ?: continue
+            if (sameHost(n, selNode)) continue // тот же хост, что и текущий — не запасной
             if (!AppSettings.gameMode && exitsRussia(n)) continue
             if (delayMs(t) == null) { results.put(t, null); continue }
             if (standby != t) AppLog.srv("запасной сервер: «${Ui.cleanName(n)}»")
@@ -164,7 +170,7 @@ object ServerTester {
         val alive = delay.keys
         // Запасной и сервер для звонков/игр — из живых, по задержке
         pickLowPing(ctx, alive)
-        ranked.firstOrNull { t -> t != current && t in alive && nodeOf[t]?.let { !exitsRussia(it) } == true }?.let {
+        ranked.firstOrNull { t -> t != current && t in alive && nodeOf[t]?.let { !exitsRussia(it) && !sameHost(it, nodeOf[current]) } == true }?.let {
             if (it != standby) AppLog.srv("запасной сервер: «${AppLog.name(ctx, it)}» (${delay[it]} мс)")
             standby = it
         }
@@ -293,17 +299,24 @@ object ServerTester {
      * (Яндекс, Google) отвечает. Нужно, чтобы не принять «пропала связь» (дорога, лифт, за городом)
      * за «сломался обход/сервер» — и не гонять зря подборы и уведомления.
      */
+    /** Российские эталоны: если ни один не открывается напрямую — проблема в сети, а не в сервере */
+    private val RU_REFS = listOf("ya.ru", "vk.com", "gosuslugi.ru", "dzen.ru")
+
     fun internetUp(ctx: Context): Boolean {
-        val cm = ctx.getSystemService(ConnectivityManager::class.java)
         val net = underlying(ctx) ?: return false
-        // Прямая проверка мимо туннеля: несколько адресов и портов (у некоторых операторов 53 закрыт,
-        // а 443 работает). Хоть один ответ — интернет есть, и тогда «сервер не ответил» = мёртвый сервер.
-        val probes = listOf("77.88.8.8" to 53, "1.1.1.1" to 443, "8.8.8.8" to 53, "77.88.8.8" to 443)
-        for ((ip, port) in probes) {
-            if (tcpRtt(net, InetAddress.getByName(ip), port) != null) return true
+        // Пробуем реально открыть российские сайты мимо туннеля: резолвим через саму сеть (её DNS,
+        // не fakeip) и коннектимся на 443. Хоть один открылся — интернет есть, и «сервер не ответил»
+        // значит сервер мёртв. Утром в логе было «0 из 70» и vk.ru не резолвился — тогда это проблема
+        // сети, и дёргать серверы бессмысленно. Коннект до DNS-портов (8.8.8.8:53) как «интернет есть»
+        // больше не считаем: он проходил сквозь ТСПУ даже когда реальные сайты лежали.
+        for (host in RU_REFS) {
+            val addr = try {
+                (net.getAllByName(host)).firstOrNull { it is Inet4Address }
+            } catch (_: Exception) { null } ?: continue
+            if (tcpRtt(net, addr, 443, 2500) != null) return true
         }
-        // Ни один адрес не ответил, но Android уверен, что сеть рабочая — доверяем ему (а не считаем «нет сети»)
-        return cm.getNetworkCapabilities(net)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        // Запасной эталон по IP (Яндекс), без DNS — вдруг резолвер лёг, а связь есть
+        return tcpRtt(net, InetAddress.getByName("77.88.8.8"), 443, 2000) != null
     }
 
     /**
