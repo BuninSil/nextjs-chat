@@ -165,7 +165,10 @@ object XrayCore {
             try {
                 p.inputStream.bufferedReader().forEachLine {
                     Log.i(TAG, it)
-                    VpnLog.add("xray: $it")
+                    // Штатный шум не пишем в журнал отчёта: нормальное закрытие WS и fake-IP «не подключён»
+                    if (!it.contains("ws closed: 1000") && !it.contains("ws closed: 1001") &&
+                        !(it.contains("endpoint not connected") && it.contains("198.18."))
+                    ) VpnLog.add("xray: $it")
                 }
             } catch (_: Exception) {
             }

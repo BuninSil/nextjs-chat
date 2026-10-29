@@ -659,6 +659,11 @@ class BoxVpnService : VpnService(), PlatformInterface {
             return
         }
         Log.i("sing-box", message)
+        // Штатный шум ядра в журнал отчёта не пишем (из-за него лог и раздувался до 1 МБ):
+        // нормальное закрытие WS (код 1000), «endpoint not connected» на fake-IP 198.18.x.x
+        if (plain.contains("ws closed: 1000") || plain.contains("ws closed: 1001") ||
+            (plain.contains("endpoint not connected") && plain.contains("198.18."))
+        ) return
         val id = connId.find(plain)?.groupValues?.get(1)
         val dest = id?.let { synchronized(connDest) { connDest[it] } }?.split('\u0000')?.takeIf { it.size == 3 }
         VpnLog.add(if (dest != null) "$message  ⟶ ${dest[2]} через ${routeName(dest[0], dest[1])}" else message)
