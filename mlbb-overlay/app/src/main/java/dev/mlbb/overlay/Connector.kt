@@ -580,9 +580,15 @@ object Connector {
                         busyText = "Ищу сервер побыстрее…"
                         Widget.update(ctx)
                         AppLog.conn("плановая проверка: нет ли сервера быстрее")
-                        val ranked = ServerTester.measure(ctx) { _, _ -> }
+                        // Не пингуем все 70 на платной мобилке: берём порядок по опыту (автопилот),
+                        // pickFastest сам свежо замерит только топ-кандидатов. Полный прогон — при смене
+                        // сети и когда рабочих не осталось (ветки ниже).
+                        val byTag = Subscription.usable(ctx)
+                            .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) }
+                            .associateBy { it.tag }
+                        val ranked = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
                         if (ranked.isNotEmpty() && BoxVpnService.isRunning) {
-                            ServerTester.pickFastest(ctx, ranked)
+                            ServerTester.pickFastest(ctx, ranked, candidates = 8)
                             ServerTester.markRanked(ctx)
                             if (AppSettings.selectedTag != before) {
                                 AppLog.conn("плановая проверка: переключил на «${nodeName(ctx, AppSettings.selectedTag)}»")
