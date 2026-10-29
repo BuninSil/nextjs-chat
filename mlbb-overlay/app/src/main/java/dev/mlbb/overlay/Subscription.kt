@@ -202,13 +202,20 @@ object Subscription {
         val xray = XrayCore.available(ctx)
         val seen = LinkedHashSet<String>()
         val picked = ArrayList<Node>()
+        // Списки качаем НАПРЯМУ, мимо туннеля: если текущий сервер мёртв, запрос через него валится
+        // пачками SSLHandshakeException — а резерв как раз и нужен, когда серверы не работают
+        val net = ServerTester.underlying(ctx)
         for (url in RESERVE_SOURCES) {
             try {
-                val c = Net.open(url.trim())
+                val c = (net?.openConnection(java.net.URL(url.trim())) ?: java.net.URL(url.trim()).openConnection()) as java.net.HttpURLConnection
+                c.connectTimeout = 10_000
+                c.readTimeout = 20_000
                 c.setRequestProperty("User-Agent", "v2rayNG/1.9.0")
                 c.setRequestProperty("Accept-Encoding", "identity")
                 if (c.responseCode != 200) continue
-                val body = readLimited(c.inputStream, 512 * 1024)
+                // Публичные агрегаторы бесплатных серверов — это 1-2 МБ base64; 512 КБ не хватало
+                // (и из-за целочисленного деления лимит показывался как «0 МБ»)
+                val body = readLimited(c.inputStream, 3 * 1024 * 1024)
                 for (n in parseAll(body)) {
                     if (n.xrayLink != null && !xray) continue
                     val id = n.server + ":" + n.port
@@ -452,7 +459,7 @@ object Subscription {
                 val n = it.read(buf)
                 if (n < 0) break
                 out.write(buf, 0, n)
-                if (out.size() > limit) throw RuntimeException("подписка слишком большая (больше ${limit / 1024 / 1024} МБ) — это не похоже на подписку")
+                if (out.size() > limit) throw RuntimeException("подписка слишком большая (больше ${if (limit >= 1_048_576) "${limit / 1_048_576} МБ" else "${limit / 1024} КБ"}) — это не похоже на подписку")
             }
         }
         return out.toString("UTF-8")
@@ -503,7 +510,12 @@ object Subscription {
     fun update(ctx: Context, url: String): Int {
         AppLog.sub("обновляю подписку с ${AppLog.host(url)} " + if (BoxVpnService.ports != null) "через VPN" else "напрямую")
         var lastProblem = "сервер подписки не ответил"
-        for (ua in userAgents) {
+        // User-Agent, который в прошлый раз дал серверы для этой подписки — первым (панель могла отдавать
+        // гигантский JSON-массив конфигов Xray на v2rayNG/Happ и нормальный список — на Hiddify; не качаем всё зря)
+        val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val okUa = prefs.getString("ua:${key(url)}", null)
+        val order = (listOfNotNull(okUa) + userAgents).distinct()
+        for (ua in order) {
             try {
                 val c = Net.open(url.trim())
                 c.setRequestProperty("User-Agent", ua)
@@ -539,6 +551,7 @@ object Subscription {
                     lastProblem = "панель отдала подписку в формате, который я не понял"
                     continue
                 }
+                prefs.edit().putString("ua:${key(url)}", ua).apply() // этот клиент сработал — в следующий раз первым
                 val primary = isPrimary(url)
                 (if (primary) file(ctx) else extraFile(ctx, url)).writeText(body)
                 c.getHeaderField("subscription-userinfo")?.let {
@@ -602,7 +615,80 @@ object Subscription {
         return out
     }
 
+    /** JSON-массив полных конфигов Xray (v2rayNG/Happ): из каждого берём рабочий outbound → ссылку → узел */
+    private fun parseXrayArray(body: String): List<Node> {
+        val arr = try { JSONArray(body) } catch (_: Exception) { return emptyList() }
+        val out = ArrayList<Node>()
+        for (i in 0 until arr.length()) {
+            val el = arr.optJSONObject(i) ?: continue
+            // Элемент — либо полный конфиг Xray (с outbounds), либо один outbound
+            val ob = el.optJSONArray("outbounds")?.let { obs ->
+                (0 until obs.length()).mapNotNull { obs.optJSONObject(it) }
+                    .firstOrNull { it.optString("protocol") in setOf("vless", "trojan", "vmess", "shadowsocks") }
+            } ?: el.takeIf { it.has("protocol") }
+            if (ob == null) continue
+            val name = el.optString("remarks").ifEmpty { ob.optString("tag").ifEmpty { "сервер ${out.size + 1}" } }
+            val link = try { xrayOutboundToLink(ob, name) } catch (_: Exception) { null } ?: continue
+            try { parse(link, "n${out.size}")?.let { out.add(it.copy(raw = link)) } } catch (_: Exception) {}
+        }
+        return out
+    }
+
+    /** Outbound Xray (JSON) → ссылка vless://… для общего парсера [parse] */
+    private fun xrayOutboundToLink(o: JSONObject, name: String): String? {
+        val proto = o.optString("protocol")
+        val ss = o.optJSONObject("streamSettings") ?: JSONObject()
+        val net = ss.optString("network", "tcp").ifEmpty { "tcp" }
+        val sec = ss.optString("security", "none").ifEmpty { "none" }
+        val frag = "#" + java.net.URLEncoder.encode(name, "UTF-8")
+        fun q(): String {
+            val p = linkedMapOf<String, String>()
+            p["type"] = net
+            if (sec != "none") p["security"] = sec
+            when (net) {
+                "ws", "httpupgrade" -> ss.optJSONObject("wsSettings")?.let { w ->
+                    w.optString("path").takeIf { it.isNotEmpty() }?.let { p["path"] = it }
+                    w.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotEmpty() }?.let { p["host"] = it }
+                }
+                "grpc" -> ss.optJSONObject("grpcSettings")?.optString("serviceName")?.takeIf { it.isNotEmpty() }?.let { p["serviceName"] = it }
+                "xhttp", "splithttp" -> ss.optJSONObject("xhttpSettings")?.let { x ->
+                    x.optString("path").takeIf { it.isNotEmpty() }?.let { p["path"] = it }
+                    x.optString("host").takeIf { it.isNotEmpty() }?.let { p["host"] = it }
+                    x.optString("mode").takeIf { it.isNotEmpty() }?.let { p["mode"] = it }
+                }
+            }
+            val tls = ss.optJSONObject(if (sec == "reality") "realitySettings" else "tlsSettings")
+            tls?.optString("serverName")?.takeIf { it.isNotEmpty() }?.let { p["sni"] = it }
+            tls?.optString("fingerprint")?.takeIf { it.isNotEmpty() }?.let { p["fp"] = it }
+            if (sec == "reality") {
+                tls?.optString("publicKey")?.takeIf { it.isNotEmpty() }?.let { p["pbk"] = it }
+                tls?.optString("shortId")?.let { p["sid"] = it }
+            }
+            return p.entries.joinToString("&") { "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}" }
+        }
+        return when (proto) {
+            "vless" -> {
+                val v = o.optJSONObject("settings")?.optJSONArray("vnext")?.optJSONObject(0) ?: return null
+                val u = v.optJSONArray("users")?.optJSONObject(0) ?: return null
+                val flow = u.optString("flow").takeIf { it.isNotEmpty() }?.let { "&flow=$it" } ?: ""
+                "vless://${u.optString("id")}@${v.optString("address")}:${v.optInt("port")}?${q()}$flow$frag"
+            }
+            "trojan" -> {
+                val s = o.optJSONObject("settings")?.optJSONArray("servers")?.optJSONObject(0) ?: return null
+                "trojan://${s.optString("password")}@${s.optString("address")}:${s.optInt("port")}?${q()}$frag"
+            }
+            "shadowsocks" -> {
+                val s = o.optJSONObject("settings")?.optJSONArray("servers")?.optJSONObject(0) ?: return null
+                val userinfo = android.util.Base64.encodeToString("${s.optString("method")}:${s.optString("password")}".toByteArray(),
+                    android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE)
+                "ss://$userinfo@${s.optString("address")}:${s.optInt("port")}$frag"
+            }
+            else -> null // vmess в этих списках редок — пропускаем
+        }
+    }
+
     fun parseAll(body: String): List<Node> {
+        if (body.trimStart().startsWith("[")) return parseXrayArray(body)
         if (body.trimStart().startsWith("{")) return parseSingBox(body)
         val text = if (body.contains("://")) body else try {
             b64(body)
