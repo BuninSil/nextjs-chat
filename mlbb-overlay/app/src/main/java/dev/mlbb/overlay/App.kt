@@ -51,8 +51,13 @@ class App : Application() {
 }
 
 object CrashReport {
-    /** Последнее падение (для отчёта о проблеме). */
-    fun last(ctx: Context): String? = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getString("lastCrash", null)
+    /** Последнее падение (для отчёта о проблеме). Падение из прошлой версии помечаем. */
+    fun last(ctx: Context): String? {
+        val p = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val text = p.getString("lastCrash", null) ?: return null
+        val ver = p.getString("lastCrashVer", null)
+        return if (ver != null && ver != BuildConfig.VERSION_NAME) "⚠ из прошлой версии ($ver, сейчас ${BuildConfig.VERSION_NAME}):\n$text" else text
+    }
 
     const val KOTLIN = "crash.txt"
     const val GO = "core-stderr.log"
@@ -70,8 +75,13 @@ object CrashReport {
             it.delete()
         }
         val text = parts.joinToString("\n\n").ifBlank { null }
-        // Копия для отчёта о проблеме — файлы падения после показа удаляются
-        if (text != null) ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("lastCrash", text.take(8000)).apply()
+        // Копия для отчёта — с версией, в которой случилось падение (берём из текста «Версия X», а не
+        // текущую: между падением и запуском приложение могли обновить)
+        if (text != null) {
+            val ver = Regex("""Версия (\S+)""").find(text)?.groupValues?.get(1) ?: BuildConfig.VERSION_NAME
+            ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+                .putString("lastCrash", text.take(8000)).putString("lastCrashVer", ver).apply()
+        }
         return text
     }
 }
