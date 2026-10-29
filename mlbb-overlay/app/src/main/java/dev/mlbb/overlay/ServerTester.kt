@@ -193,8 +193,8 @@ object ServerTester {
         fun stab(t: String): Double = nodeOf[t]?.let { Autopilot.confidence(ctx, it)?.let { c -> 0.5 + 0.5 * c.first } } ?: 0.9
         fun score(t: String): Double = (speed[t] ?: 0.0) * pingF(t) * stab(t)
         // Серверы выше порога 3 Мбит/с — если такие есть; иначе из всех живых
-        val pool = alive.filter { (speed[it] ?: 0.0) >= 3.0 }.ifEmpty { alive.toList() }
-        val best = pool.maxByOrNull { score(it) } ?: return pickWorking(ctx, ranked)
+        val aboveFloor = alive.filter { (speed[it] ?: 0.0) >= 3.0 }.ifEmpty { alive.toList() }
+        val best = aboveFloor.maxByOrNull { score(it) } ?: return pickWorking(ctx, ranked)
         fun mb(t: String) = speed[t]?.let { String.format(java.util.Locale.US, "%.0f Мбит/с", it) } ?: "—"
         // Текущий жив и его скор не сильно ниже лучшего (в пределах 25%) — остаёмся
         if (current in alive && score(best) <= score(current) * 1.25) {
