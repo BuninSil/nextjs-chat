@@ -73,7 +73,9 @@ object XrayCore {
         q("extra")?.let { e -> try { xhttp.put("extra", JSONObject(e)) } catch (_: Exception) {} }
         stream.put("xhttpSettings", xhttp)
         // Адрес сервера — через DNS из конфига (см. [dns]): системного резолвера у Xray на Android нет
-        stream.put("sockopt", JSONObject().put("domainStrategy", "UseIPv4"))
+        // tcpKeepAliveInterval: WS/CDN рвут простаивающее соединение (у Телеги ровно каждые ~1m32s) —
+        // периодический keepalive держит долгие коннекты живыми
+        stream.put("sockopt", JSONObject().put("domainStrategy", "UseIPv4").put("tcpKeepAliveInterval", 15))
         out.put("streamSettings", stream)
         return out
     }
