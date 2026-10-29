@@ -200,7 +200,8 @@ object ServerTester {
         if (current in alive && score(best) <= score(current) * 1.25) {
             switchCandidate = null; switchCount = 0
             nodeOf[current]?.let { Autopilot.record(ctx, it, ok = true) }
-            AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${delay[current]} мс, ${mb(current)} (лучший «${AppLog.name(ctx, best)}» не выгоднее)")
+            if (best == current) AppLog.srv("текущий сервер «${AppLog.name(ctx, current)}» — лучший (${delay[current]} мс, ${mb(current)})")
+            else AppLog.srv("оставляю «${AppLog.name(ctx, current)}» — ${delay[current]} мс, ${mb(current)} (лучший «${AppLog.name(ctx, best)}» не выгоднее)")
             return current
         }
         // Лучший заметно выгоднее. Ручное подключение (firstWins) — сразу; фоновая плановая проверка —
