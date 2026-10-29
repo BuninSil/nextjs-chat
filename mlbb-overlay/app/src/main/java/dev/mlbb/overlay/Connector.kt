@@ -171,6 +171,13 @@ object Connector {
                         AppLog.conn("cloudflared: порт 7844 напрямую не прошёл (если не пользуешься WARP/cloudflared — неважно)")
                 } catch (_: Exception) {}
             }.start()
+            // Частный DNS (DoT) в системе мешает нашему DNS — мы его в туннеле отбиваем (порт 853),
+            // Android откатывается на обычный DNS. Пишем в журнал, чтобы это было видно в отчёте.
+            try {
+                val mode = android.provider.Settings.Global.getString(ctx.contentResolver, "private_dns_mode")
+                if (mode != null && mode != "off")
+                    AppLog.conn("частный DNS Android включён ($mode) — в туннеле отключён (853 отбивается), работает наш DNS")
+            } catch (_: Exception) {}
             startWatchdog(ctx)
         }
     }
