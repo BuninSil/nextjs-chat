@@ -469,6 +469,8 @@ object Connector {
                     }
                 } catch (_: InterruptedException) { break }
                 if (!BoxVpnService.isRunning || busy) continue
+                // Идёт тест скорости пользователя — не трогаем сервер, иначе рестарт ядра испортит замер
+                if (SpeedTest.active) continue
                 val net = Autopilot.networkKey(ctx)
                 // «cell:оператор» → «cell:оператор:город» — тот же оператор, просто узнали регион
                 if (net.startsWith("$lastNet:") || lastNet.startsWith("$net:")) lastNet = net
@@ -571,7 +573,7 @@ object Connector {
                 // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
                 // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
                 if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
-                    ServerTester.netKey(ctx) != "none"
+                    ServerTester.netKey(ctx) != "none" && System.currentTimeMillis() - BoxVpnService.upAt > 60_000L
                 ) {
                     lastRank = System.currentTimeMillis()
                     val before = AppSettings.selectedTag
@@ -638,7 +640,9 @@ object Connector {
                         }
                         val bad = qWin.count { it.second }
                         val twoInRow = qWin.size >= 2 && qWin.last().second && qWin.elementAt(qWin.size - 2).second
-                        val trigger = (bad >= 3 || twoInRow) && tNow > qPauseUntil && tNow - qSwitchAt > 3 * 60_000L
+                        // И не дёргаем сервер в первую минуту после подключения (ему надо прогреться)
+                        val trigger = (bad >= 3 || twoInRow) && tNow > qPauseUntil && tNow - qSwitchAt > 3 * 60_000L &&
+                            tNow - BoxVpnService.upAt > 60_000L
                         if (slow) {
                             val badList = qWin.filter { it.second }.joinToString(", ") { "${it.first}" }
                             AppLog.conn("сторож: «${nodeName(ctx, sel)}» тормозит — $ms мс при базе ~${qBase.toInt()} (плохих $bad из ${qWin.size}: $badList)" +

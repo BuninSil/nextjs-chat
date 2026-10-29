@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicLong
 object SpeedTest {
     data class Result(val pingMs: Int?, val jitterMs: Int?, val downMbps: Double?, val upMbps: Double?)
 
+    /** Идёт тест скорости пользователя — сторож и автовыбор замораживаются, чтобы не портить замер сменой сервера */
+    @Volatile var active = false
+
     private const val BASE = "https://speed.cloudflare.com"
 
     /**

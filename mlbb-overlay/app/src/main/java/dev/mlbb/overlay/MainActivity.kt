@@ -1202,11 +1202,12 @@ class MainActivity : AppCompatActivity() {
         dlg.setContentView(card)
         dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         dlg.window?.setLayout((resources.displayMetrics.widthPixels * 0.88).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-        dlg.setOnDismissListener { speedRunning = false }
+        dlg.setOnDismissListener { speedRunning = false; SpeedTest.active = false }
         dlg.show()
 
         fun mbps(v: Double) = if (v >= 100) "%.0f Мбит/с".format(v) else "%.1f Мбит/с".format(v)
         Thread {
+            SpeedTest.active = true // заморозить сторож/автовыбор на время теста, чтобы не портить замер
             val p = SpeedTest.ping()
             runOnUiThread {
                 ping.text = p?.let { "${it.first} ms" } ?: "✖"
@@ -1225,7 +1226,10 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 up.text = upv?.let { mbps(it) } ?: "✖"
             }
-            AppLog.add("SPEED", "тест скорости (${if (BoxVpnService.isRunning) "через VPN" else "напрямую"}): " +
+            // Для честного сравнения стеков: пишем сервер и режим стека (mixed/gVisor) в строку [SPEED]
+            val srv = if (BoxVpnService.isRunning) AppLog.name(this, AppSettings.selectedTag) else "без VPN"
+            val stack = if (AppSettings.compatStack) "gVisor" else "mixed"
+            AppLog.add("SPEED", "тест скорости (${if (BoxVpnService.isRunning) "через VPN" else "напрямую"}, сервер «$srv», стек $stack): " +
                 "пинг ${p?.first ?: "—"} ms, разброс ${p?.second ?: "—"} ms, загрузка ${dn?.let { mbps(it) } ?: "—"}, отдача ${upv?.let { mbps(it) } ?: "—"}")
             runOnUiThread {
                 if (p == null && dn == null) state.text = "Нет доступа к интернету"
@@ -1234,6 +1238,7 @@ class MainActivity : AppCompatActivity() {
                     state.setTextColor(Ui.GREEN)
                 }
                 speedRunning = false
+                SpeedTest.active = false
             }
         }.start()
     }
