@@ -140,6 +140,8 @@ object BoxConfig {
         lowPing: String? = null,
         /** Файл кэша ядра (DNS FakeIP между перезапусками); пусто — без кэша */
         cachePath: String = "",
+        /** Есть ли у текущей сети IPv6 — если нет, не поднимаем v6-маршрут (приложения не тратят время на v6) */
+        hasV6: Boolean = true,
     ): String {
         val outbounds = JSONArray()
         val tags = JSONArray()
@@ -204,9 +206,10 @@ object BoxConfig {
 
         val tun = JSONObject()
             .put("type", "tun").put("tag", "tun-in")
-            // IPv6 тоже в туннель: иначе Android пускает его мимо VPN напрямую через провайдера
-            // (YouTube со своим DNS, игры) — с российского адреса, и часть приложений не работает
-            .put("address", JSONArray().put("172.19.0.1/30").put("fdfe:dcba:9876::1/126"))
+            // IPv6 поднимаем в туннель, ТОЛЬКО если он есть у текущей сети: иначе приложения (Telegram
+            // и др.) долбятся в недоступный v6 и ловят «network unreachable» сотнями строк. Нет v6 в
+            // сети — нечего и утекать, поэтому v6-адрес туннелю не даём, apps сразу идут по v4.
+            .put("address", JSONArray().put("172.19.0.1/30").apply { if (hasV6) put("fdfe:dcba:9876::1/126") })
             // Обычный режим — 9000 (больше данных за пакет, выше скорость, как по умолчанию в sing-box);
             // игровой — 1500, без лишней буферизации для мелких пакетов игры
             .put("mtu", if (gameMode) 1500 else 9000)
@@ -243,9 +246,9 @@ object BoxConfig {
             // cloudflared/WARP (служебный канал на 7844) через WS-сервер рвётся каждые ~1.5 с — направляем напрямую
             .put(JSONObject().put("port", 7844).put("outbound", "direct"))
         if (abroadTag != null) {
-            // Telegram — по своему маршруту «tg». Его адреса в IPv6 (если у оператора есть IPv6) —
-            // сразу напрямую: это ставим до общего отклонения IPv6 ниже.
-            rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS6).put("outbound", "direct"))
+            // Telegram — по своему маршруту «tg». Его адреса в IPv6 — напрямую, но только если v6 реально
+            // есть у сети (иначе был бы тот же «network unreachable»); без v6 они и не возникнут.
+            if (hasV6) rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS6).put("outbound", "direct"))
             rules.put(JSONObject().put("domain_suffix", TG_DOMAINS).put("outbound", "tg"))
             rules.put(JSONObject().put("ip_cidr", TELEGRAM_CIDRS).put("outbound", "tg"))
         }

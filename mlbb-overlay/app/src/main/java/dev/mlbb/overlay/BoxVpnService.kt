@@ -102,6 +102,15 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val cm by lazy { getSystemService(ConnectivityManager::class.java) }
 
+    /** Есть ли у текущей (не-VPN) сети глобальный IPv6-адрес — тогда поднимаем v6-маршрут в туннель */
+    private fun hasNetworkV6(): Boolean = try {
+        val net = ServerTester.underlying(this) ?: return false
+        cm.getLinkProperties(net)?.linkAddresses?.any {
+            val a = it.address
+            a is java.net.Inet6Address && !a.isLinkLocalAddress && !a.isLoopbackAddress && !a.isAnyLocalAddress
+        } == true
+    } catch (_: Exception) { false }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             val manual = intent.getBooleanExtra("manual", true)
@@ -354,6 +363,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 bypassPort = bypassPort,
                 lowPing = lowPing,
                 cachePath = cachePath,
+                hasV6 = hasNetworkV6(),
             )
             AppLog.vpn("конфиг: сервер «${AppLog.name(this, selected)}», серверов ${usable.size} (XHTTP через Xray: ${xrayPorts.size}), " +
                 "игровой ${AppSettings.gameMode}, только игра ${AppSettings.onlyGame}, матч напрямую ${AppSettings.battleDirect}, " +
