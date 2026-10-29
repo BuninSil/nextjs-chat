@@ -99,10 +99,23 @@ object Report {
         return sb.toString()
     }
 
+    @Volatile private var building = false
+
+    /** Копия для буфера: шапка + хвост журнала (~150 КБ), чтобы влезть в лимит Binder (~1 МБ) */
+    private fun forClipboard(text: String): String {
+        if (text.length <= 200_000) return text
+        val head = text.substringBefore("\n--- Полный журнал")
+        val tail = text.takeLast(150_000).let { it.substring(it.indexOf('\n') + 1) } // обрезаем по границе строки
+        return head + "\n\n--- Полный журнал (только конец, ~150 КБ; весь — в файле) ---\n" + tail
+    }
+
     /** Собрать отчёт и показать окно: отправить файлом, скопировать или закрыть. */
     fun show(a: Activity) {
+        if (building) { android.widget.Toast.makeText(a, "Отчёт уже собирается…", android.widget.Toast.LENGTH_SHORT).show(); return }
+        building = true
         AppLog.ui("нажал «Сообщить о проблеме» — собираю отчёт")
         val text = try { build(a) } catch (e: Exception) { "Не удалось собрать отчёт: ${e.message}" }
+        building = false
         val dir = File(a.cacheDir, "reports").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
@@ -126,8 +139,14 @@ object Report {
                 a.startActivity(Intent.createChooser(send, "Отправить отчёт"))
             }
             .setNeutralButton("Скопировать") { _, _ ->
-                a.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fast VPN report", text))
-                android.widget.Toast.makeText(a, "Отчёт скопирован — вставь в сообщение", android.widget.Toast.LENGTH_LONG).show()
+                // Весь лог (~1 МБ) не влезает в буфер обмена (лимит Binder ~1 МБ) — копируем шапку и хвост,
+                // полный лог остаётся в файле. И никогда не падаем на этом.
+                try {
+                    a.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fast VPN report", forClipboard(text)))
+                    android.widget.Toast.makeText(a, "Скопирована шапка и конец лога — полный лог в файле, отправь его", android.widget.Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(a, "Не удалось скопировать (${e.message}) — отправь файл", android.widget.Toast.LENGTH_LONG).show()
+                }
             }
             .setNegativeButton("Закрыть", null)
             .show()
