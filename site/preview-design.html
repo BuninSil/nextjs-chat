@@ -1,0 +1,211 @@
+<title>Fast VPN — новый дизайн</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Предпросмотр экспериментального оформления приложения: точная палитра NEW_DARK из кода.
+     Показывает новый вид на реальной структуре экранов (не фотошоп — те же элементы). */
+  :root{
+    color-scheme: dark;
+    --page:#070809; --bg:#0D0F13; --card:#161A21; --card2:#1F242C; --sel:#13251B;
+    --line:#232932; --fg:#EBEBEF; --muted:#8A9099; --sub:#C7CBD1; --hint:#5C636D;
+    --green:#1ED760; --green-top:#2BE873; --green-bot:#16B84F; --ink:#07140D;
+    --red:#FF5A52; --yellow:#F5C542; --switch-off:#2A313A;
+    --f:"Manrope",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--page);color:var(--fg);font-family:var(--f);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px;}
+  .head{display:grid;gap:10px;margin-bottom:28px;}
+  .head h1{margin:0;font-size:clamp(24px,4vw,34px);font-weight:800;letter-spacing:-.02em;}
+  .head h1 .g{color:var(--green);}
+  .head p{margin:0;color:var(--muted);font-size:15px;max-width:60ch;}
+  .badge{display:inline-flex;align-items:center;gap:7px;align-self:start;font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);border:1px solid var(--line);border-radius:999px;padding:6px 12px;}
+  .row{display:flex;flex-wrap:wrap;gap:26px;justify-content:center;}
+  .col{display:grid;gap:12px;justify-items:center;}
+  .cap{font-size:13px;color:var(--muted);font-weight:600;}
+
+  /* телефон */
+  .phone{width:300px;background:var(--bg);border:1px solid #20262e;border-radius:34px;padding:12px 12px 10px;box-shadow:0 30px 60px -24px #000, inset 0 0 0 4px #000;}
+  .scr{border-radius:24px;overflow:hidden;background:var(--bg);}
+  .sb{display:flex;justify-content:space-between;align-items:center;padding:8px 14px 4px;font-family:var(--mono);font-size:11px;color:var(--fg);}
+  .sb .dots{letter-spacing:2px;color:var(--muted);}
+  .pad{padding:6px 14px 16px;display:grid;gap:12px;}
+
+  /* заголовок приложения */
+  .apphead{display:flex;align-items:center;gap:10px;}
+  .apphead .logo{font-weight:800;font-size:19px;letter-spacing:-.01em;}
+  .apphead .logo .g{color:var(--green);}
+  .apphead .slogan{font-family:var(--mono);font-size:9.5px;color:var(--green);letter-spacing:.02em;}
+  .grow{flex:1;}
+  .gear{width:34px;height:34px;border-radius:10px;background:var(--card2);display:grid;place-items:center;color:var(--muted);}
+  .gear svg{width:18px;height:18px;}
+
+  .card{background:var(--card);border-radius:18px;padding:14px;}
+  .card.sel{background:var(--sel);border:2px solid var(--green);padding:12px;}
+  .stat{color:var(--green);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);}
+  .srv{display:flex;align-items:center;gap:11px;margin-top:10px;}
+  .flag{font-size:25px;line-height:1;}
+  .srv .nm{font-weight:700;font-size:15px;}
+  .srv .su{font-size:11px;color:var(--muted);font-family:var(--mono);}
+  .srv .pg{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--green);}
+  .srv .pg.y{color:var(--yellow);} .srv .pg.r{color:var(--red);}
+  .ipline{font-size:11px;color:var(--sub);margin-top:10px;}
+
+  .wifi{display:flex;align-items:center;gap:10px;}
+  .wifi svg{width:20px;height:20px;color:var(--green);}
+  .wifi .t{font-size:13px;} .wifi .s{font-size:11px;color:var(--muted);}
+
+  /* большая кнопка */
+  .power{display:grid;justify-items:center;gap:10px;padding:14px 0 6px;}
+  .pbtn{width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 40% 35%,var(--green-top),var(--green-bot));display:grid;place-items:center;box-shadow:0 0 0 10px rgba(30,215,96,.08),0 0 44px -6px rgba(30,215,96,.6);}
+  .pbtn svg{width:52px;height:52px;color:#eafff2;}
+  .phint{font-size:12px;color:var(--muted);}
+
+  .togglerow{display:flex;align-items:center;gap:10px;justify-content:center;}
+  .togglerow .t{font-weight:700;font-size:14px;display:flex;align-items:center;gap:7px;}
+  .togglerow .t svg{width:18px;height:18px;color:var(--green);}
+  .sw{width:44px;height:26px;border-radius:999px;background:var(--green);position:relative;flex:none;}
+  .sw.off{background:var(--switch-off);}
+  .sw::after{content:"";position:absolute;top:3px;left:21px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
+  .sw.off::after{left:3px;background:#B0B4BA;}
+
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .tile{background:var(--card);border-radius:14px;padding:12px;display:grid;gap:3px;}
+  .tile .tt{font-weight:700;font-size:13px;display:flex;align-items:center;gap:7px;}
+  .tile .tt svg{width:17px;height:17px;color:var(--green);}
+  .tile .th{font-size:10.5px;color:var(--muted);line-height:1.3;}
+
+  /* кнопки */
+  .btn{border-radius:13px;padding:13px;text-align:center;font-weight:700;font-size:14px;}
+  .btn.primary{background:var(--green);color:var(--ink);}
+  .btn.second{background:var(--card2);color:var(--fg);}
+
+  /* список серверов */
+  .chips{display:flex;gap:7px;}
+  .chip{font-size:12px;font-weight:600;padding:7px 13px;border-radius:999px;background:var(--card2);color:var(--muted);}
+  .chip.on{background:var(--green);color:var(--ink);}
+  .slist{display:grid;gap:8px;}
+  .sitem{display:flex;align-items:center;gap:11px;background:var(--card);border-radius:14px;padding:12px 13px;}
+  .sitem .nm{font-weight:600;font-size:14px;} .sitem .su{font-size:10.5px;color:var(--muted);font-family:var(--mono);}
+  .sitem .pg{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:14px;}
+
+  /* стат-плитки */
+  .stats4{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
+  .st{background:var(--card2);border-radius:12px;padding:10px 6px;text-align:center;}
+  .st .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .st .v{font-family:var(--mono);font-weight:700;font-size:13px;margin-top:3px;}
+  .st .v.g{color:var(--green);}
+
+  .sec{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 2px 2px;}
+  .setrow{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:12px;padding:12px 13px;}
+  .setrow .t{font-size:13.5px;} .setrow .s{font-size:10.5px;color:var(--muted);}
+
+  @media (max-width:420px){ .phone{width:100%;max-width:330px;} }
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <span class="badge">● Новый дизайн · бета</span>
+    <h1>Fast VPN — <span class="g">новое оформление</span></h1>
+    <p>Предпросмотр экспериментального дизайна на реальной структуре экранов приложения. Включается сам после обновления; откат к прежнему виду — свитчем в «Оформлении». Реальные скрины снимешь с тестовой сборки на телефоне.</p>
+  </div>
+
+  <div class="row">
+
+    <!-- ГЛАВНЫЙ ЭКРАН -->
+    <div class="col">
+      <div class="phone"><div class="scr">
+        <div class="sb"><span>12:05</span><span class="dots">▪▪▪ ▪ ⬤</span></div>
+        <div class="pad">
+          <div class="apphead">
+            <div><div class="logo">Fast <span class="g">VPN</span></div><div class="slogan">⚡ Быстрее нас — только свет</div></div>
+            <div class="grow"></div>
+            <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 .3-1.8"/></svg></div>
+          </div>
+          <div class="card">
+            <div class="stat"><span class="dot"></span> Подключено</div>
+            <div class="srv"><span class="flag">🇫🇮</span><div><div class="nm">Финляндия</div><div class="su">Helsinki · vless</div></div><span class="pg">41 ms</span></div>
+            <div class="ipline">IP 185.xx.xx.xx · Финляндия</div>
+          </div>
+          <div class="card wifi">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+            <div><div class="t">Wi-Fi 5 ГГц</div><div class="s">Отличный сигнал (−52 dBm)</div></div>
+          </div>
+          <div class="power">
+            <div class="pbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.5 7a8 8 0 1 0 11 0"/></svg></div>
+            <div class="phint">Нажми, чтобы отключить</div>
+          </div>
+          <div class="card togglerow">
+            <div class="t"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="12" rx="4"/><path d="M7 12v2M6 13h2"/><circle cx="16" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="14.5" r="1" fill="currentColor"/></svg> Игровой режим</div>
+            <div class="grow"></div><div class="sw"></div>
+          </div>
+          <div class="tiles">
+            <div class="tile"><div class="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg> Серверы</div><div class="th">список, пинг, выбрать</div></div>
+            <div class="tile"><div class="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg> Подписка</div><div class="th">ссылка твоего VPN</div></div>
+            <div class="tile"><div class="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 13V8"/><path d="M5.5 18a8 8 0 1 1 13 0"/></svg> Тест скорости</div><div class="th">пинг, загрузка, отдача</div></div>
+            <div class="tile"><div class="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Настройки</div><div class="th">автовыбор, Wi-Fi</div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">1 · Главный экран</div>
+    </div>
+
+    <!-- СПИСОК СЕРВЕРОВ + ДЕТАЛИ -->
+    <div class="col">
+      <div class="phone"><div class="scr">
+        <div class="sb"><span>12:05</span><span class="dots">▪▪▪ ▪ ⬤</span></div>
+        <div class="pad">
+          <div class="apphead"><div class="gear" style="background:transparent;color:var(--fg)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></div><div class="logo" style="font-size:17px">Серверы</div><div class="grow"></div><div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg></div></div>
+          <div class="chips"><span class="chip on">Авто</span><span class="chip">Для игр</span><span class="chip">Быстрые</span><span class="chip">Все</span></div>
+          <div class="card sel">
+            <div class="srv" style="margin-top:0"><span class="flag">⚡</span><div><div class="nm">Автовыбор</div><div class="su" style="font-family:var(--f);color:var(--sub)">лучший по пингу и стабильности</div></div><span class="pg">›</span></div>
+          </div>
+          <div class="slist">
+            <div class="sitem"><span class="flag">🇫🇮</span><div><div class="nm">Финляндия</div><div class="su">vless · Helsinki</div></div><span class="pg" style="color:var(--green)">41 ms</span></div>
+            <div class="sitem"><span class="flag">🇷🇺</span><div><div class="nm">Москва Обход #3</div><div class="su">vless · Москва</div></div><span class="pg" style="color:var(--green)">34 ms</span></div>
+            <div class="sitem"><span class="flag">🇷🇺</span><div><div class="nm">Санкт-Петербург</div><div class="su">vless · Россия</div></div><span class="pg" style="color:var(--green)">39 ms</span></div>
+            <div class="sitem"><span class="flag">🇩🇪</span><div><div class="nm">Германия #2</div><div class="su">trojan · Германия</div></div><span class="pg" style="color:var(--yellow)">58 ms</span></div>
+            <div class="sitem"><span class="flag">🇳🇱</span><div><div class="nm">Нидерланды</div><div class="su">vless · Нидерланды</div></div><span class="pg" style="color:var(--yellow)">63 ms</span></div>
+            <div class="sitem"><span class="flag">🇹🇷</span><div><div class="nm">Турция</div><div class="su">hysteria2 · Турция</div></div><span class="pg" style="color:var(--red)">96 ms</span></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">2 · Список серверов</div>
+    </div>
+
+    <!-- ОФОРМЛЕНИЕ со свитчем + Тест скорости -->
+    <div class="col">
+      <div class="phone"><div class="scr">
+        <div class="sb"><span>12:05</span><span class="dots">▪▪▪ ▪ ⬤</span></div>
+        <div class="pad">
+          <div class="apphead"><div class="gear" style="background:transparent;color:var(--fg)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></div><div class="logo" style="font-size:17px">Оформление</div></div>
+          <div class="sec">Новый дизайн · бета</div>
+          <div class="card togglerow" style="border:1px solid var(--line)">
+            <div><div class="t" style="margin-bottom:3px">Новый дизайн</div><div class="s" style="font-size:11px;color:var(--muted);max-width:180px">Обновлённое оформление. Если что-то выглядит криво — выключи, вернётся прежний вид.</div></div>
+            <div class="grow"></div><div class="sw"></div>
+          </div>
+          <div class="sec">Тест скорости</div>
+          <div class="card" style="display:grid;gap:12px;justify-items:center;text-align:center">
+            <div style="font-family:var(--mono);font-weight:700;font-size:30px;color:var(--green)">36 ms</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:-8px">Отлично · Пинг</div>
+            <div class="stats4" style="width:100%">
+              <div class="st"><div class="l">Разброс</div><div class="v">4 ms</div></div>
+              <div class="st"><div class="l">Загрузка</div><div class="v g">24.8</div></div>
+              <div class="st"><div class="l">Отдача</div><div class="v g">17.3</div></div>
+              <div class="st"><div class="l">Сервер</div><div class="v">🇫🇮</div></div>
+            </div>
+            <div class="btn primary" style="width:100%">Протестировать снова</div>
+          </div>
+          <div class="sec">Основные</div>
+          <div class="setrow"><div class="t">Запуск при включении</div><div class="grow"></div><div class="sw"></div></div>
+          <div class="setrow"><div class="t">Блокировка рекламы</div><div class="grow"></div><div class="sw off"></div></div>
+        </div>
+      </div></div>
+      <div class="cap">3 · Оформление (свитч-откат) + тест скорости</div>
+    </div>
+
+  </div>
+</div>
