@@ -299,6 +299,71 @@ object Ui {
         tv.text = if (flag == "🌐") iconText(tv.context, R.drawable.ic_servers, "", sizeDp) else flag
     }
 
+    // ---------- Компоненты нового дизайна (по макету) ----------
+
+    /** Заголовок секции: мелкие заглавные с разрядкой, приглушённый. */
+    fun sectionLabel(ctx: Context, s: String) = text(ctx, s.uppercase(), 11.5f, MUTED, bold = true).apply {
+        letterSpacing = 0.08f
+        setPadding(dp(ctx, 4f), dp(ctx, 18f), 0, dp(ctx, 8f))
+    }
+
+    /** Зелёная основная кнопка с тёмными чернилами (как на макете). */
+    fun primaryBtn(ctx: Context, s: CharSequence, onClick: () -> Unit) = TextView(ctx).apply {
+        text = s
+        gravity = Gravity.CENTER
+        setTextColor(ON_BUTTON)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        setTypeface(typeface, Typeface.BOLD)
+        background = rounded(BUTTON, dp(ctx, 14f).toFloat())
+        val p = dp(ctx, 14f); setPadding(p, p, p, p)
+        setOnClickListener { AppLog.ui("нажал «${s.toString().trim()}»"); onClick() }
+    }
+
+    /** Второстепенная кнопка (цвет карточки-2, обычный текст). */
+    fun secondaryBtn(ctx: Context, s: CharSequence, onClick: () -> Unit) = TextView(ctx).apply {
+        text = s
+        gravity = Gravity.CENTER
+        setTextColor(TEXT)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        background = rounded(CARD2, dp(ctx, 14f).toFloat())
+        val p = dp(ctx, 13f); setPadding(p, p, p, p)
+        setOnClickListener { AppLog.ui("нажал «${s.toString().trim()}»"); onClick() }
+    }
+
+    /** Чип-фильтр (таблетка). Выбранный — зелёный с тёмным текстом. */
+    fun chip(ctx: Context, s: String, selected: Boolean, onClick: () -> Unit) = TextView(ctx).apply {
+        text = s
+        gravity = Gravity.CENTER
+        setTextColor(if (selected) ON_BUTTON else MUTED)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        if (selected) setTypeface(typeface, Typeface.BOLD)
+        background = rounded(if (selected) BUTTON else CARD2, dp(ctx, 999f).toFloat())
+        setPadding(dp(ctx, 15f), dp(ctx, 8f), dp(ctx, 15f), dp(ctx, 8f))
+        setOnClickListener { onClick() }
+    }
+
+    /** Мини-плитка статистики: подпись сверху, значение снизу. */
+    fun statTile(ctx: Context, label: String, value: CharSequence, accent: Boolean = false): LinearLayout =
+        LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = rounded(CARD2, dp(ctx, 12f).toFloat())
+            setPadding(dp(ctx, 6f), dp(ctx, 11f), dp(ctx, 6f), dp(ctx, 11f))
+            addView(text(ctx, label.uppercase(), 9.5f, MUTED).apply { letterSpacing = 0.03f; gravity = Gravity.CENTER })
+            addView(text(ctx, "", 14f, if (accent) GREEN else TEXT, bold = true).apply {
+                text = value; gravity = Gravity.CENTER; setPadding(0, dp(ctx, 3f), 0, 0)
+            })
+        }
+
+    /** Строка «подпись слева — значение справа». */
+    fun infoRow(ctx: Context, label: String, value: CharSequence, valueColor: Int = TEXT): LinearLayout =
+        LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(ctx, 10f), 0, dp(ctx, 10f))
+            addView(text(ctx, label, 14f, MUTED), LinearLayout.LayoutParams(0, -2, 1f))
+            addView(text(ctx, "", 14f, valueColor, bold = true).apply { text = value; gravity = Gravity.END })
+        }
+
     /** Название без флага в начале. */
     fun cleanName(n: Subscription.Node): String {
         // Имя из некоторых подписок приходит URL-кодированным (пробелы как «+»): «Финляндия+|+Trojan».

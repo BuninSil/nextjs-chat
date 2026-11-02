@@ -263,6 +263,11 @@ class MainActivity : AppCompatActivity() {
         builtTheme = AppSettings.theme
         builtAnim = AppSettings.anim
         builtNewDesign = AppSettings.newDesign
+        return if (AppSettings.newDesign) buildUiNew() else buildUiClassic()
+    }
+
+    /** Прежний главный экран (откат при выключенном новом дизайне). */
+    private fun buildUiClassic(): android.view.View {
         val d = { v: Float -> Ui.dp(this, v) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -504,6 +509,248 @@ class MainActivity : AppCompatActivity() {
         return frame
     }
 
+    private fun newSwitch(v: Boolean, onChange: (Boolean) -> Unit) = androidx.appcompat.widget.SwitchCompat(this).apply {
+        isChecked = v
+        Ui.styleSwitch(this)
+        setOnCheckedChangeListener { _, x -> onChange(x) }
+    }
+
+    /** Нижняя навигация нового дизайна. Игровой пункт — только в игровом профиле. */
+    private fun bottomNav(): android.view.View {
+        val d = { v: Float -> Ui.dp(this, v) }
+        val nav = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Ui.CARD)
+            setPadding(d(6f), d(9f), d(6f), d(11f))
+        }
+        fun item(icon: Int, label: String, onClick: () -> Unit): android.view.View = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(android.widget.ImageView(this@MainActivity).apply {
+                setImageDrawable(Ui.icon(this@MainActivity, icon, 22f, tint = Ui.MUTED, under = Ui.CARD))
+            }, LinearLayout.LayoutParams(d(26f), d(26f)))
+            addView(Ui.text(this@MainActivity, label, 10.5f, Ui.MUTED).apply { gravity = Gravity.CENTER; setPadding(0, d(3f), 0, 0) })
+            setOnClickListener { AppLog.ui("навигация: $label"); onClick() }
+        }
+        nav.addView(item(R.drawable.ic_servers, "Серверы") { startActivity(Intent(this, ServersActivity::class.java)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (AppSettings.simple) {
+            nav.addView(item(R.drawable.ic_link, "Подписка") { showSubscription() }, LinearLayout.LayoutParams(0, -2, 1f))
+        } else {
+            nav.addView(item(R.drawable.ic_game, "Игры") { startActivity(Intent(this, MatchesActivity::class.java)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        nav.addView(item(R.drawable.ic_speedtest, "Скорость") { speedTest() }, LinearLayout.LayoutParams(0, -2, 1f))
+        nav.addView(item(R.drawable.ic_settings, "Настройки") { showSettings() }, LinearLayout.LayoutParams(0, -2, 1f))
+        return nav
+    }
+
+    /** Новый главный экран по макету: статус+сервер+Wi-Fi одной карточкой, кнопка-кольцо, нижняя навигация. */
+    private fun buildUiNew(): android.view.View {
+        val d = { v: Float -> Ui.dp(this, v) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(d(16f), d(18f), d(16f), d(16f))
+        }
+
+        // Заголовок: Fast VPN + шестерёнка
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Ui.text(this, "Fast VPN", 21f, bold = true))
+        top.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        top.addView(Ui.iconButton(this, R.drawable.ic_settings_w) { showSettings() })
+        root.addView(top)
+        root.addView(Ui.space(this, 14f))
+
+        // Мастер первого запуска
+        setupCard = Ui.card(this).apply {
+            background = Ui.rounded(Ui.SEL, d(18f).toFloat()).apply { setStroke(d(2f), Ui.GREEN) }
+        }
+        setupTitle = Ui.text(this, "", 16f, bold = true)
+        setupText = Ui.text(this, "", 13f, Ui.SUB).apply { setPadding(0, d(6f), 0, d(12f)) }
+        setupButton = TextView(this).apply {
+            gravity = Gravity.CENTER
+            setTextColor(Ui.ON_BUTTON)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
+            setPadding(0, d(12f), 0, d(12f))
+        }
+        setupCard.addView(setupTitle)
+        setupCard.addView(setupText)
+        setupCard.addView(setupButton, LinearLayout.LayoutParams(-1, -2))
+        root.addView(setupCard)
+        root.addView(Ui.space(this, 12f))
+
+        // Карточка: статус + сервер + IP + Wi-Fi (одним блоком)
+        val status = Ui.card(this)
+        statusLine = Ui.text(this, "", 15f, bold = true)
+        status.addView(statusLine)
+        val srv = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(10f), 0, 0) }
+        serverFlag = Ui.text(this, "", 26f).apply { Ui.setFlag(this, "🌐") }
+        srv.addView(serverFlag)
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(d(12f), 0, d(8f), 0) }
+        serverName = Ui.text(this, "", 16f, bold = true)
+        serverSub = Ui.text(this, "", 12f, Ui.MUTED)
+        col.addView(serverName)
+        col.addView(serverSub)
+        srv.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        serverPing = Ui.text(this, "", 16f, Ui.GREEN, bold = true)
+        srv.addView(serverPing)
+        srv.setOnClickListener {
+            if (Subscription.usable(this).isEmpty() && AppSettings.selectedTag != XrayCore.BYPASS) showSubscription()
+            else startActivity(Intent(this, ServersActivity::class.java))
+        }
+        status.addView(srv)
+        ipLine = Ui.text(this, "", 12f, Ui.SUB).apply {
+            setPadding(0, d(10f), 0, 0)
+            setOnClickListener {
+                AppLog.ui("нажал на строку IP — проверяю заново")
+                text = "Узнаю IP…"
+                MyIp.refresh(force = true) { runOnUiThread { text = MyIp.line() } }
+            }
+        }
+        status.addView(ipLine)
+        subWarn = Ui.text(this, "", 12f, Ui.YELLOW).apply { setPadding(0, d(10f), 0, 0); visibility = android.view.View.GONE }
+        status.addView(subWarn)
+        // Wi-Fi в той же карточке; refresh управляет видимостью wifiCard
+        wifiCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(android.view.View(this@MainActivity).apply { setBackgroundColor(Ui.DIVIDER) },
+                LinearLayout.LayoutParams(-1, d(1f)).apply { topMargin = d(12f); bottomMargin = d(10f) })
+        }
+        wifiLine = Ui.text(this, "", 14f)
+        wifiAdvice = Ui.text(this, "", 12f, Ui.YELLOW)
+        wifiCard.addView(wifiLine)
+        wifiCard.addView(wifiAdvice)
+        status.addView(wifiCard)
+        root.addView(status)
+
+        // Кнопка питания (кольцо) + анимация подключения
+        playButton = TextView(this).apply {
+            gravity = Gravity.CENTER
+            setOnClickListener { play() }
+        }
+        ring = ConnectRing(this).apply { style = AppSettings.anim; anchor = playButton }
+        val playBox = android.widget.FrameLayout(this)
+        val playWrap = LinearLayout(this).apply { gravity = Gravity.CENTER }
+        if (AppSettings.anim == AppSettings.ANIM_GLOBE) {
+            globeMode = true
+            globe = GlobeView(this).also { g ->
+                playBox.addView(g, android.widget.FrameLayout.LayoutParams(-1, -1))
+                getSharedPreferences("settings", MODE_PRIVATE).getString("homeCountry", null)
+                    ?.let { GlobeView.place(it) }?.let { g.setHome(it[0], it[1]) }
+            }
+            playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(120f), d(120f), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
+            playWrap.addView(playBox, LinearLayout.LayoutParams(-1, d(300f)))
+        } else {
+            playBox.addView(playButton, android.widget.FrameLayout.LayoutParams(d(150f), d(150f), Gravity.CENTER))
+            playWrap.addView(playBox, LinearLayout.LayoutParams(d(230f), d(230f)))
+        }
+        root.addView(playWrap)
+        playHint = Ui.text(this, "", 13f, Ui.MUTED).apply { gravity = Gravity.CENTER; setPadding(d(16f), d(2f), d(16f), d(14f)) }
+        root.addView(playHint, LinearLayout.LayoutParams(-1, -2))
+
+        // Игровой режим — ТОЛЬКО в игровом профиле
+        launchRow = LinearLayout(this)
+        if (!AppSettings.simple) {
+            val gameCard = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = Ui.rounded(Ui.CARD, d(16f).toFloat())
+                setPadding(d(14f), d(13f), d(14f), d(13f))
+            }
+            val gcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            gcol.addView(Ui.text(this, "", 15f, bold = true).apply {
+                text = Ui.iconText(this@MainActivity, R.drawable.ic_game, "Игровой режим", 20f, under = Ui.CARD)
+            })
+            gcol.addView(Ui.text(this, "Оптимизация сети для игр", 12f, Ui.MUTED).apply { setPadding(0, d(2f), 0, 0) })
+            gameCard.addView(gcol, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(10f) })
+            gameCard.addView(newSwitch(AppSettings.gameMode) { v ->
+                AppSettings.gameMode = v
+                AppLog.set("Игровой режим", v)
+                AppSettings.save(this@MainActivity)
+                if (anyRunning()) toast("Применится после переподключения")
+            })
+            root.addView(Ui.space(this, 12f))
+            root.addView(gameCard, LinearLayout.LayoutParams(-1, -2))
+
+            launchRow.apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = Ui.rounded(Ui.CARD, d(16f).toFloat())
+                setPadding(d(14f), d(13f), d(14f), d(13f))
+            }
+            launchRow.addView(Ui.text(this, "Запускать MLBB после подключения", 14f), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(10f) })
+            launchSwitch = newSwitch(AppSettings.autoLaunch) { v ->
+                AppSettings.autoLaunch = v
+                AppLog.set("Запускать MLBB после подключения", v)
+                AppSettings.save(this@MainActivity)
+            }
+            launchRow.addView(launchSwitch)
+            root.addView(Ui.space(this, 10f))
+            root.addView(launchRow, LinearLayout.LayoutParams(-1, -2))
+
+            stopButton = Ui.primaryBtn(this, Ui.iconText(this, R.drawable.ic_play, "Запустить MLBB", 16f, tint = Ui.ON_BUTTON)) { launchGame() }
+            root.addView(Ui.space(this, 10f))
+            root.addView(stopButton, LinearLayout.LayoutParams(-1, -2))
+
+            root.addView(Ui.space(this, 12f))
+            battleCard = Ui.card(this)
+            battleCard.addView(Ui.text(this, "Боевой сервер в последнем матче", 12f, Ui.MUTED))
+            val b = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(8f), 0, 0) }
+            val bc = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            battleName = Ui.text(this, "", 16f, bold = true)
+            battleSub = Ui.text(this, "", 12f, Ui.MUTED)
+            bc.addView(battleName)
+            bc.addView(battleSub)
+            b.addView(bc, LinearLayout.LayoutParams(0, -2, 1f))
+            battlePing = Ui.text(this, "", 16f, Ui.GREEN, bold = true)
+            b.addView(battlePing)
+            battleCard.addView(b)
+            root.addView(battleCard)
+        } else {
+            // Простой профиль: игровых полей нет; создаём скрытыми для refresh
+            stopButton = Ui.text(this, "", 15f).apply { visibility = android.view.View.GONE }
+            battleCard = Ui.card(this).apply { visibility = android.view.View.GONE }
+            battleName = Ui.text(this, "")
+            battleSub = Ui.text(this, "")
+            battlePing = Ui.text(this, "")
+            launchSwitch = newSwitch(false) {}
+            launchRow.visibility = android.view.View.GONE
+            root.addView(stopButton)
+            root.addView(battleCard)
+        }
+
+        infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0); gravity = Gravity.CENTER }
+        root.addView(infoLine)
+
+        // Анимация под скроллом + нижняя навигация, закреплённая снизу
+        val frame = android.widget.FrameLayout(this)
+        stars = if (AppSettings.anim == AppSettings.ANIM_WARP) StarField(this).also {
+            it.anchor = playButton
+            frame.addView(it, android.widget.FrameLayout.LayoutParams(-1, -1))
+        } else null
+        frame.addView(ring, android.widget.FrameLayout.LayoutParams(-1, -1))
+        frame.addView(ScrollView(this).apply {
+            addView(root)
+            var starsAt = 0L
+            val catchUp = Runnable { stars?.invalidate() }
+            setOnScrollChangeListener { v, _, _, _, _ ->
+                ring.invalidate()
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - starsAt >= 40) { starsAt = now; stars?.invalidate() }
+                v.removeCallbacks(catchUp)
+                v.postDelayed(catchUp, 60)
+            }
+        }, android.widget.FrameLayout.LayoutParams(-1, -1))
+        flashView = android.view.View(this).apply {
+            setBackgroundColor(0xFFE8FFF0.toInt())
+            visibility = android.view.View.GONE
+        }
+        frame.addView(flashView, android.widget.FrameLayout.LayoutParams(-1, -1))
+
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        outer.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
+        outer.addView(bottomNav(), LinearLayout.LayoutParams(-1, -2))
+        return outer
+    }
+
     private fun nodeByTag(tag: String) = Subscription.usable(this).firstOrNull { it.tag == tag }
 
     private fun anyRunning() = BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning
@@ -572,23 +819,33 @@ class MainActivity : AppCompatActivity() {
         }
         if (playKey != label) {
             playKey = label
-            if (connecting) {
-                // Молния в кнопке «заряжается»: кнопка дышит, по кольцу бежит дуга
-                playButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", if (globeMode) 36f else 54f, tint = 0xFFFFFFFF.toInt())
+            if (AppSettings.newDesign) {
+                // Новый дизайн: кнопка-кольцо с иконкой питания (зелёная), без надписей внутри — текст под кнопкой
+                playButton.text = Ui.iconText(this, R.drawable.ic_power, "", if (globeMode) 34f else 58f, tint = Ui.GREEN)
+                playButton.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(0x00000000)
+                    setStroke(Ui.dp(this@MainActivity, 4f), Ui.GREEN)
+                }
             } else {
-                playButton.text = label
-                // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
-                playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, when {
-                    globeMode -> if (label == "ИГРАТЬ") 17f else 13f
-                    label == "ИГРАТЬ" -> 28f
-                    else -> 22f
-                })
+                if (connecting) {
+                    // Молния в кнопке «заряжается»: кнопка дышит, по кольцу бежит дуга
+                    playButton.text = Ui.iconText(this, R.drawable.ic_bolt, "", if (globeMode) 36f else 54f, tint = 0xFFFFFFFF.toInt())
+                } else {
+                    playButton.text = label
+                    // Длинные надписи мельче, чтобы не вылезали за круг (и при крупном шрифте в системе)
+                    playButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, when {
+                        globeMode -> if (label == "ИГРАТЬ") 17f else 13f
+                        label == "ИГРАТЬ" -> 28f
+                        else -> 22f
+                    })
+                }
+                // Подключено — кнопка красная (отключить), иначе зелёная
+                val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
+                else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
+                playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
+                    .apply { shape = GradientDrawable.OVAL }
             }
-            // Подключено — кнопка красная (отключить), иначе зелёная
-            val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
-            else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
-            playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
-                .apply { shape = GradientDrawable.OVAL }
             if (connecting) {
                 if (pulse == null) pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
                     playButton,
