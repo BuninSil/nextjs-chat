@@ -192,12 +192,19 @@ object ServerTester {
         fun pingF(t: String): Double { val d = delay[t] ?: return 0.5; return 1.0 / (1.0 + maxOf(0, d - 50) / 150.0) }
         fun stab(t: String): Double = nodeOf[t]?.let { Autopilot.confidence(ctx, it)?.let { c -> 0.5 + 0.5 * c.first } } ?: 0.9
         fun score(t: String): Double = (speed[t] ?: 0.0) * pingF(t) * stab(t)
-        // Серверы выше порога 3 Мбит/с — если такие есть; иначе из всех живых
-        val aboveFloor = alive.filter { (speed[it] ?: 0.0) >= 3.0 }.ifEmpty { alive.toList() }
+        // Карантин: сервер, падавший 2+ раза за 6 ч, автовыбором не берём (текущий — исключение)
+        val selectable = alive.filter { it == current || nodeOf[it]?.let { n -> !Autopilot.quarantined(ctx, n) } ?: true }
+            .ifEmpty { alive.toList() }
+        // Серверы выше порога 3 Мбит/с — если такие есть; иначе из всех живых (не в карантине)
+        val aboveFloor = selectable.filter { (speed[it] ?: 0.0) >= 3.0 }.ifEmpty { selectable }
         val best = aboveFloor.maxByOrNull { score(it) } ?: return pickWorking(ctx, ranked)
         fun mb(t: String) = speed[t]?.let { String.format(java.util.Locale.US, "%.0f Мбит/с", it) } ?: "—"
-        // Текущий жив и его скор не сильно ниже лучшего (в пределах 25%) — остаёмся
-        if (current in alive && score(best) <= score(current) * 1.25) {
+        // Текущий жив и достаточно хорош — остаёмся. На ФОНОВОЙ плановой проверке, если текущий уже
+        // «достаточно быстрый» (≥30 Мбит/с), не дёргаемся ради +37% (68→93): переключаемся только при
+        // реальном превосходстве в 2 раза. При ручном подключении берём лучший по обычному порогу 25%.
+        val enough = !firstWins && current in alive && (speed[current] ?: 0.0) >= 30.0
+        val stayFactor = if (enough) 2.0 else 1.25
+        if (current in alive && score(best) <= score(current) * stayFactor) {
             switchCandidate = null; switchCount = 0
             nodeOf[current]?.let { Autopilot.record(ctx, it, ok = true) }
             if (best == current) AppLog.srv("текущий сервер «${AppLog.name(ctx, current)}» — лучший (${delay[current]} мс, ${mb(current)})")
@@ -316,14 +323,16 @@ object ServerTester {
         // значит сервер мёртв. Утром в логе было «0 из 70» и vk.ru не резолвился — тогда это проблема
         // сети, и дёргать серверы бессмысленно. Коннект до DNS-портов (8.8.8.8:53) как «интернет есть»
         // больше не считаем: он проходил сквозь ТСПУ даже когда реальные сайты лежали.
+        // Требуем именно РЕЗОЛВ + коннект: если DNS сети лёг (name error на vk.ru, как в логе), то и
+        // наши серверы по именам не резолвятся — это «сети нет», а не «серверы мертвы». Голого коннекта
+        // по IP (77.88.8.8:443) для «интернет есть» уже недостаточно: он проходил, когда DNS не работал.
         for (host in RU_REFS) {
             val addr = try {
                 (net.getAllByName(host)).firstOrNull { it is Inet4Address }
             } catch (_: Exception) { null } ?: continue
             if (tcpRtt(net, addr, 443, 2500) != null) return true
         }
-        // Запасной эталон по IP (Яндекс), без DNS — вдруг резолвер лёг, а связь есть
-        return tcpRtt(net, InetAddress.getByName("77.88.8.8"), 443, 2000) != null
+        return false
     }
 
     /**

@@ -221,6 +221,21 @@ object Autopilot {
         s.at = now
     }
 
+    // Карантин: времена сбоев по «сеть|сервер». Если сервер падал 2+ раза за 6 часов — временно не
+    // выбираем его автовыбором (на 90 мин от последнего сбоя), даже если по скорости он лучший.
+    private val failLog = HashMap<String, ArrayDeque<Long>>()
+    private const val QUARANTINE_WINDOW = 6 * 3600_000L
+    private const val QUARANTINE_HOLD = 90 * 60_000L
+
+    @Synchronized
+    fun quarantined(ctx: Context, n: Subscription.Node): Boolean {
+        val key = "${networkKey(ctx)}|${id(n)}"
+        val log = failLog[key] ?: return false
+        val now = System.currentTimeMillis()
+        while (log.isNotEmpty() && now - log.first() > QUARANTINE_WINDOW) log.removeFirst()
+        return log.size >= 2 && now - log.last() < QUARANTINE_HOLD
+    }
+
     /** Подключение через сервер прошло / не прошло (в этой сети). */
     @Synchronized
     fun record(ctx: Context, n: Subscription.Node, ok: Boolean, mbps: Double? = null) {
@@ -228,6 +243,11 @@ object Autopilot {
         if (!ok && n.xrayLink != null && BypassLab.running) return
         val key = networkKey(ctx).ifEmpty { return }
         val now = System.currentTimeMillis()
+        if (!ok) {
+            val fl = failLog.getOrPut("$key|${id(n)}") { ArrayDeque() }
+            fl.addLast(now)
+            while (fl.isNotEmpty() && now - fl.first() > QUARANTINE_WINDOW) fl.removeFirst()
+        }
         for (k in keysFor(key)) {
             val s = net(ctx, k).servers.getOrPut(id(n)) { Stat() }
             decay(s, now)
