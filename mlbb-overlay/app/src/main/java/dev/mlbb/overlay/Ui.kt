@@ -283,6 +283,10 @@ object Ui {
     }
 
     /** Название без флага в начале. */
-    fun cleanName(n: Subscription.Node) =
-        n.name.replace(Regex("^[\\x{1F1E6}-\\x{1F1FF}]{2}\\s*"), "").trim()
+    fun cleanName(n: Subscription.Node): String {
+        // Имя из некоторых подписок приходит URL-кодированным (пробелы как «+»): «Финляндия+|+Trojan».
+        // Если пробелов нет, а «+» есть — это закодированные пробелы, раскодируем.
+        val name = if (!n.name.contains(' ') && n.name.contains('+')) n.name.replace('+', ' ') else n.name
+        return name.replace(Regex("^[\\x{1F1E6}-\\x{1F1FF}]{2}\\s*"), "").trim()
+    }
 }
