@@ -1443,19 +1443,46 @@ class MainActivity : AppCompatActivity() {
         }
         card.addView(Ui.text(this, "", 20f, bold = true).apply { text = Ui.iconText(this@MainActivity, R.drawable.ic_speedtest, "Тест скорости", 22f) })
         card.addView(Ui.text(this, "Cloudflare · $via", 13f, Ui.MUTED).apply { setPadding(0, d(4f), 0, d(16f)) })
-        fun metric(title: String): TextView {
-            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(6f), 0, d(6f)) }
-            row.addView(Ui.text(this, title, 15f, Ui.MUTED), LinearLayout.LayoutParams(0, -2, 1f))
-            val v = Ui.text(this, "—", 20f, bold = true)
-            row.addView(v)
-            card.addView(row)
-            return v
+        val ping: TextView; val jitter: TextView; val down: TextView; val up: TextView
+        if (AppSettings.newDesign) {
+            // По макету: крупный пинг сверху + три плитки Разброс/Загрузка/Отдача
+            ping = Ui.text(this, "—", 36f, Ui.GREEN, bold = true).apply { gravity = Gravity.CENTER; setPadding(0, d(6f), 0, 0) }
+            card.addView(ping, LinearLayout.LayoutParams(-1, -2))
+            card.addView(Ui.text(this, "Пинг", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, d(16f)) }, LinearLayout.LayoutParams(-1, -2))
+            val tilesRow = LinearLayout(this)
+            fun tileValue(label: String, accent: Boolean): TextView {
+                val t = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                    background = Ui.rounded(Ui.CARD2, d(12f).toFloat()); setPadding(d(6f), d(11f), d(6f), d(11f))
+                }
+                t.addView(Ui.text(this, label.uppercase(), 9.5f, Ui.MUTED).apply { gravity = Gravity.CENTER })
+                val v = Ui.text(this, "—", 14f, if (accent) Ui.GREEN else Ui.TEXT, bold = true).apply { gravity = Gravity.CENTER; setPadding(0, d(3f), 0, 0) }
+                t.addView(v)
+                tilesRow.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (tilesRow.childCount > 0) marginStart = d(7f) })
+                return v
+            }
+            jitter = tileValue("Разброс", false)
+            down = tileValue("Загрузка", true)
+            up = tileValue("Отдача", true)
+            card.addView(tilesRow, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            fun metric(title: String): TextView {
+                val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, d(6f), 0, d(6f)) }
+                row.addView(Ui.text(this, title, 15f, Ui.MUTED), LinearLayout.LayoutParams(0, -2, 1f))
+                val v = Ui.text(this, "—", 20f, bold = true)
+                row.addView(v)
+                card.addView(row)
+                return v
+            }
+            ping = metric("Пинг")
+            jitter = metric("Разброс")
+            down = metric("Загрузка")
+            up = metric("Отдача")
         }
-        val ping = metric("Пинг")
-        val jitter = metric("Разброс")
-        val down = metric("Загрузка")
-        val up = metric("Отдача")
-        val state = Ui.text(this, "Меряю пинг…", 13f, Ui.MUTED).apply { setPadding(0, d(10f), 0, 0) }
+        val state = Ui.text(this, "Меряю пинг…", 13f, Ui.MUTED).apply {
+            setPadding(0, d(14f), 0, 0)
+            if (AppSettings.newDesign) gravity = Gravity.CENTER
+        }
         card.addView(state)
         val dlg = android.app.Dialog(this)
         dlg.setContentView(card)
