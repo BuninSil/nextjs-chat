@@ -151,8 +151,8 @@ object Connector {
                     ServerTester.use(ctx, lead.tag)
                     Autopilot.record(ctx, lead, ok = true)
                     onReady(current())
-                    // Без «первого рабочего» — он увёл бы с лидера; только сверка скорости
-                    refine(ctx)
+                    // Готово сразу на лидере; полную проверку скорости — в фоне, не задерживая «готово»
+                    Thread { try { refine(ctx) } catch (_: Exception) {} }.start()
                 } else {
                     // Сервер не отвечает (или в игре выход не в России) — сначала любой рабочий
                     rank(ctx, game) { onReady(current()) }
@@ -347,32 +347,46 @@ object Connector {
     /** Полный подбор при работающем VPN; прогресс — в busyText. Прерывается, если VPN выключили. */
     private fun rank(ctx: Context, game: Boolean, onWorking: () -> Unit) {
         if (!BoxVpnService.isRunning) return
-        AppLog.conn("полный подбор сервера (${if (game) "игровой режим" else "обычный режим"})")
+        AppLog.conn("подбор сервера (${if (game) "игровой режим" else "обычный режим"})")
+        // Обычный режим: сначала БЫСТРО находим первый рабочий по опыту (автопилот), без полного пинга
+        // всех серверов — иначе «готово» ждало полминуты (36990 мс в логе). Полный подбор лучшего — в фоне.
+        if (!game) {
+            val byTag = Subscription.usable(ctx)
+                .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) }
+                .associateBy { it.tag }
+            val quick = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
+            busyText = "Проверяю сервер…"
+            if (quick.isNotEmpty()) ServerTester.pickWorking(ctx, quick)
+            if (!ServerTester.alive(AppSettings.selectedTag) && AppSettings.freeReserve && ServerTester.internetUp(ctx)) {
+                busyText = "Серверы не отвечают — пробую резервные…"; Widget.update(ctx)
+                ServerTester.pickReserve(ctx)?.let {
+                    notifyBypass(ctx, "Включён резервный сервер",
+                        "Серверы подписки сейчас не отвечают — подключил бесплатный публичный сервер. Как только подписка заработает, вернусь на неё.")
+                }
+            }
+            onWorking() // готово — пользуемся сразу
+            Widget.update(ctx)
+            // Полный пинг всех серверов и выбор лучшего — в фоне, не задерживая подключение
+            if (BoxVpnService.isRunning) Thread {
+                try {
+                    val ranked = ServerTester.measure(ctx) { _, _ -> }
+                    if (ranked.isNotEmpty() && BoxVpnService.isRunning) {
+                        ServerTester.pickFastest(ctx, ranked, firstWins = true)
+                        ServerTester.markRanked(ctx)
+                    }
+                } catch (_: Exception) {}
+            }.start()
+            return
+        }
+        // Игровой режим: как раньше — полный пинг (нужен выход в России), затем первый рабочий
         busyText = "Меряю пинг до серверов…"
         val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
         if (!BoxVpnService.isRunning) return
-        if (ranked.isEmpty()) {
-            onWorking()
-            return
-        }
-        // Сначала — первый рабочий (в игре — с выходом в России): интернет есть уже через секунды
-        busyText = if (game) "Ищу сервер с выходом в России…" else "Проверяю сервер…"
+        if (ranked.isEmpty()) { onWorking(); return }
+        busyText = "Ищу сервер с выходом в России…"
         ServerTester.pickWorking(ctx, ranked)
-        // Ни один сервер подписки не ответил, а резерв включён — крайний вариант: бесплатный сервер
-        if (!game && !ServerTester.alive(AppSettings.selectedTag) && AppSettings.freeReserve && ServerTester.internetUp(ctx)) {
-            busyText = "Серверы не отвечают — пробую резервные…"
-            Widget.update(ctx)
-            ServerTester.pickReserve(ctx)?.let {
-                notifyBypass(ctx, "Включён резервный сервер",
-                    "Серверы подписки сейчас не отвечают — подключил бесплатный публичный сервер. Как только подписка заработает, вернусь на неё.")
-            }
-        }
         onWorking()
         Widget.update(ctx)
-        // Обычный режим: дальше — самый быстрый по задержке (путь подключения, с первого замера)
-        if (!game && BoxVpnService.isRunning) {
-            ServerTester.pickFastest(ctx, ranked, firstWins = true) { done, total -> busyText = "Проверяю скорость: $done из $total" }
-        }
         if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
     }
 
@@ -443,7 +457,6 @@ object Connector {
             // последние 5 замеров; переключаемся, если 3 из 5 плохих ИЛИ 2 подряд. Таймаут — тоже плохой.
             var qTag = ""
             var qBase = 0.0
-            var qFloor = 0.0                             // пол базы — медиана 3 замеров при выборе сервера
             val qGood = ArrayDeque<Pair<Long, Int>>()   // (время, мс) хороших замеров
             val qWin = ArrayDeque<Pair<Int, Boolean>>()  // последние 5: (мс, плохой ли)
             var qStuck = 0                               // сработок подряд, когда переключиться не на что
@@ -619,9 +632,10 @@ object Connector {
                     val tNow = System.currentTimeMillis()
                     if (qTag != sel) {
                         qTag = sel; qGood.clear(); qWin.clear(); qStuck = 0
-                        // База — медиана 3 свежих замеров (не один «удачный»); она же пол базы
+                        // Стартовая база — медиана 3 свежих замеров (не один «удачный»); дальше она
+                        // скользит по хорошим замерам и БЕЗ пола (из-за пола база застревала на 574 мс
+                        // при реальных 220-260 и сторож не отлипал)
                         qBase = (ServerTester.baseline3(sel) ?: ServerTester.results[sel]?.medianMs ?: ms).toDouble()
-                        qFloor = qBase
                     }
                     // Во время скачивания/видео (>1,5 МБ/с) пинг растёт сам — такой замер не учитываем вовсе
                     if (BoxVpnService.downBps < 1_500_000) {
@@ -634,9 +648,10 @@ object Connector {
                             // База не опускается ниже пола (медианы 3 замеров при выборе), иначе случайные
                             // сверхнизкие пинги занижали бы базу и всё казалось бы «медленным».
                             qGood.addLast(tNow to ms)
-                            while (qGood.isNotEmpty() && tNow - qGood.first().first > 30 * 60_000L) qGood.removeFirst()
-                            val gm = qGood.map { it.second }.sorted().let { if (it.isEmpty()) ms.toDouble() else it[it.size / 2].toDouble() }
-                            qBase = maxOf(gm, qFloor)
+                            // Последние ~12 хороших замеров (и не старше 30 мин) — чтобы база быстро
+                            // следовала за реальной задержкой сети, а не фиксировалась при выборе
+                            while (qGood.size > 12 || (qGood.isNotEmpty() && tNow - qGood.first().first > 30 * 60_000L)) qGood.removeFirst()
+                            qBase = qGood.map { it.second }.sorted().let { if (it.isEmpty()) ms.toDouble() else it[it.size / 2].toDouble() }
                         }
                         val bad = qWin.count { it.second }
                         val twoInRow = qWin.size >= 2 && qWin.last().second && qWin.elementAt(qWin.size - 2).second
@@ -682,7 +697,6 @@ object Connector {
                                 if (qStuck >= 3) {
                                     // Замкнутый круг: пересчитываем базу по окну как есть, чтобы отлипнуть
                                     qBase = qWin.map { it.first }.sorted().let { if (it.isEmpty()) qBase else it[it.size / 2].toDouble() }
-                                    qFloor = minOf(qFloor, qBase)
                                     qStuck = 0; qWin.clear()
                                     AppLog.conn("сторож: кандидаты давно не лучше — пересчитал базу по факту: ~${qBase.toInt()} мс")
                                 }
