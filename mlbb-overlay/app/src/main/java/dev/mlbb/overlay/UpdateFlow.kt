@@ -78,7 +78,7 @@ object UpdateFlow {
         card.addView(TextView(a).apply {
             text = "Обновить"
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Ui.ON_BUTTON)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
@@ -129,7 +129,7 @@ object UpdateFlow {
         card.addView(TextView(a).apply {
             this.text = "Отлично"
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Ui.ON_BUTTON)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())

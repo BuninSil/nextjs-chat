@@ -43,6 +43,8 @@ data class Theme(
     val accentTop: Long,
     val accentBottom: Long,
     val button: Long,
+    /** Цвет текста/значка на зелёной кнопке: на ярком зелёном нужен тёмный, иначе белый. */
+    val onButton: Long = 0xFFFFFFFF,
     val red: Long = 0xFFFF5A52,
     val redTop: Long = 0xFFE5534B,
     val redBottom: Long = 0xFFA8322C,
@@ -56,7 +58,7 @@ object Ui {
     const val SLOGAN = "Быстрее нас — только свет"
 
     val THEMES = listOf(
-        // Тёмная — тема по умолчанию, та же, что была
+        // Тёмная — классическая тема (прежний вид, сохранён для отката с нового дизайна)
         Theme("dark", "Тёмная", false, bg = 0xFF121417, card = 0xFF1A1D22, card2 = 0xFF23272D, sel = 0xFF182A20,
             input = 0xFF0F1114, text = 0xFFE8EAED, muted = 0xFF8B9098, sub = 0xFFC9CCD1, hint = 0xFF5F6368,
             divider = 0xFF262A30, accent = 0xFF34C759, accentTop = 0xFF43D17A, accentBottom = 0xFF1F8F4C,
@@ -76,7 +78,20 @@ object Ui {
             button = 0xFF2FB565, switchOff = 0xFF33373D),
     )
 
-    val theme: Theme get() = THEMES.firstOrNull { it.id == AppSettings.theme } ?: THEMES[0]
+    /**
+     * Экспериментальный новый дизайн (бета): near-black фон #0D0F13, яркий зелёный #1ED760,
+     * тёмный текст на кнопках. Применяется поверх тёмной темы, когда включён AppSettings.newDesign.
+     */
+    val NEW_DARK = Theme("dark", "Тёмная", false, bg = 0xFF0D0F13, card = 0xFF161A21, card2 = 0xFF1F242C, sel = 0xFF13251B,
+        input = 0xFF0F1216, text = 0xFFEBEBEF, muted = 0xFF8A9099, sub = 0xFFC7CBD1, hint = 0xFF5C636D,
+        divider = 0xFF232932, accent = 0xFF1ED760, accentTop = 0xFF2BE873, accentBottom = 0xFF16B84F,
+        button = 0xFF1ED760, onButton = 0xFF07140D, switchOff = 0xFF2A313A)
+
+    val theme: Theme get() {
+        val sel = THEMES.firstOrNull { it.id == AppSettings.theme } ?: THEMES[0]
+        // Новый дизайн — эксперимент поверх тёмной темы по умолчанию; свои темы не трогаем
+        return if (AppSettings.newDesign && sel.id == "dark") NEW_DARK else sel
+    }
 
     val BG get() = theme.bg.toInt()
     val CARD get() = theme.card.toInt()
@@ -94,6 +109,8 @@ object Ui {
     val YELLOW get() = theme.yellow.toInt()
     val RED get() = theme.red.toInt()
     val SWITCH_OFF get() = theme.switchOff.toInt()
+    /** Цвет текста/значка на зелёной кнопке (тёмный на ярком зелёном, иначе белый). */
+    val ON_BUTTON get() = theme.onButton.toInt()
 
     /** Окно и полосы системы под тему. Вызывать в onCreate каждого экрана. */
     fun applyWindow(a: android.app.Activity) {

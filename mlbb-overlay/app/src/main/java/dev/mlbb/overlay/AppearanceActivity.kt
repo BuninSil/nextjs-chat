@@ -49,6 +49,33 @@ class AppearanceActivity : AppCompatActivity() {
         top.addView(Ui.text(this, "Оформление", 22f, bold = true))
         root.addView(top)
 
+        // ---------- Экспериментальный дизайн ----------
+        root.addView(section("Новый дизайн · бета"))
+        run {
+            val card = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(d(14f), d(14f), d(14f), d(14f))
+                background = Ui.rounded(Ui.CARD, d(16f).toFloat())
+            }
+            val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(Ui.text(this, "Новый дизайн", 15f, bold = true))
+            col.addView(Ui.text(this, "Обновлённое оформление (эксперимент). Если что-то выглядит криво — выключи, вернётся прежний вид.", 12f, Ui.MUTED).apply { setPadding(0, d(3f), 0, 0) })
+            card.addView(col, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(10f) })
+            val sw = androidx.appcompat.widget.SwitchCompat(this).apply {
+                isChecked = AppSettings.newDesign
+                Ui.styleSwitch(this)
+                setOnCheckedChangeListener { _, v ->
+                    if (v == AppSettings.newDesign) return@setOnCheckedChangeListener
+                    AppSettings.newDesign = v
+                    AppLog.set("Новый дизайн (бета)", v)
+                    AppSettings.save(this@AppearanceActivity)
+                    recreate()
+                }
+            }
+            card.addView(sw)
+            root.addView(card, LinearLayout.LayoutParams(-1, -2))
+        }
+
         // ---------- Тема ----------
         root.addView(section("Тема"))
         Ui.THEMES.chunked(2).forEach { pair ->

@@ -190,12 +190,13 @@ class MainActivity : AppCompatActivity() {
     private var builtProfile = ""
     private var builtTheme = ""
     private var builtAnim = ""
+    private var builtNewDesign = true
 
     override fun onResume() {
         super.onResume()
         AppSettings.load(this)
         AutoUpdate.uiVisible = true
-        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme || AppSettings.anim != builtAnim) {
+        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme || AppSettings.anim != builtAnim || AppSettings.newDesign != builtNewDesign) {
             recreate()
             return
         }
@@ -261,6 +262,7 @@ class MainActivity : AppCompatActivity() {
         builtProfile = AppSettings.profile
         builtTheme = AppSettings.theme
         builtAnim = AppSettings.anim
+        builtNewDesign = AppSettings.newDesign
         val d = { v: Float -> Ui.dp(this, v) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -285,7 +287,7 @@ class MainActivity : AppCompatActivity() {
         setupText = Ui.text(this, "", 13f, Ui.SUB).apply { setPadding(0, d(6f), 0, d(12f)) }
         setupButton = TextView(this).apply {
             gravity = Gravity.CENTER
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(Ui.ON_BUTTON)
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())

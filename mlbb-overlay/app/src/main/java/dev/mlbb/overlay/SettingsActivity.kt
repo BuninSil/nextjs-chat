@@ -500,7 +500,7 @@ class SettingsActivity : AppCompatActivity() {
         val label = text.toString().trim()
         this.text = text
         gravity = Gravity.CENTER
-        setTextColor(0xFFFFFFFF.toInt())
+        setTextColor(Ui.ON_BUTTON)
         textSize = 15f
         setTypeface(typeface, android.graphics.Typeface.BOLD)
         background = Ui.rounded(Ui.BUTTON, d(14f).toFloat())
