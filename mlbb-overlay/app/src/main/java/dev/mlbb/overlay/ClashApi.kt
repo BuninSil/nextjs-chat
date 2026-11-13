@@ -65,16 +65,30 @@ object ClashApi {
      * Поток скорости ядра: раз в секунду строка {"up":…,"down":…} (байт за секунду).
      * Лёгкий — в отличие от /connections, не растёт с числом соединений. Блокирует, пока поток жив.
      */
+    @Volatile private var trafficConnection: HttpURLConnection? = null
+
+    /** Разрывает долгий /traffic при остановке или перезапуске VPN. */
+    fun stopTraffic() {
+        try { trafficConnection?.disconnect() } catch (_: Exception) {}
+        trafficConnection = null
+    }
+
     fun streamTraffic(port: Int, secret: String, onSecond: (up: Long, down: Long) -> Unit) {
         val c = open(port, "/traffic", secret, 5000)
-        c.readTimeout = 10_000
-        c.inputStream.bufferedReader().use { r ->
-            while (true) {
-                val line = r.readLine() ?: break
-                val up = Regex("\"up\":(\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
-                val down = Regex("\"down\":(\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
-                onSecond(up, down)
+        trafficConnection = c
+        try {
+            c.readTimeout = 10_000
+            c.inputStream.bufferedReader().use { r ->
+                while (true) {
+                    val line = r.readLine() ?: break
+                    val up = Regex("\\\"up\\\":(\\\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                    val down = Regex("\\\"down\\\":(\\\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                    onSecond(up, down)
+                }
             }
+        } finally {
+            if (trafficConnection === c) trafficConnection = null
+            try { c.disconnect() } catch (_: Exception) {}
         }
     }
 
