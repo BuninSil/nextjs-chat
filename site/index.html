@@ -1,0 +1,408 @@
+<title>Fast VPN</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Тёмный «ночной/оптоволоконный» лендинг: тёплый луч света в герое (слоган),
+     сигнально-зелёный = «подключено/РФ» как в приложении, моно для телеметрии.
+     Один визуальный мир — только тёмная тема, все цвета заданы явно. */
+  :root {
+    color-scheme: dark;
+    --bg: #080B0A;
+    --panel: #0D1211;
+    --card: #121A17;
+    --card-2: #16201C;
+    --line: #233029;
+    --line-soft: #1a241f;
+    --fg: #ECF3EF;
+    --muted: #8A978E;
+    --faint: #5c6b62;
+    --go: #30D96A;        /* подключено / скачать / РФ = хорошо */
+    --go-deep: #1fa74f;
+    --go-ink: #04210f;
+    --light: #FFD98A;     /* «свет» — тёплый луч в герое */
+    --far: #FF6B6B;       /* занесло за границу */
+    --f-display: "Unbounded", "Arial Black", sans-serif;
+    --f-body: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --maxw: 1060px;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin-inline: auto;
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+  }
+
+  a { color: inherit; }
+  h1, h2, h3 { margin: 0; font-family: var(--f-display); font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; line-height: 1.05; }
+  p { margin: 0; }
+
+  .eyebrow {
+    font-family: var(--f-mono); font-weight: 500; font-size: 12px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--go);
+  }
+
+  /* ---------- HERO ---------- */
+  .hero { position: relative; overflow: hidden; padding-block: 92px 76px; border-bottom: 1px solid var(--line-soft); }
+  .beam {
+    position: absolute; inset: -40% -20% auto -20%; height: 150%; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(60% 55% at 72% 8%, rgba(255,217,138,0.20), rgba(255,217,138,0) 70%),
+      radial-gradient(45% 40% at 20% 0%, rgba(48,217,106,0.14), rgba(48,217,106,0) 72%);
+    transform: translateY(0);
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+  .beam::after {
+    content: ""; position: absolute; top: -10%; left: 50%; width: 140%; height: 42px;
+    transform: translateX(-50%) rotate(-18deg);
+    background: linear-gradient(90deg, transparent, rgba(255,241,210,0.55), transparent);
+    filter: blur(22px); opacity: 0.5;
+    animation: sweep 9s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { transform: translateY(26px); } }
+  @keyframes sweep { from { transform: translateX(-70%) rotate(-18deg); } to { transform: translateX(-30%) rotate(-18deg); } }
+
+  .hero-inner { position: relative; z-index: 1; display: grid; gap: 30px; max-width: 760px; }
+  .mark { display: flex; align-items: center; gap: 12px; }
+  .mark .dot { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(150deg, var(--go), var(--go-deep)); box-shadow: 0 0 22px rgba(48,217,106,0.45); }
+  .mark .dot svg { width: 19px; height: 19px; color: var(--go-ink); }
+  .mark .name { font-family: var(--f-display); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
+
+  .hero h1 { font-size: clamp(42px, 9vw, 82px); }
+  .hero h1 .lit { color: var(--light); }
+  .lede { font-size: clamp(17px, 2.5vw, 21px); color: var(--muted); max-width: 54ch; }
+  .lede b { color: var(--fg); font-weight: 600; }
+
+  .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; margin-top: 4px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px; text-decoration: none;
+    background: linear-gradient(150deg, var(--go), var(--go-deep)); color: var(--go-ink);
+    font-family: var(--f-body); font-weight: 700; font-size: 17px;
+    padding: 17px 26px; border-radius: 14px;
+    box-shadow: 0 10px 34px -8px rgba(48,217,106,0.55); border: 1px solid rgba(255,255,255,0.14);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 16px 42px -8px rgba(48,217,106,0.7); }
+  .btn svg { width: 20px; height: 20px; }
+  .btn-meta { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .btn-meta b { color: var(--fg); font-weight: 700; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .chip {
+    font-family: var(--f-mono); font-weight: 500; font-size: 12.5px; letter-spacing: 0.02em;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.015);
+    color: var(--muted); display: inline-flex; align-items: center; gap: 7px;
+  }
+  .chip .v { color: var(--fg); }
+  .chip .ok { color: var(--go); }
+
+  /* ---------- SECTIONS ---------- */
+  section { padding-block: 72px; }
+  .sec-head { max-width: 640px; display: grid; gap: 14px; margin-bottom: 44px; }
+  .sec-head h2 { font-size: clamp(28px, 4.6vw, 42px); }
+  .sec-head p { color: var(--muted); font-size: 17px; }
+
+  /* Боль → решение */
+  .pains { display: grid; gap: 18px; }
+  .pain {
+    display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start;
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px;
+  }
+  .pain .ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: var(--card-2); border: 1px solid var(--line); color: var(--go); }
+  .pain .ic svg { width: 24px; height: 24px; }
+  .pain h3 { font-family: var(--f-body); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; margin-bottom: 7px; }
+  .pain p { color: var(--muted); font-size: 15.5px; }
+  .pain p .far { color: var(--far); font-weight: 600; }
+  .pain p .near { color: var(--go); font-weight: 600; }
+
+  /* Фичи */
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .feat { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 16px; padding: 22px; display: grid; gap: 12px; align-content: start; }
+  .feat .ic { width: 38px; height: 38px; color: var(--go); }
+  .feat .ic svg { width: 26px; height: 26px; }
+  .feat h3 { font-family: var(--f-body); font-weight: 700; font-size: 16px; letter-spacing: -0.005em; }
+  .feat p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+
+  /* Как работает */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: s; }
+  .step { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; display: grid; gap: 10px; }
+  .step::before { counter-increment: s; content: counter(s, decimal-leading-zero); font-family: var(--f-mono); font-weight: 700; font-size: 13px; color: var(--go); letter-spacing: 0.1em; }
+  .step h3 { font-family: var(--f-body); font-weight: 700; font-size: 17px; }
+  .step p { color: var(--muted); font-size: 15px; }
+
+  /* Бонус для игроков */
+  .bonus-card { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 36px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: clamp(26px, 4vw, 44px); }
+  .bonus-card .txt { display: grid; gap: 14px; }
+  .bonus-card h2 { font-size: clamp(26px, 4vw, 38px); }
+  .bonus-card p { color: var(--muted); font-size: 16px; max-width: 46ch; }
+  .bonus-card p b { color: var(--fg); font-weight: 600; }
+  .bonus-note { font-family: var(--f-mono); font-size: 12.5px; color: var(--faint); }
+  /* мок-плашка поверх игры */
+  .plak-wrap { display: grid; gap: 12px; justify-items: stretch; }
+  .plak { display: flex; align-items: center; gap: 14px; background: #0a120d; border: 1px solid var(--go); border-radius: 14px; padding: 14px 16px; box-shadow: 0 0 0 4px rgba(48,217,106,0.08), 0 14px 30px -12px rgba(0,0,0,0.8); }
+  .plak.far { border-color: var(--far); box-shadow: 0 0 0 4px rgba(255,107,107,0.08), 0 14px 30px -12px rgba(0,0,0,0.8); }
+  .plak .flag { font-size: 26px; line-height: 1; }
+  .plak .pdata { display: grid; gap: 2px; min-width: 0; }
+  .plak .pdata .loc { font-weight: 700; font-size: 15px; }
+  .plak .pdata .sub { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+  .plak .stat { margin-left: auto; font-family: var(--f-mono); font-weight: 700; font-size: 13px; }
+  .plak.near .stat { color: var(--go); }
+  .plak.far .stat { color: var(--far); }
+
+  /* Честность */
+  .honest { background: linear-gradient(160deg, var(--card-2), var(--panel)); border: 1px solid var(--line); border-radius: 22px; padding: clamp(28px, 5vw, 48px); display: grid; gap: 16px; max-width: 820px; }
+  .honest h2 { font-size: clamp(24px, 3.8vw, 34px); }
+  .honest p { color: var(--muted); font-size: 16.5px; max-width: 62ch; }
+  .honest p b { color: var(--fg); font-weight: 600; }
+  .honest .tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+
+  /* Финальный CTA */
+  .final { text-align: center; display: grid; gap: 26px; justify-items: center; padding-block: 86px; border-top: 1px solid var(--line-soft); position: relative; overflow: hidden; }
+  .final .glow { position: absolute; inset: auto 0 -60% 0; height: 100%; background: radial-gradient(50% 60% at 50% 100%, rgba(48,217,106,0.16), transparent 70%); pointer-events: none; }
+  .final > * { position: relative; z-index: 1; }
+  .final h2 { font-size: clamp(30px, 5.4vw, 52px); }
+  .final h2 .lit { color: var(--light); }
+  .final .sub { color: var(--muted); font-size: 16.5px; max-width: 48ch; }
+  .ios { font-size: 14px; color: var(--faint); max-width: 52ch; }
+  .ios a { color: var(--muted); text-underline-offset: 3px; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--line-soft); padding-block: 40px; }
+  .foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
+  .foot .slogan { font-family: var(--f-display); font-weight: 600; font-size: 15px; color: var(--muted); }
+  .foot .links { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; }
+  .foot .links a { color: var(--muted); text-decoration: none; }
+  .foot .links a:hover { color: var(--fg); }
+  .foot .ver { font-family: var(--f-mono); font-size: 12px; color: var(--faint); }
+
+  a.btn:focus-visible, .foot a:focus-visible, .ios a:focus-visible { outline: 2px solid var(--go); outline-offset: 3px; border-radius: 6px; }
+
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .steps { grid-template-columns: 1fr; }
+    .bonus-card { grid-template-columns: 1fr; gap: 26px; }
+  }
+  @media (max-width: 520px) {
+    .hero { padding-block: 64px 56px; }
+    .grid { grid-template-columns: 1fr; }
+    .pain { grid-template-columns: 1fr; gap: 14px; padding: 22px; }
+    section { padding-block: 56px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .beam, .beam::after { animation: none; }
+    .btn { transition: none; }
+  }
+</style>
+
+<header class="hero">
+  <div class="beam" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <div class="mark">
+      <span class="dot" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4.5 13.5H11L10 22l9.5-12.5H13L13 2Z"/></svg>
+      </span>
+      <span class="name">Fast&nbsp;VPN</span>
+    </div>
+
+    <div style="display:grid; gap:20px;">
+      <p class="eyebrow">Быстрее нас — только свет</p>
+      <h1>Твой интернет снова <span class="lit">быстрый</span>.</h1>
+      <p class="lede">VPN для Android по <b>твоей</b> подписке. Сам находит самый быстрый сервер, держит Telegram на связи и пускает российские сайты напрямую. А если играешь в&nbsp;Mobile&nbsp;Legends — есть <b>приятный бонус</b>.</p>
+    </div>
+
+    <div class="cta-row">
+      <a class="btn" href="https://github.com/BuninSil/nextjs-chat/releases/latest/download/fast-vpn.apk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Скачать на Android
+      </a>
+      <div class="btn-meta">APK · последняя официальная версия<br>бесплатно · без рекламы</div>
+    </div>
+
+    <div class="chips" aria-hidden="true">
+      <span class="chip">ПИНГ <span class="v">24 мс</span></span>
+      <span class="chip">СКОРОСТЬ <span class="v">480 Мбит/с</span></span>
+      <span class="chip">СЕРВЕР <span class="ok">РОССИЯ ✓</span></span>
+      <span class="chip">АВТОПИЛОТ <span class="ok">ВКЛ</span></span>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Зачем он тебе</p>
+      <h2>Три причины, по которым обычный VPN тебя бесит</h2>
+      <p>И что Fast VPN делает вместо этого.</p>
+    </div>
+
+    <div class="pains">
+      <article class="pain">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg></span>
+        <div>
+          <h3>Телега отваливается, скорость — лотерея</h3>
+          <p>Чужие клиенты рвут долгие соединения каждые полторы минуты и цепляют «первый попавшийся» сервер. Fast VPN <span class="near">меряет реальную скорость и пинг</span> каждого сервера и держит соединение живым — Telegram не отваливается.</p>
+        </div>
+      </article>
+
+      <article class="pain">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12 8 8m4 4 5 2"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+        <div>
+          <h3>Лень выбирать сервер из списка на 70 штук</h3>
+          <p>И не надо. Автопилот запоминает, какие серверы живые <span class="near">именно в твоей сети и регионе</span>, и подключает лучший сам — за секунды. Не по одному пингу, а по связке скорость × пинг × стабильность.</p>
+        </div>
+      </article>
+
+      <article class="pain">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <div>
+          <h3>Под обычным VPN ломаются российские сайты</h3>
+          <p>Госуслуги, банки и Сбер не любят заграничный IP — тупят или блокируют. Fast VPN пускает <span class="near">российские сайты напрямую</span>, мимо VPN, а через сервер гонит только то, что нужно.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Что внутри</p>
+      <h2>Коротко — по делу</h2>
+    </div>
+    <div class="grid">
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></svg></span>
+        <h3>Автопилот</h3>
+        <p>Сам выбирает сервер по скорости, пингу и стабильности. Помнит опыт по каждой сети.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <h3>РФ — напрямую</h3>
+        <p>Госуслуги, банки и Сбер идут мимо VPN и не тупят. Остальное — через сервер.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg></span>
+        <h3>Своя подписка</h3>
+        <p>Вставь ссылку от Karing, Hiddify или v2rayN — серверы твои, трафик твой.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13V8"/><path d="M5.5 18a8 8 0 1 1 13 0"/><path d="m12 13 3.5-2"/></svg></span>
+        <h3>Честный тест скорости</h3>
+        <p>Реальный замер скорости и пинга по каждому серверу — без накруток.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg></span>
+        <h3>Блок рекламы</h3>
+        <p>Режется на уровне VPN — сразу во всех приложениях, а не только в браузере.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></span>
+        <h3>Плитка и виджет</h3>
+        <p>Включай из шторки или с рабочего стола. Автоподключение на нужной сети.</p>
+      </article>
+      <article class="feat">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 4v4h-4"/></svg></span>
+        <h3>Автообновление</h3>
+        <p>Новые версии прилетают сами. Ничего скачивать руками не нужно.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="mlbb">
+  <div class="wrap">
+    <div class="bonus-card">
+      <div class="txt">
+        <p class="eyebrow">Приятный бонус</p>
+        <h2>Играешь в Mobile&nbsp;Legends? Держи.</h2>
+        <p>Из России матч нередко уводит на зарубежный боевой сервер — отсюда лаги. Fast VPN рисует <b>флаг и город боевого сервера прямо поверх игры</b>: зелёным — если ты в России, красным — если занесло. Хочешь — запустит игру сам и включит «не беспокоить» на время матча.</p>
+        <p class="bonus-note">Не играешь в MLBB? Выбери при первом запуске режим «⚡ Fast VPN» — останется чистый VPN, без игрового обвеса.</p>
+      </div>
+      <div class="plak-wrap" aria-hidden="true">
+        <div class="plak near">
+          <span class="flag">🇷🇺</span>
+          <span class="pdata"><span class="loc">Россия · Москва</span><span class="sub">BATTLE SERVER</span></span>
+          <span class="stat">24 мс</span>
+        </div>
+        <div class="plak far">
+          <span class="flag">🇸🇬</span>
+          <span class="pdata"><span class="loc">Сингапур</span><span class="sub">ТЕБЯ ЗАНЕСЛО</span></span>
+          <span class="stat">180 мс</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Запуск за минуту</p>
+      <h2>Как это работает</h2>
+    </div>
+    <div class="steps">
+      <article class="step">
+        <h3>Вставь ссылку подписки</h3>
+        <p>Ту же, что используешь в Karing или v2rayN. Серверы подтянутся сами.</p>
+      </article>
+      <article class="step">
+        <h3>Приложение выбрало сервер</h3>
+        <p>Перебрало все, замерило скорость и пинг и взяло самый быстрый для твоей сети.</p>
+      </article>
+      <article class="step">
+        <h3>Нажал — и играешь</h3>
+        <p>Одна кнопка — и ты подключён. Захочешь — приложение само запустит MLBB.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="honest">
+  <div class="wrap">
+    <div class="honest">
+      <p class="eyebrow">Без обмана</p>
+      <h2>Своих серверов у нас нет — и это честно</h2>
+      <p>Fast VPN не продаёт тебе трафик и не гонит его через непонятно чей сервер. Нужна <b>твоя</b> подписка — зато ты точно знаешь, куда идёт трафик. Приложение <b>бесплатное</b> и <b>без рекламы</b>, а обновления приходят в него сами.</p>
+      <div class="tags">
+        <span class="chip">БЕСПЛАТНО</span>
+        <span class="chip">БЕЗ РЕКЛАМЫ</span>
+        <span class="chip">ТВОЯ ПОДПИСКА</span>
+        <span class="chip">ANDROID 8.0+</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="final" id="download">
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wrap" style="display:grid; gap:26px; justify-items:center;">
+    <h2>Быстрее нас — <span class="lit">только свет</span>.</h2>
+    <p class="sub">Поставь один раз, вставь подписку — и забудь, что такое тормоза и лаги в игре.</p>
+    <a class="btn" href="https://github.com/BuninSil/nextjs-chat/releases/latest/download/fast-vpn.apk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      Скачать Fast VPN
+    </a>
+    <div class="btn-meta" style="text-align:center;">APK · последняя официальная версия</div>
+    <p class="ios">На iPhone своё приложение Apple поставить по ссылке не даёт. Но твоя подписка работает в <a href="https://apps.apple.com/app/karing/id6472431552">Karing</a> на том же движке — вставь туда ту же ссылку.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span class="slogan">⚡ Fast VPN</span>
+    <nav class="links">
+      <a href="#why">Возможности</a>
+      <a href="#how">Как это работает</a>
+      <a href="#download">Скачать</a>
+    </nav>
+    <span class="ver">BuninSil · Fast VPN для Android</span>
+  </div>
+</footer>
