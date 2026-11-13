@@ -63,7 +63,7 @@ class AppsActivity : AppCompatActivity() {
             setTextColor(Ui.TEXT)
             setHintTextColor(Ui.HINT)
             textSize = 15f
-            background = Ui.rounded(Ui.INPUT, d(12f).toFloat())
+            background = if (AppSettings.newDesign) Ui.surface(this@AppsActivity, Ui.INPUT, 14f) else Ui.rounded(Ui.INPUT, d(12f).toFloat())
             setPadding(d(12f), d(10f), d(12f), d(10f))
             isSingleLine = true
             addTextChangedListener(object : TextWatcher {
