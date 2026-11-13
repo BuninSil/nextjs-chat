@@ -140,24 +140,31 @@ object ClashApi {
             if (r != Probe.NO) return p to r
         }
 
-        progress("Сканирую локальные порты, пара секунд…")
-        val pool = Executors.newFixedThreadPool(64)
-        val open = ConcurrentLinkedQueue<Int>()
-        for (p in 1024..65535) {
-            pool.execute {
-                try {
-                    Socket().use { it.connect(InetSocketAddress(HOST, p), 200) }
-                    open.add(p)
-                } catch (_: Exception) {
+        progress("Ищу локальные слушающие порты…")
+        // Не создаём 64 тысячи задач в очереди: на слабых телефонах такой «поиск»
+        // сам способен подвесить приложение. Android обычно позволяет прочитать
+        // список локальных LISTEN-сокетов из procfs.
+        val open = try {
+            listOf("/proc/net/tcp", "/proc/net/tcp6").flatMap { file ->
+                java.io.File(file).useLines { lines ->
+                    lines.drop(1).mapNotNull { line ->
+                        val fields = line.trim().split(Regex("\\s+"))
+                        if (fields.size < 4 || fields[3] != "0A") null
+                        else fields[1].substringAfterLast(':').toIntOrNull(16)
+                    }.toList()
                 }
-            }
+            }.filter { it in 1024..65535 }.distinct().sorted().take(256)
+        } catch (_: Exception) {
+            emptyList()
         }
-        pool.shutdown()
-        pool.awaitTermination(60, TimeUnit.SECONDS)
 
-        progress("Открытых портов: ${open.size}, проверяю каждый…")
+        if (open.isEmpty()) {
+            lastReport = "Не удалось обнаружить локальные LISTEN-порты через procfs."
+            return null
+        }
+        progress("Найдено слушающих портов: ${open.size}, проверяю…")
         var needSecret: Int? = null
-        for (p in open.sorted()) {
+        for (p in open) {
             when (probe(p, secret)) {
                 Probe.OK -> return p to Probe.OK
                 Probe.NEED_SECRET -> if (needSecret == null) needSecret = p
