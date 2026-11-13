@@ -412,7 +412,7 @@ class ServersActivity : AppCompatActivity() {
             for (g in groups) {
                 val groupAll = sorted.filter { it.sub == g }
                 val list = if (query.isEmpty()) groupAll else groupAll.filter {
-                    listOf(Ui.cleanName(it), it.name, it.server, it.country, it.type, it.tag)
+                    listOf(Ui.cleanName(it), it.name, it.server, it.type, it.tag)
                         .joinToString(" ").lowercase().contains(query)
                 }
                 val total = all.count { it.sub == g }
