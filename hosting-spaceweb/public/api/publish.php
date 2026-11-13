@@ -16,6 +16,21 @@ if (!preg_match('/^1\.0\.\d{1,8}$/', $version) || $code < 1 || !preg_match('/^[a
 $expected = hash_hmac('sha256', $version."\n".$code."\n".$sha, $cfg['publish_secret']);
 if (!hash_equals($expected, $sig)) { http_response_code(403); exit(json_encode(['error'=>'signature'])); }
 
+// Защита от случайной публикации старого тега поверх более новой версии.
+$versionFile = dirname(__DIR__) . '/version.json';
+if (is_file($versionFile)) {
+    $current = json_decode((string)file_get_contents($versionFile), true);
+    $currentCode = (int)($current['versionCode'] ?? 0);
+    if ($code < $currentCode || ($code === $currentCode && !hash_equals((string)($current['sha256'] ?? ''), $sha))) {
+        http_response_code(409);
+        exit(json_encode(['error'=>'version_not_newer']));
+    }
+    if ($code === $currentCode && hash_equals((string)($current['sha256'] ?? ''), $sha)) {
+        echo json_encode(['ok'=>true,'already_published'=>true,'version'=>$version,'sha256'=>$sha]);
+        exit;
+    }
+}
+
 $upload = $_FILES['apk'] ?? null;
 if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($upload['tmp_name'])) {
     http_response_code(400); exit(json_encode(['error'=>'upload_failed']));
