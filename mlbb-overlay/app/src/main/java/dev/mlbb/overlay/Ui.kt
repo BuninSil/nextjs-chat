@@ -109,6 +109,11 @@ object Ui {
     val YELLOW get() = theme.yellow.toInt()
     val RED get() = theme.red.toInt()
     val SWITCH_OFF get() = theme.switchOff.toInt()
+    // Цвета состояний VPN не зависят от выбранной темы: зелёный = подключено, серый = выключено.
+    val VPN_OFF = 0xFF59636F.toInt()
+    val VPN_CONNECTING = 0xFFF2B84B.toInt()
+    val VPN_ON = 0xFF2FCB72.toInt()
+    val VPN_ERROR = 0xFFE05252.toInt()
     /** Цвет текста/значка на зелёной кнопке (тёмный на ярком зелёном, иначе белый). */
     val ON_BUTTON get() = theme.onButton.toInt()
 
