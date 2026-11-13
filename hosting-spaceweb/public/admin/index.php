@@ -38,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket'], $_POST['sta
 }
 $filter = (string)($_GET['status'] ?? '');
 $allowed = ['new','in_progress','resolved','duplicate'];
+$categoryLabels = ['vpn'=>'Подключение','network'=>'Сеть и скорость','update'=>'Обновление','other'=>'Другое'];
 $sql = 'SELECT ticket,category,app_version,manufacturer,device_model,android_version,vpn_state,network_type,description,diagnostics,status,admin_note,created_at FROM reports';
 $args = [];
 if (in_array($filter, $allowed, true)) { $sql .= ' WHERE status=?'; $args[] = $filter; }
@@ -50,7 +51,7 @@ $count = $pdo->query("SELECT status, COUNT(*) c FROM reports GROUP BY status")->
 </style><header><b>⚡ Fast VPN · Центр обращений</b><a href="?logout=1">Выйти</a></header><main>
 <div class="stats"><?php foreach(['new'=>'Новые','in_progress'=>'В работе','resolved'=>'Решены','duplicate'=>'Дубликаты'] as $k=>$label):?><div class="stat"><b><?= (int)($count[$k]??0)?></b><span class="muted"><?=eh($label)?></span></div><?php endforeach;?></div>
 <nav class="filters"><a href="/admin/">Все</a><?php foreach($allowed as $s):?><a href="?status=<?=$s?>"><?=eh($s)?></a><?php endforeach;?></nav>
-<?php foreach($rows as $r):?><article class="ticket"><h3><?=eh($r['ticket'])?> <span class="tag">· <?=eh($r['status'])?></span> <span class="muted">· <?=eh($r['category'])?></span></h3>
+<?php foreach($rows as $r):?><article class="ticket"><h3><?=eh($r['ticket'])?> <span class="tag">· <?=eh($r['status'])?></span> <span class="muted">· <?=eh($categoryLabels[$r['category']] ?? 'Другое')?></span></h3>
 <div class="muted"><?=eh($r['created_at'])?> UTC · <?=eh($r['app_version'])?> · <?=eh($r['manufacturer'].' '.$r['device_model'])?> · Android <?=eh($r['android_version'])?> · <?=eh($r['network_type'])?> · VPN <?=eh($r['vpn_state'])?></div>
 <?php if($r['description']!==''):?><p class="desc"><?=eh($r['description'])?></p><?php endif;?>
 <details><summary>Диагностика</summary><pre class="diag"><?=eh($r['diagnostics'])?></pre></details>
