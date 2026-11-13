@@ -80,6 +80,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
         @Volatile var lastError: String? = null
         /** Скорость загрузки сейчас, байт/с (обновляется раз в 2 секунды) — для спидометра на главном. */
         @Volatile var downBps = 0.0
+        /** Скорость отдачи сейчас, байт/с. */
+        @Volatile var upBps = 0.0
         @Volatile var ports: BoxConfig.Ports? = null
         /** Когда ядро последний раз поднялось — первые секунды после запуска обход ещё «прогревается» */
         @Volatile var upAt = 0L
@@ -281,6 +283,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 dayBytes += dDown + dUp
                 if (++ticks % 15 == 0) flush()
                 downBps = dDown / sec
+                upBps = dUp / sec
                 val text = "↓ ${fmtBytes(dDown / sec)}/с · ↑ ${fmtBytes(dUp / sec)}/с"
                 val sub = "за сессию ${fmtBytes(session.toDouble())} · сегодня ${fmtBytes(dayBytes.toDouble())}"
                 // Уведомление перерисовываем, только если что-то поменялось
@@ -428,6 +431,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private fun stopBox(keepForeground: Boolean = false) {
         isRunning = false
         downBps = 0.0
+        upBps = 0.0
         try { Widget.update(this) } catch (_: Exception) {}
         ports = null
         XrayCore.stop()
