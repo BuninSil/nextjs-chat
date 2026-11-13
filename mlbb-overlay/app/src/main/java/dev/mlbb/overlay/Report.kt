@@ -67,17 +67,19 @@ object Report {
         return created
     }
 
-    private fun networkType(ctx: Context): String = try {
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return "нет сети"
-        val caps = cm.getNetworkCapabilities(network) ?: return "неизвестно"
-        when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная сеть"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-            else -> "другая сеть"
-        }
-    } catch (_: Exception) { "неизвестно" }
+    private fun networkType(ctx: Context): String {
+        return try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return "нет сети"
+            val caps = cm.getNetworkCapabilities(network) ?: return "неизвестно"
+            when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная сеть"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+                else -> "другая сеть"
+            }
+        } catch (_: Exception) { "неизвестно" }
+    }
 
     private fun safeDiagnostics(ctx: Context): String {
         val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://|https?://)")
