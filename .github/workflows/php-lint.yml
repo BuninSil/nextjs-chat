@@ -1,0 +1,23 @@
+name: Fast VPN PHP check
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "hosting-spaceweb/**"
+      - ".github/workflows/php-lint.yml"
+  workflow_dispatch:
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_mysql
+      - name: Проверить синтаксис PHP
+        run: |
+          find hosting-spaceweb/public -type f -name '*.php' -print0 | xargs -0 -n1 php -l
