@@ -89,8 +89,8 @@ object Ui {
 
     val theme: Theme get() {
         val sel = THEMES.firstOrNull { it.id == AppSettings.theme } ?: THEMES[0]
-        // Новый дизайн — эксперимент поверх тёмной темы по умолчанию; свои темы не трогаем
-        return if (AppSettings.newDesign && sel.id == "dark") NEW_DARK else sel
+        // Новый дизайн меняет только компоновку. Выбранная пользователем цветовая схема остаётся прежней.
+        return sel
     }
 
     val BG get() = theme.bg.toInt()
