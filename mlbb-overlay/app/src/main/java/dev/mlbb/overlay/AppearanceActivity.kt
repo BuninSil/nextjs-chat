@@ -250,7 +250,7 @@ class AppearanceActivity : AppCompatActivity() {
         val c = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(d(12f), d(12f), d(12f), d(12f))
-            background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
+            background = if (AppSettings.newDesign) Ui.surface(this@AppearanceActivity, Ui.CARD, 18f, selected) else Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
                 if (selected) setStroke(d(2f), Ui.GREEN)
             }
         }
