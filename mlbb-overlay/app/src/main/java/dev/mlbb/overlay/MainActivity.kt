@@ -31,6 +31,9 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var statusLine: TextView
+    private lateinit var protectedBadge: LinearLayout
+    private lateinit var protectedIcon: TextView
+    private lateinit var protectedLabel: TextView
     private lateinit var serverFlag: TextView
     private lateinit var subWarn: TextView
     private lateinit var serverName: TextView
@@ -562,14 +565,16 @@ class MainActivity : AppCompatActivity() {
         content.addView(top)
         content.addView(Ui.space(this, 18f))
 
-        val protected = LinearLayout(this).apply {
+        protectedBadge = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            background = Ui.rounded(Ui.SEL, d(18f).toFloat())
+            background = Ui.surface(this@MainActivity, Ui.CARD2, 18f)
             setPadding(d(14f), d(13f), d(14f), d(13f))
-            addView(Ui.text(this@MainActivity, "✓", 22f, Ui.GREEN, bold = true))
-            addView(Ui.text(this@MainActivity, "  ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ", 15f, Ui.GREEN, bold = true))
+            protectedIcon = Ui.text(this@MainActivity, "○", 22f, Ui.MUTED, bold = true)
+            protectedLabel = Ui.text(this@MainActivity, "  VPN ОТКЛЮЧЁН", 15f, Ui.MUTED, bold = true)
+            addView(protectedIcon)
+            addView(protectedLabel)
         }
-        content.addView(protected)
+        content.addView(protectedBadge)
         content.addView(Ui.space(this, 18f))
 
         statusLine = Ui.text(this, "", 18f, bold = true).apply { gravity = Gravity.CENTER }
@@ -729,6 +734,29 @@ class MainActivity : AppCompatActivity() {
             else -> "○  Отключено"
         }
         statusLine.setTextColor(if (running) Ui.GREEN else if (err != null) Ui.RED else Ui.MUTED)
+        if (::protectedBadge.isInitialized) {
+            val badgeColor = when {
+                running -> Ui.GREEN
+                connecting -> Ui.YELLOW
+                err != null -> Ui.RED
+                else -> Ui.MUTED
+            }
+            protectedIcon.text = when {
+                running -> "✓"
+                connecting -> "◌"
+                err != null -> "!"
+                else -> "○"
+            }
+            protectedIcon.setTextColor(badgeColor)
+            protectedLabel.text = when {
+                running -> "  ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ"
+                connecting -> "  УСТАНАВЛИВАЮ СОЕДИНЕНИЕ"
+                err != null -> "  ОШИБКА ПОДКЛЮЧЕНИЯ"
+                else -> "  VPN ОТКЛЮЧЁН"
+            }
+            protectedLabel.setTextColor(badgeColor)
+            protectedBadge.background = Ui.surface(this, if (running) Ui.SEL else Ui.CARD2, 18f, running)
+        }
 
         when (AppSettings.mode) {
             AppSettings.MODE_BOX -> if (AppSettings.selectedTag == XrayCore.BYPASS && XrayCore.available(this)) {
