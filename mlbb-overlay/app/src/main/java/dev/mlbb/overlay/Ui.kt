@@ -131,7 +131,12 @@ object Ui {
     }
 
     /** Стиль системных окон (AlertDialog) под тему — ставить до super.onCreate. */
-    fun themeRes() = if (theme.light) R.style.AppTheme_Light else R.style.AppTheme
+    fun themeRes(): Int = when (AppSettings.theme) {
+        "light" -> R.style.AppTheme_Light
+        "neon" -> R.style.AppTheme_Neon
+        "amoled" -> R.style.AppTheme_Amoled
+        else -> if (AppSettings.newDesign) R.style.AppTheme else R.style.AppTheme_DarkClassic
+    }
 
     /** Переключатель в цветах темы. */
     fun styleSwitch(sw: androidx.appcompat.widget.SwitchCompat) {
