@@ -1,6 +1,10 @@
 <title>Fast VPN — быстрый VPN-клиент для Android</title>
 <meta name="description" content="Fast VPN — Android-клиент для твоей подписки. Автовыбор сервера, стабильное соединение и российские сайты напрямую.">
 <meta name="theme-color" content="#080B0A">
+<meta name="application-name" content="Fast VPN">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Fast VPN — быстрый VPN-клиент для Android">
+<meta property="og:description" content="VPN для Android по твоей подписке. Автовыбор сервера, стабильное соединение и российские сайты напрямую.">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -36,7 +40,50 @@
   }
 
   * { box-sizing: border-box; }
-  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  html { scroll-behavior: smooth; }
+  body { position: relative; background: var(--bg); color: var(--fg); font-family: var(--f-body); line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  /* Атмосферный фон: только CSS, без canvas, JS и тяжёлых фильтров. */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(ellipse 42% 34% at 88% 8%, rgba(48,217,106,.105), transparent 72%),
+      radial-gradient(ellipse 35% 28% at 4% 48%, rgba(255,217,138,.055), transparent 74%),
+      linear-gradient(rgba(48,217,106,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(48,217,106,.025) 1px, transparent 1px);
+    background-size: auto, auto, 54px 54px, 54px 54px;
+    mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.72) 42%, transparent 92%);
+    animation: ambient-drift 28s ease-in-out infinite alternate;
+  }
+  @keyframes ambient-drift {
+    from { background-position: 0 0, 0 0, 0 0, 0 0; }
+    to { background-position: 2% 3%, -2% 5%, 0 18px, 18px 0; }
+  }
+  @keyframes beam-breathe {
+    0%, 100% { opacity: .65; transform: translate3d(0,0,0) scale(1); }
+    50% { opacity: 1; transform: translate3d(-1.5%,1%,0) scale(1.035); }
+  }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes signal-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(48,217,106,.32); }
+    50% { box-shadow: 0 0 0 6px rgba(48,217,106,0); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .beam { animation: beam-breathe 15s ease-in-out infinite; }
+    .hero-inner > * { animation: rise-in .75s both; }
+    .hero-inner > *:nth-child(2) { animation-delay: .08s; }
+    .hero-inner > *:nth-child(3) { animation-delay: .16s; }
+    .hero-inner > *:nth-child(4) { animation-delay: .24s; }
+    .mark .dot { animation: signal-pulse 4s ease-in-out infinite; }
+    .pain, .feat, .step, .bonus-card, .honest { transition: border-color .25s ease, transform .25s ease, background-color .25s ease; }
+    .pain:hover, .feat:hover, .step:hover { transform: translateY(-3px); }
+    .pain:hover { border-color: rgba(48,217,106,.38); }
+    .feat:hover, .step:hover { border-top-color: var(--go); }
+    .chip { transition: border-color .2s ease, color .2s ease, background-color .2s ease; }
+    .chip:hover { border-color: rgba(48,217,106,.55); color: var(--fg); background: rgba(48,217,106,.055); }
+  }
 
   .wrap {
     max-width: var(--maxw);
@@ -61,7 +108,7 @@
     background: radial-gradient(ellipse 54% 70% at 88% 0%, rgba(255,217,138,0.09), transparent 72%);
     transform: none;
   }
-  .beam::after { content: none; }
+  .beam::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 28% 42% at 72% 18%, rgba(48,217,106,.075), transparent 72%); }
 
   .hero-inner { position: relative; z-index: 1; display: grid; gap: 30px; max-width: 790px; }
   .hero-inner::after { content: "ANDROID CLIENT  /  YOUR SUBSCRIPTION"; display: block; width: fit-content; margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--faint); font: 10px var(--f-mono); letter-spacing: .12em; }
@@ -191,8 +238,7 @@
     section { padding-block: 56px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .beam { animation: none; }
-    .btn { transition: none; }
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
 </style>
 
