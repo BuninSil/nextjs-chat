@@ -289,7 +289,10 @@ object ServerTester {
 
     private fun tcpRtt(net: Network?, addr: InetAddress, port: Int, timeoutMs: Int = 1500): Int? = try {
         Socket().use { s ->
-            try { net?.bindSocket(s) } catch (_: Exception) {}
+            // Если Android не смог привязать сокет к физической сети, нельзя продолжать
+            // через default route: при активном VPN проверка иначе уйдёт в сам туннель
+            // и ложно подтвердит наличие интернета.
+            if (net != null) net.bindSocket(s)
             val t = System.nanoTime()
             s.connect(InetSocketAddress(addr, port), timeoutMs)
             ((System.nanoTime() - t) / 1_000_000).toInt().coerceAtLeast(1)
