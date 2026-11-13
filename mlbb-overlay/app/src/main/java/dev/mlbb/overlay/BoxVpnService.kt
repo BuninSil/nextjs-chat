@@ -99,6 +99,10 @@ class BoxVpnService : VpnService(), PlatformInterface {
         }
     }
 
+    private val startLock = Any()
+    @Volatile private var stopRequested = false
+    private class StartCancelledException : Exception("запуск VPN отменён пользователем")
+
     private var box: BoxService? = null
     private var tunPfd: ParcelFileDescriptor? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -118,6 +122,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             val manual = intent.getBooleanExtra("manual", true)
+            synchronized(startLock) { stopRequested = true }
             AppLog.vpn("стоп: " + if (manual) "выключил пользователь" else "выключено автоматически")
             Thread {
                 stopBox()
@@ -146,7 +151,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
         if (intent == null) AppLog.vpn("сервис перезапущен системой (постоянный VPN или после выгрузки)")
         if (!isRunning && !isStarting) {
             AppLog.vpn("старт VPN-ядра")
-            isStarting = true
+            synchronized(startLock) { stopRequested = false; isStarting = true }
             Thread { startBox() }.start()
         }
         return START_STICKY
@@ -301,8 +306,13 @@ class BoxVpnService : VpnService(), PlatformInterface {
         it.localPort
     }
 
+    private fun ensureStartAllowed() {
+        if (stopRequested) throw StartCancelledException()
+    }
+
     private fun startBox() {
         try {
+            ensureStartAllowed()
             lastError = null
             VpnLog.clear()
             AppSettings.load(this)
@@ -319,6 +329,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             // Обход: сразу способ, найденный лабораторией для этой сети
             XrayCore.presetBypassParams(Autopilot.bypassBest(this)?.params())
             XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) }, bypassPort)
+            ensureStartAllowed()
 
             if (!setupDone) {
                 val work = File(filesDir, "box").apply { mkdirs() }
@@ -375,6 +386,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 "РФ напрямую ${AppSettings.ruDirect}, реклама ${AppSettings.adBlock}, приложения режим ${AppSettings.appsMode} (${AppSettings.appsList.size}), " +
                 "стек ${if (AppSettings.compatStack) "gvisor (совместимость)" else "mixed"}")
             var first: BoxService? = null
+            ensureStartAllowed()
             val service = try {
                 Libbox.newService(config(cacheFile.path), this).also { first = it; it.start() }
             } catch (e: Exception) {
@@ -384,12 +396,22 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 try { tunPfd?.close() } catch (_: Exception) {}
                 tunPfd = null
                 cacheFile.delete()
+                ensureStartAllowed()
                 Libbox.newService(config(""), this).also { it.start() }
             }
-            box = service
-            ports = p
-            isRunning = true
-            upAt = System.currentTimeMillis()
+            synchronized(startLock) {
+                if (stopRequested) {
+                    try { service.close() } catch (_: Exception) {}
+                    try { tunPfd?.close() } catch (_: Exception) {}
+                    tunPfd = null
+                    XrayCore.stop()
+                    throw StartCancelledException()
+                }
+                box = service
+                ports = p
+                isRunning = true
+                upAt = System.currentTimeMillis()
+            }
             AppLog.vpn("VPN работает")
             // Ядро помнит выбор серверов с прошлого запуска (кэш) — ставим нынешний явно:
             // номера серверов после обновления подписки могли сменить смысл
@@ -406,12 +428,17 @@ class BoxVpnService : VpnService(), PlatformInterface {
             // Оверлей и лог: читаем соединения игры у своего же ядра
             if (AppSettings.gameMode) MonitorService.start(this, p.api, p.secret, p.mixed)
         } catch (e: Exception) {
-            Log.e(TAG, "start failed", e)
-            AppLog.err("VPN не запустился", e)
-            val tail = VpnLog.tail(8)
-            lastError = "Не удалось подключить VPN: ${e.message}" + if (tail.isNotEmpty()) "\n\nЖурнал ядра:\n$tail" else ""
-            stopBox()
-            stopSelf()
+            if (stopRequested || e is StartCancelledException) {
+                AppLog.vpn("запуск VPN отменён до завершения")
+                stopBox()
+            } else {
+                Log.e(TAG, "start failed", e)
+                AppLog.err("VPN не запустился", e)
+                val tail = VpnLog.tail(8)
+                lastError = "Не удалось подключить VPN: ${e.message}" + if (tail.isNotEmpty()) "\n\nЖурнал ядра:\n$tail" else ""
+                stopBox()
+                stopSelf()
+            }
         } finally {
             isStarting = false
         }
@@ -429,23 +456,23 @@ class BoxVpnService : VpnService(), PlatformInterface {
     }
 
     private fun stopBox(keepForeground: Boolean = false) {
-        isRunning = false
-        downBps = 0.0
-        upBps = 0.0
+        val oldBox: BoxService?
+        val oldTun: ParcelFileDescriptor?
+        synchronized(startLock) {
+            isRunning = false
+            downBps = 0.0
+            upBps = 0.0
+            ports = null
+            oldBox = box
+            box = null
+            oldTun = tunPfd
+            tunPfd = null
+        }
         try { Widget.update(this) } catch (_: Exception) {}
-        ports = null
         XrayCore.stop()
         MonitorService.stop(this)
-        try {
-            box?.close()
-        } catch (_: Exception) {
-        }
-        box = null
-        try {
-            tunPfd?.close()
-        } catch (_: Exception) {
-        }
-        tunPfd = null
+        try { oldBox?.close() } catch (_: Exception) {}
+        try { oldTun?.close() } catch (_: Exception) {}
         if (!keepForeground) stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -499,7 +526,13 @@ class BoxVpnService : VpnService(), PlatformInterface {
                 "Настройки → Сеть и интернет → VPN → шестерёнка у того приложения → выключи «Постоянный VPN» " +
                 "и «Блокировать соединения без VPN»."
         )
-        tunPfd = pfd
+        synchronized(startLock) {
+            if (stopRequested) {
+                pfd.close()
+                throw StartCancelledException()
+            }
+            tunPfd = pfd
+        }
         return pfd.fd
     }
 
