@@ -83,8 +83,7 @@ jobs:
           git add . && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "Official Android APK ${GITHUB_REF_NAME} from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" apk-builds
 
-      # Публикация в SpaceWeb включается только при настроенных Secrets и официальном теге.
-      # SSH/SFTP на бесплатном тестовом периоде может быть выключен в панели SpaceWeb.
+      # Публикация в SpaceWeb включается только при настроенных HTTPS Secrets и официальном теге.
       - name: Prepare APK for SpaceWeb
         if: startsWith(github.ref, 'refs/tags/mlbb-v')
         run: |
