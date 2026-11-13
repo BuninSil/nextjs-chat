@@ -84,6 +84,7 @@ object Report {
     private fun safeDiagnostics(ctx: Context): String {
         val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://|https?://)")
         val ip = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
+        val ipv6 = Regex("""(?i)\\b(?:[0-9a-f]{1,4}:){2,}[0-9a-f:]{2,}\\b""")
         val longToken = Regex("""[A-Za-z0-9_+/=-]{36,}""")
         val selected = AppLog.all().lineSequence()
             .filter { line ->
@@ -93,10 +94,11 @@ object Report {
             }
             .toList()
             .takeLast(100)
-            .map { it.replace(ip, "[IP скрыт]").replace(longToken, "[токен скрыт]").take(300) }
+            .map { it.replace(ip, "[IP скрыт]").replace(ipv6, "[IPv6 скрыт]").replace(longToken, "[токен скрыт]").take(300) }
         val crash = CrashReport.last(ctx)?.let {
             "\nПоследнее падение:\n" + it
                 .replace(ip, "[IP скрыт]")
+                .replace(ipv6, "[IPv6 скрыт]")
                 .replace(Regex("(?i)https?://\\S+"), "[адрес скрыт]")
                 .replace(longToken, "[токен скрыт]")
                 .take(1800)
@@ -106,8 +108,9 @@ object Report {
 
     private fun payload(ctx: Context, description: String): JSONObject {
         val vpn = when {
-            BoxVpnService.isRunning -> "connected"
+            BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning -> "connected"
             BoxVpnService.isStarting -> "connecting"
+            BoxVpnService.lastError != null || CaptureVpnService.lastError != null || MonitorService.lastError != null -> "error"
             else -> "off"
         }
         return JSONObject().apply {
