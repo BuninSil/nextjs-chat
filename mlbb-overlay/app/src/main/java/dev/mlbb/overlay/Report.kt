@@ -84,7 +84,7 @@ object Report {
     private fun safeDiagnostics(ctx: Context): String {
         val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://|https?://)")
         val ip = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
-        val ipv6 = Regex("""(?i)\\b(?:[0-9a-f]{1,4}:){2,}[0-9a-f:]{2,}\\b""")
+        val ipv6 = Regex("""(?i)\b(?:[0-9a-f]{1,4}:){2,}[0-9a-f:]{2,}\b""")
         val longToken = Regex("""[A-Za-z0-9_+/=-]{36,}""")
         val selected = AppLog.all().lineSequence()
             .filter { line ->
