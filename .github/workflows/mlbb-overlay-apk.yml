@@ -106,10 +106,10 @@ jobs:
         run: |
           NOTES="$(git log -1 --pretty=%s "$GITHUB_SHA")"
           curl --fail --silent --show-error --max-time 180 \
-            -X POST "$SPACEWEB_SITE_URL/api/publish.php" \
+            -X POST "${SPACEWEB_SITE_URL%/}/api/publish.php" \
             -H "X-Publish-Signature: $APK_PUBLISH_SIGNATURE" \
             -F "version=$APK_VERSION" \
             -F "version_code=$APK_VERSION_CODE" \
             -F "sha256=$APK_SHA256" \
-            -F "notes=$NOTES" \
+            --form-string "notes=$NOTES" \
             -F "apk=@deploy/fast-vpn.apk;type=application/vnd.android.package-archive"
