@@ -448,10 +448,7 @@ class SettingsActivity : AppCompatActivity() {
         dlg.show()
     }
 
-    private fun section(title: String) = Ui.text(this, title.uppercase(), 12f, Ui.MUTED, bold = true).apply {
-        setPadding(d(4f), d(22f), 0, d(8f))
-        letterSpacing = 0.08f
-    }
+    private fun section(title: String) = Ui.sectionLabel(this, title)
 
     private fun divider() = View(this).apply {
         setBackgroundColor(Ui.DIVIDER)
