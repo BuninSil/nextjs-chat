@@ -65,6 +65,7 @@ jobs:
 
       # Копия APK в ветке apk-builds (перезаписывается), чтобы забрать её обычным git fetch
       - name: Publish APK to apk-builds branch
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
