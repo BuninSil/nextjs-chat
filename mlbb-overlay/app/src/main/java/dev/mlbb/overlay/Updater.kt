@@ -9,8 +9,7 @@ import org.json.JSONArray
 import java.io.File
 
 /**
- * Автообновление по GitHub Releases. CI публикует релиз с тегом mlbb-v1.0.<versionCode>
- * и ассетом mlbb-overlay.apk в публичном репозитории BuildConfig.UPDATE_REPO.
+ * Автообновление с собственного сайта Fast VPN. GitHub используется только для сборки APK.
  */
 object Updater {
     /** apkSize — размер APK из релиза: по нему узнаём, что файл уже скачан целиком. */
@@ -30,7 +29,7 @@ object Updater {
         if (!json.optBoolean("available", false)) return null
         val version = json.optString("version")
         val code = json.optInt("versionCode", 0)
-        if (!version.matches(Regex("""1\\.0\\.\\d{1,8}""")) || code <= BuildConfig.VERSION_CODE) return null
+        if (!version.matches(Regex("""1\.0\.\d{1,8}""")) || code <= BuildConfig.VERSION_CODE) return null
         val sha = json.optString("sha256").lowercase()
         if (!sha.matches(Regex("""[a-f0-9]{64}"""))) throw RuntimeException("сервер вернул некорректную контрольную сумму APK")
         val size = json.optLong("size", -1L)
@@ -138,7 +137,7 @@ object Updater {
                 digest.update(buffer, 0, n)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     /** true — установщик открыт; false — сначала нужно разрешить установку из этого приложения. */
