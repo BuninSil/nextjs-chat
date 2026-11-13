@@ -683,6 +683,11 @@ class MainActivity : AppCompatActivity() {
         wifiCard = LinearLayout(this)
         wifiLine = Ui.text(this, "")
         wifiAdvice = Ui.text(this, "")
+        // В новом интерфейсе тоже оставляем одну заметную точку отправки диагностики.
+        content.addView(Ui.tile(this, R.drawable.ic_log, "Сообщить о проблеме", "автоматическая диагностика · описание по желанию") {
+            Report.show(this)
+        })
+        content.addView(Ui.space(this, 10f))
         infoLine = Ui.text(this, "", 12f, Ui.MUTED)
 
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
