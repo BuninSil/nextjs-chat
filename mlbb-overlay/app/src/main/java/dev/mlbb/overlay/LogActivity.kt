@@ -47,7 +47,7 @@ class LogActivity : AppCompatActivity() {
         summary.setTextColor(Ui.MUTED)
         for (id in listOf(R.id.btnClear, R.id.btnExport)) findViewById<Button>(id).apply {
             setTextColor(Ui.TEXT)
-            background = Ui.rounded(Ui.CARD2, Ui.dp(this@LogActivity, 12f).toFloat())
+            background = if (AppSettings.newDesign) Ui.surface(this@LogActivity, Ui.CARD2, 14f) else Ui.rounded(Ui.CARD2, Ui.dp(this@LogActivity, 12f).toFloat())
         }
         val list = findViewById<RecyclerView>(R.id.list)
         list.layoutManager = LinearLayoutManager(this)
