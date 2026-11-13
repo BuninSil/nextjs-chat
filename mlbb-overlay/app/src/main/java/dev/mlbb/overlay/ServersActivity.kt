@@ -65,8 +65,9 @@ class ServersActivity : AppCompatActivity() {
         val actions = LinearLayout(this)
         actions.addView(Ui.tile(this, R.drawable.ic_exits, "Выходы", "в какой стране сервер выходит в интернет") { checkExits() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
-        actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() },
-            LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
+        actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() }.apply {
+            if (AppSettings.newDesign) background = Ui.surface(this@ServersActivity, Ui.CARD, 16f)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         root.addView(actions)
         root.addView(Ui.text(this, "Подбор по вашей сети", 17f, bold = true).apply {
             setPadding(d(2f), d(16f), 0, d(2f))
