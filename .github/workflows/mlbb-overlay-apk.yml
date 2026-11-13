@@ -54,7 +54,7 @@ jobs:
 
       # Релиз — источник автообновления в приложении (versionCode = номер запуска).
       # Префикс тега mlbb-v не меняем: по нему уже установленные версии находят обновления.
-      # Только из main: рабочая ветка собирает APK для проверки, но обновление пользователям не выпускает
+      # Публикация APK в ветку разрешена только при явном официальном Android-теге.
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/mlbb-v')
         env:
@@ -69,7 +69,7 @@ jobs:
 
       # Копия APK в ветке apk-builds (перезаписывается), чтобы забрать её обычным git fetch
       - name: Publish APK to apk-builds branch
-        if: github.ref == 'refs/heads/main'
+        if: startsWith(github.ref, 'refs/tags/mlbb-v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -77,5 +77,5 @@ jobs:
           cd /tmp/pub
           echo "${GITHUB_SHA}" > SOURCE_COMMIT
           git init -q && git checkout -q -b apk-builds
-          git add . && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "Debug APK from ${GITHUB_SHA}"
+          git add . && git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "Official Android APK ${GITHUB_REF_NAME} from ${GITHUB_SHA}"
           git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" apk-builds
