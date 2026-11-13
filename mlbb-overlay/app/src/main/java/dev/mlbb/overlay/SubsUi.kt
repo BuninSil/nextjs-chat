@@ -17,7 +17,6 @@ object SubsUi {
     private fun styleDialog(a: Activity, dialog: AlertDialog) {
         if (!AppSettings.newDesign) return
         dialog.window?.setBackgroundDrawable(Ui.rounded(Ui.CARD, Ui.dp(a, 20f).toFloat()))
-        dialog.findViewById<TextView>(android.R.id.alertTitle)?.setTextColor(Ui.TEXT)
         dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Ui.SUB)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
