@@ -7,5 +7,5 @@ return [
     'db_pass' => 'УКАЗАТЬ',
     'admin_password_hash' => 'СОЗДАЁТСЯ_УСТАНОВЩИКОМ',
     'publish_secret' => 'СОЗДАЁТСЯ_УСТАНОВЩИКОМ',
-    'client_key' => 'fastvpn-android-v1',
+    'client_key' => 'android-v1',
 ];
