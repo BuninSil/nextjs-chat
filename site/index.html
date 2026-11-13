@@ -407,6 +407,84 @@
     .feat:hover,.step:hover,.pain:hover { transform:translateY(-5px);border-color:rgba(84,245,138,.55);box-shadow:0 18px 42px rgba(0,0,0,.22); }
   }
 
+
+  /* Единая спокойная палитра приложения: никаких кислотных свечений и карточек-градиентов. */
+  :root {
+    --bg: #0D0F13;
+    --panel: #12161C;
+    --card: #161A21;
+    --card-2: #1F242C;
+    --line: #2A3039;
+    --line-soft: #232932;
+    --fg: #EBEBEF;
+    --muted: #8A9099;
+    --faint: #626A75;
+    --go: #34C759;
+    --go-deep: #1F8F4C;
+    --go-ink: #07140D;
+    --light: #C7CBD1;
+    --far: #FF5A52;
+  }
+  body::before,.beam,.beam::after { display:none !important; }
+  .hero {
+    background: var(--bg) !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+  .mark .dot { background: var(--go) !important; box-shadow:none !important; }
+  .btn,.btn:hover {
+    background: var(--go) !important;
+    color: var(--go-ink) !important;
+    border: 1px solid var(--go) !important;
+    box-shadow:none !important;
+  }
+  .hero-shot {
+    min-height: 480px;
+    padding: 24px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:24px;
+    box-shadow:none;
+  }
+  .hero-shot img {
+    display:block;
+    width:auto;
+    max-width:min(100%, 390px);
+    max-height: min(68vh, 590px);
+    object-fit:contain;
+    border:1px solid var(--line);
+    border-radius:18px;
+    background:#090B0E;
+    box-shadow:0 18px 44px rgba(0,0,0,.28);
+  }
+  .shot-caption {
+    color:var(--muted);
+    font:10px var(--f-mono);
+    letter-spacing:.12em;
+    text-align:center;
+  }
+  .pain,.feat,.bonus-card,.honest {
+    background:var(--card) !important;
+    border-color:var(--line) !important;
+    box-shadow:none !important;
+  }
+  .pain:hover,.feat:hover,.step:hover {
+    border-color:#46515E !important;
+    box-shadow:0 12px 28px rgba(0,0,0,.18) !important;
+  }
+  .final { background:var(--panel) !important; }
+  .final .glow { display:none !important; }
+  .chip { background:var(--card-2) !important; border-color:var(--line) !important; color:var(--muted) !important; }
+  .preview-orbit,.preview-top,.preview-status,.preview-stats,.preview-bottom { display:none !important; }
+  @media (max-width: 800px) {
+    .hero-shot { min-height:0; padding:18px; }
+    .hero-shot img { max-height:560px; max-width:min(100%, 340px); }
+  }
+
 </style>
 
 <header class="hero">
@@ -440,19 +518,10 @@
       <span class="chip">Без рекламы</span>
     </div>
   </div>
-  <aside class="hero-preview" aria-label="Пример интерфейса Fast VPN">
-    <div class="preview-top"><span class="preview-brand"><span class="preview-bolt">⚡</span> FAST VPN</span><span class="preview-live"><i></i> ИНТЕРФЕЙС ПРИЛОЖЕНИЯ</span></div>
-    <div class="preview-orbit">
-      <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
-      <div class="orbit-core"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.5 13h5.8l-.7 8.5L18.5 11h-5.8l.5-8.5Z" fill="currentColor"/></svg></div>
-      <span class="orbit-node node-a"></span><span class="orbit-node node-b"></span><span class="orbit-node node-c"></span>
-    </div>
-    <div class="preview-status"><div><span class="status-label">РЕЖИМ РАБОТЫ</span><strong>Автовыбор сервера</strong></div><span class="status-check">✓</span></div>
-    <div class="preview-stats">
-      <div><span>ПОДКЛЮЧЕНИЕ</span><b>В один тап</b></div>
-      <div><span>МАРШРУТИЗАЦИЯ</span><b>Умная</b></div>
-    </div>
-    <div class="preview-bottom"><span>ТВОЯ СЕТЬ. ТВОИ ПРАВИЛА.</span><span class="preview-bars"><i></i><i></i><i></i><i></i><i></i></span></div>
+  <aside class="hero-shot" aria-label="Настоящий экран приложения Fast VPN">
+    <img src="https://raw.githubusercontent.com/BuninSil/nextjs-chat/main/docs/img/main.jpg"
+         alt="Главный экран приложения Fast VPN" loading="eager" decoding="async">
+    <span class="shot-caption">РЕАЛЬНЫЙ ИНТЕРФЕЙС ПРИЛОЖЕНИЯ</span>
   </aside>
 </div>
 </header>
