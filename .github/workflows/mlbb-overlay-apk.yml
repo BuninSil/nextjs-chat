@@ -17,6 +17,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SPACEWEB_HOST: ${{ secrets.SPACEWEB_HOST }}
+      SPACEWEB_USER: ${{ secrets.SPACEWEB_USER }}
+      SPACEWEB_PASSWORD: ${{ secrets.SPACEWEB_PASSWORD }}
+      SPACEWEB_FINGERPRINT: ${{ secrets.SPACEWEB_FINGERPRINT }}
+      SPACEWEB_INCOMING_PATH: ${{ secrets.SPACEWEB_INCOMING_PATH }}
+      SPACEWEB_SITE_URL: ${{ secrets.SPACEWEB_SITE_URL }}
+      SPACEWEB_PUBLISH_SECRET: ${{ secrets.SPACEWEB_PUBLISH_SECRET }}
     defaults:
       run:
         working-directory: mlbb-overlay
@@ -84,8 +92,6 @@ jobs:
       # SSH/SFTP на бесплатном тестовом периоде может быть выключен в панели SpaceWeb.
       - name: Prepare APK for SpaceWeb
         if: startsWith(github.ref, 'refs/tags/mlbb-v')
-        env:
-          PUBLISH_SECRET: ${{ secrets.SPACEWEB_PUBLISH_SECRET }}
         run: |
           mkdir -p deploy
           cp /tmp/fast-vpn.apk deploy/fast-vpn.apk
@@ -107,15 +113,13 @@ jobs:
           password: ${{ secrets.SPACEWEB_PASSWORD }}
           port: 22
           fingerprint: ${{ secrets.SPACEWEB_FINGERPRINT }}
-          source: "deploy/fast-vpn.apk"
+          source: "mlbb-overlay/deploy/fast-vpn.apk"
           target: ${{ secrets.SPACEWEB_INCOMING_PATH }}
           strip_components: 1
           overwrite: true
 
       - name: Activate APK on SpaceWeb and remove previous version
         if: startsWith(github.ref, 'refs/tags/mlbb-v') && env.SPACEWEB_HOST != '' && env.SPACEWEB_USER != '' && env.SPACEWEB_PASSWORD != '' && env.SPACEWEB_FINGERPRINT != '' && env.SPACEWEB_INCOMING_PATH != '' && env.SPACEWEB_SITE_URL != '' && env.SPACEWEB_PUBLISH_SECRET != ''
-        env:
-          SPACEWEB_SITE_URL: ${{ secrets.SPACEWEB_SITE_URL }}
         run: |
           BODY="$(printf '{"version":"%s","version_code":%s,"sha256":"%s"}' "$APK_VERSION" "$APK_VERSION_CODE" "$APK_SHA256")"
           curl --fail --silent --show-error --max-time 20 \
