@@ -693,16 +693,10 @@ class MainActivity : AppCompatActivity() {
             background = Ui.surface(this@MainActivity, Ui.CARD2, 16f)
             setPadding(d(14f), d(12f), d(14f), d(12f))
 
-            val reportIcon = Ui.text(this@MainActivity, "", 20f, Ui.GREEN).apply {
-                gravity = Gravity.CENTER
-                text = Ui.iconText(this@MainActivity, R.drawable.ic_log, "", 20f, tint = Ui.GREEN)
-                background = Ui.surface(this@MainActivity, Ui.SEL, 12f)
-            }
-            addView(reportIcon, LinearLayout.LayoutParams(d(42f), d(42f)))
-
+            // В новом интерфейсе плитка без отдельного значка: только текст и стрелка.
             val labels = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(d(12f), 0, d(8f), 0)
+                setPadding(0, 0, d(8f), 0)
                 addView(Ui.text(this@MainActivity, "Сообщить о проблеме", 14f, Ui.TEXT, bold = true))
                 addView(Ui.text(this@MainActivity, "Отправить диагностику приложения", 11f, Ui.MUTED).apply {
                     setPadding(0, d(3f), 0, 0)
@@ -1243,11 +1237,16 @@ class MainActivity : AppCompatActivity() {
         val d = { v: Float -> Ui.dp(this, v) }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(d(20f), d(8f), d(20f), 0)
+            background = if (AppSettings.newDesign) Ui.surface(this@MainActivity, Ui.CARD, 20f)
+                else Ui.rounded(Ui.CARD, d(18f).toFloat())
+            setPadding(d(16f), d(14f), d(16f), d(12f))
         }
         box.addView(TextView(this).apply {
             text = "Ссылка подписки — та же, что в Karing, Hiddify или v2rayNG.\n" +
                 "Можно вставить и сами серверы: строки vless://, trojan://… или base64-блок."
+            setTextColor(Ui.SUB)
+            textSize = 14f
+            setLineSpacing(d(2f).toFloat(), 1f)
         })
         // Токен подписки в поле замаскирован — полностью по кнопке «Показать»
         val saved = AppSettings.subUrl
@@ -1255,6 +1254,10 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this).apply {
             hint = "https://…"
             setText(masked)
+            setTextColor(Ui.TEXT)
+            setHintTextColor(Ui.HINT)
+            background = Ui.rounded(Ui.INPUT, d(12f).toFloat())
+            setPadding(d(12f), d(10f), d(12f), d(10f))
             // Многострочное: можно вставить и список серверов
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             maxLines = 4
@@ -1293,7 +1296,9 @@ class MainActivity : AppCompatActivity() {
             for ((i, url) in all.withIndex()) {
                 val row = LinearLayout(this).apply {
                     gravity = android.view.Gravity.CENTER_VERTICAL
-                    setPadding(0, d(6f), 0, d(6f))
+                    background = if (AppSettings.newDesign) Ui.surface(this@MainActivity, Ui.CARD2, 12f)
+                        else Ui.rounded(Ui.CARD2, d(12f).toFloat())
+                    setPadding(d(10f), d(8f), d(10f), d(8f))
                 }
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 col.addView(TextView(this).apply {
@@ -1340,9 +1345,16 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Отмена", null)
             .create()
-        // Ссылка с токеном — не в скриншоты, запись экрана и превью «Недавних»
+        // Ссылка с токеном — не в скриншоты, запись экрана и превью «Недавних».
+        // Оформление окна наследует только текущую тему и выбранный вариант интерфейса.
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
+        val titleId = resources.getIdentifier("alertTitle", "id", "android")
+        dialog.findViewById<TextView>(titleId)?.setTextColor(Ui.TEXT)
     }
 
     /** https://host/путь/токен → https://host/…**** (путь с токеном скрыт); не ссылка — как есть */
