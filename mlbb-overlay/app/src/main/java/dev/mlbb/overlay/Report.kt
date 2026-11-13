@@ -5,7 +5,10 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.view.Gravity
+import android.view.WindowManager
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Toast
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -22,40 +25,101 @@ object Report {
     private const val CONSENT = "diagnostics_consent_v1"
     private const val MAX_DIAGNOSTICS = 5500
 
+    /**
+     * Собственное окно вместо системного AlertDialog: одинаково выглядит в старом
+     * и новом интерфейсах и полностью берёт палитру из выбранной темы.
+     */
+    private fun styledDialog(
+        a: Activity,
+        title: String,
+        message: String,
+        positive: String,
+        negative: String? = "Отмена",
+        input: EditText? = null,
+        onPositive: () -> Unit,
+    ) {
+        val dialog = android.app.Dialog(a)
+        val root = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.surface(a, Ui.CARD, 22f)
+            val p = Ui.dp(a, if (AppSettings.newDesign) 22f else 20f)
+            setPadding(p, p, p, p)
+        }
+        root.addView(Ui.text(a, title, if (AppSettings.newDesign) 19f else 18f, Ui.TEXT, bold = true))
+        root.addView(Ui.text(a, message, 13f, Ui.SUB).apply {
+            setLineSpacing(Ui.dp(a, 3f).toFloat(), 1f)
+            setPadding(0, Ui.dp(a, 9f), 0, if (input == null) Ui.dp(a, 18f) else Ui.dp(a, 12f))
+        })
+        input?.let { field ->
+            field.apply {
+                setTextColor(Ui.TEXT)
+                setHintTextColor(Ui.HINT)
+                textSize = 14f
+                minLines = 3
+                maxLines = 5
+                setSingleLine(false)
+                gravity = Gravity.TOP or Gravity.START
+                setPadding(Ui.dp(a, 14f), Ui.dp(a, 12f), Ui.dp(a, 14f), Ui.dp(a, 12f))
+                background = Ui.surface(a, Ui.INPUT, 14f)
+            }
+            root.addView(field, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = Ui.dp(a, 18f)
+            })
+        }
+
+        val actions = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        if (negative != null) {
+            actions.addView(Ui.secondaryBtn(a, negative) { dialog.dismiss() },
+                LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = Ui.dp(a, 8f) })
+        }
+        actions.addView(Ui.primaryBtn(a, positive) {
+            dialog.dismiss()
+            onPositive()
+        }, LinearLayout.LayoutParams(0, -2, if (negative == null) 1f else 1.25f))
+        root.addView(actions)
+
+        dialog.setContentView(root)
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.58f }
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            (a.resources.displayMetrics.widthPixels - Ui.dp(a, 40f)).coerceAtLeast(Ui.dp(a, 280f)),
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+    }
+
     fun show(a: Activity) {
         val prefs = a.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val message = "Fast VPN автоматически соберёт техническую диагностику: версию приложения, модель устройства, Android, состояние VPN и последние строки ошибок после очистки адресов и секретов.\n\n" +
             "В сам отчёт не включаются IP-адреса, ссылки подписок, ключи серверов и содержимое трафика. Хостинг технически видит адрес запроса и использует его хеш только для защиты от спама. Краткое описание можно добавить по желанию."
         if (!prefs.getBoolean(CONSENT, false)) {
-            android.app.AlertDialog.Builder(a)
-                .setTitle("Отправка диагностики")
-                .setMessage(message)
-                .setPositiveButton("Продолжить") { _, _ ->
-                    prefs.edit().putBoolean(CONSENT, true).apply()
-                    askDescription(a)
-                }
-                .setNegativeButton("Отмена", null)
-                .show()
+            styledDialog(a, "Отправка диагностики", message, "Продолжить") {
+                prefs.edit().putBoolean(CONSENT, true).apply()
+                askDescription(a)
+            }
         } else askDescription(a)
     }
 
     private fun askDescription(a: Activity) {
         val input = EditText(a).apply {
             hint = "Краткое описание (необязательно)"
-            minLines = 2
-            maxLines = 4
-            setSingleLine(false)
-            setPadding(32, 20, 32, 20)
         }
-        android.app.AlertDialog.Builder(a)
-            .setTitle("Сообщить о проблеме")
-            .setMessage("Диагностика соберётся автоматически.")
-            .setView(input)
-            .setPositiveButton("Отправить отчёт") { _, _ ->
-                send(a, input.text?.toString()?.trim().orEmpty().take(500))
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
+        styledDialog(
+            a,
+            "Сообщить о проблеме",
+            "Диагностика соберётся автоматически. Опиши, что произошло, если есть детали.",
+            "Отправить отчёт",
+            input = input,
+        ) {
+            send(a, input.text?.toString()?.trim().orEmpty().take(500))
+        }
     }
 
     private fun installId(ctx: Context): String {
@@ -175,11 +239,13 @@ object Report {
                     Toast.makeText(a, "Отчёт отправлен · $ticket", Toast.LENGTH_LONG).show()
                     AppLog.ui("диагностический отчёт отправлен: $ticket")
                 } else {
-                    android.app.AlertDialog.Builder(a)
-                        .setTitle("Не удалось отправить")
-                        .setMessage("Отчёт не потерян намеренно, но отправка не состоялась: $failure.\n\nПопробуй ещё раз, когда появится соединение.")
-                        .setPositiveButton("Понятно", null)
-                        .show()
+                    styledDialog(
+                        a,
+                        "Не удалось отправить",
+                        "Отчёт не отправлен: $failure.\n\nПопробуй ещё раз, когда появится соединение.",
+                        "Понятно",
+                        negative = null,
+                    ) {}                 .show()
                 }
             }
         }.start()
