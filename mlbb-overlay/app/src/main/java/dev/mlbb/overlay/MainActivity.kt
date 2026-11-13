@@ -190,12 +190,13 @@ class MainActivity : AppCompatActivity() {
     private var builtProfile = ""
     private var builtTheme = ""
     private var builtAnim = ""
+    private var builtNewInterface = true
 
     override fun onResume() {
         super.onResume()
         AppSettings.load(this)
         AutoUpdate.uiVisible = true
-        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme || AppSettings.anim != builtAnim) {
+        if (AppSettings.profile != builtProfile || AppSettings.theme != builtTheme || AppSettings.anim != builtAnim || AppSettings.newInterface != builtNewInterface) {
             recreate()
             return
         }
@@ -258,6 +259,75 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------- UI -------------------------------
 
     private fun buildUi(): android.view.View {
+        builtNewInterface = AppSettings.newInterface
+        return if (AppSettings.newInterface) buildUiModern() else buildUiLegacy()
+    }
+
+    /**
+     * Новый главный экран собирается из тех же рабочих элементов, что и прежний:
+     * VPN-кнопка, сервер, IP, мастер настройки и игровые инструменты не дублируются.
+     * Поэтому переключение интерфейса не меняет сетевую логику и состояние VPN.
+     */
+    private fun buildUiModern(): android.view.View {
+        val frame = buildUiLegacy() as android.widget.FrameLayout
+        val scroll = (0 until frame.childCount).map { frame.getChildAt(it) }
+            .first { it is ScrollView } as ScrollView
+        val root = scroll.getChildAt(0) as LinearLayout
+        val original = (0 until root.childCount).map { root.getChildAt(it) }
+
+        fun directChildContaining(target: android.view.View): android.view.View? {
+            fun contains(parent: android.view.View, child: android.view.View): Boolean {
+                if (parent === child) return true
+                if (parent !is android.view.ViewGroup) return false
+                for (i in 0 until parent.childCount) if (contains(parent.getChildAt(i), child)) return true
+                return false
+            }
+            return original.firstOrNull { contains(it, target) }
+        }
+
+        val header = original.first()
+        val status = directChildContaining(statusLine)!!
+        val play = directChildContaining(playButton)!!
+        val hint = playHint
+        val setup = setupCard
+        val launch = launchRow
+        val stop = stopButton
+        val wifi = wifiCard
+        val battle = battleCard
+        val info = infoLine
+
+        // Порядок нового экрана: сначала состояние и подключение, затем подсказки и инструменты.
+        val primary = listOfNotNull(header, status, play, hint, setup, launch, stop, wifi, battle, info)
+            .distinct()
+        val rest = original.filterNot { it in primary }
+        root.removeAllViews()
+        (primary + rest).forEachIndexed { index, view ->
+            val lp = view.layoutParams as? LinearLayout.LayoutParams
+                ?: LinearLayout.LayoutParams(-1, -2)
+            lp.width = -1
+            if (view === status || view === setup || view === wifi || view === battle) {
+                lp.bottomMargin = Ui.dp(this, 12f)
+            } else if (view === play) {
+                lp.bottomMargin = Ui.dp(this, 2f)
+            } else {
+                lp.bottomMargin = Ui.dp(this, 8f)
+            }
+            root.addView(view, lp)
+        }
+        root.setPadding(Ui.dp(this, 18f), Ui.dp(this, 18f), Ui.dp(this, 18f), Ui.dp(this, 24f))
+        root.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Ui.BG)
+        }
+        // Более собранные карточки и чёткая иерархия без тяжёлых градиентов и декоративного шума.
+        listOf(status, setup, wifi, battle).forEach { card ->
+            card.background = Ui.rounded(Ui.CARD, Ui.dp(this, 20f).toFloat()).apply {
+                setStroke(Ui.dp(this@MainActivity, 1f), Ui.DIVIDER)
+            }
+        }
+        return frame
+    }
+
+    private fun buildUiLegacy(): android.view.View {
         builtProfile = AppSettings.profile
         builtTheme = AppSettings.theme
         builtAnim = AppSettings.anim
