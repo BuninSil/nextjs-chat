@@ -91,9 +91,9 @@ object Report {
                     line.contains("[CORE]") || line.contains("[NET]") || line.contains("[UPD]") ||
                     line.contains("[AUTO]")) && !forbidden.containsMatchIn(line)
             }
+            .toList()
             .takeLast(100)
             .map { it.replace(ip, "[IP скрыт]").replace(longToken, "[токен скрыт]").take(300) }
-            .toList()
         val crash = CrashReport.last(ctx)?.let {
             "\nПоследнее падение:\n" + it
                 .replace(ip, "[IP скрыт]")
