@@ -486,12 +486,6 @@ class MainActivity : AppCompatActivity() {
             ))
         }
 
-        // Единая точка отправки: приложение само соберёт диагностику, описание необязательно.
-        root.addView(Ui.space(this, 10f))
-        root.addView(Ui.tile(this, R.drawable.ic_log, "Сообщить о проблеме", "автоматическая диагностика · описание по желанию") {
-            Report.show(this)
-        })
-
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
 
@@ -571,7 +565,7 @@ class MainActivity : AppCompatActivity() {
         top.addView(Ui.text(this, "⚡", 30f, Ui.GREEN, bold = true))
         top.addView(Ui.text(this, "Fast VPN", 25f, bold = true).apply { setPadding(d(10f), 0, 0, 0) },
             LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(Ui.iconButton(this, R.drawable.ic_settings_w) { showSettings() })
+        // Настройки доступны через нижнюю навигацию.
         content.addView(top)
         content.addView(Ui.space(this, 18f))
 
@@ -686,31 +680,6 @@ class MainActivity : AppCompatActivity() {
         wifiCard = LinearLayout(this)
         wifiLine = Ui.text(this, "")
         wifiAdvice = Ui.text(this, "")
-        // Компактное действие в стиле карточек нового интерфейса, без вида отдельной системной плитки.
-        val reportAction = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = Ui.surface(this@MainActivity, Ui.CARD2, 16f)
-            setPadding(d(14f), d(12f), d(14f), d(12f))
-
-            // В новом интерфейсе плитка без отдельного значка: только текст и стрелка.
-            val labels = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(0, 0, d(8f), 0)
-                addView(Ui.text(this@MainActivity, "Сообщить о проблеме", 14f, Ui.TEXT, bold = true))
-                addView(Ui.text(this@MainActivity, "Отправить диагностику приложения", 11f, Ui.MUTED).apply {
-                    setPadding(0, d(3f), 0, 0)
-                })
-            }
-            addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(Ui.text(this@MainActivity, "›", 25f, Ui.MUTED))
-            setOnClickListener {
-                AppLog.ui("нажал плитку «Сообщить о проблеме»")
-                Report.show(this@MainActivity)
-            }
-        }
-        content.addView(reportAction)
-        content.addView(Ui.space(this, 10f))
         infoLine = Ui.text(this, "", 12f, Ui.MUTED)
 
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
@@ -1334,9 +1303,15 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        val scroll = android.widget.ScrollView(this).apply {
+            isFillViewport = false
+            clipToPadding = false
+            setPadding(0, 0, 0, 0)
+            addView(box, android.widget.ScrollView.LayoutParams(-1, -2))
+        }
         dialog = AlertDialog.Builder(this)
             .setTitle("Подписка")
-            .setView(box)
+            .setView(scroll)
             .setPositiveButton("Сохранить и обновить") { _, _ ->
                 // Не трогали маску — значит, ссылка прежняя
                 val t = input.text.toString().trim().let { if (it == masked) saved else it }
@@ -1350,6 +1325,8 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
+        val maxContentHeight = (resources.displayMetrics.heightPixels * 0.62f).toInt()
+        scroll.layoutParams = scroll.layoutParams.apply { height = maxContentHeight }
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
