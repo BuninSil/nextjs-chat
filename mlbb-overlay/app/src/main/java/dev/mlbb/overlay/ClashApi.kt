@@ -2,11 +2,17 @@ package dev.mlbb.overlay
 
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.net.Proxy
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
  * Clash API (external controller) VPN-клиента: Karing, Hiddify (sing-box),
@@ -139,7 +145,7 @@ object ClashApi {
         // Не создаём 64 тысячи задач в очереди: на слабых телефонах такой «поиск»
         // сам способен подвесить приложение. Android обычно позволяет прочитать
         // список локальных LISTEN-сокетов из procfs.
-        val open = try {
+        val procPorts = try {
             listOf("/proc/net/tcp", "/proc/net/tcp6").flatMap { file ->
                 java.io.File(file).useLines { lines ->
                     lines.drop(1).mapNotNull { line ->
@@ -149,12 +155,31 @@ object ClashApi {
                     }.toList()
                 }
             }.filter { it in 1024..65535 }.distinct().sorted().take(256)
-        } catch (_: Exception) {
-            emptyList()
+        } catch (_: Exception) { emptyList() }
+
+        val open = if (procPorts.isNotEmpty()) procPorts else {
+            // На части Android-версий чтение /proc/net закрыто для обычных приложений.
+            // Резервный скан остаётся широким, но очередь ограничена и есть жёсткий лимит времени.
+            progress("procfs недоступен, проверяю локальные порты ограниченным сканированием…")
+            val found = ConcurrentLinkedQueue<Int>()
+            val pool = ThreadPoolExecutor(
+                32, 32, 0L, TimeUnit.MILLISECONDS,
+                ArrayBlockingQueue<Runnable>(512),
+                ThreadPoolExecutor.CallerRunsPolicy()
+            )
+            for (port in 1024..65535) pool.execute {
+                try {
+                    Socket().use { it.connect(InetSocketAddress(HOST, port), 80) }
+                    found.add(port)
+                } catch (_: Exception) {}
+            }
+            pool.shutdown()
+            if (!pool.awaitTermination(20, TimeUnit.SECONDS)) pool.shutdownNow()
+            found.toList().sorted().take(256)
         }
 
         if (open.isEmpty()) {
-            lastReport = "Не удалось обнаружить локальные LISTEN-порты через procfs."
+            lastReport = "Не удалось обнаружить локальные слушающие порты."
             return null
         }
         progress("Найдено слушающих портов: ${open.size}, проверяю…")
