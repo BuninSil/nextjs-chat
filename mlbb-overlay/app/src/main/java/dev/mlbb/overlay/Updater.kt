@@ -14,7 +14,7 @@ import java.io.File
  */
 object Updater {
     /** apkSize — размер APK из релиза: по нему узнаём, что файл уже скачан целиком. */
-    data class Release(val versionCode: Int, val tag: String, val notes: String, val apkUrl: String, val apkSize: Long = -1)
+    data class Release(val versionCode: Int, val tag: String, val notes: String, val apkUrl: String, val apkSize: Long = -1, val apkSha256: String = "")
 
     /**
      * Возвращает свежий релиз, если он новее установленной версии, иначе null.
@@ -22,51 +22,20 @@ object Updater {
      * чтобы при прыжке через несколько версий было видно всё, что поменялось.
      */
     fun check(): Release? {
-        val c = Net.open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases?per_page=40")
-        c.setRequestProperty("Accept", "application/vnd.github+json")
-        c.setRequestProperty("User-Agent", "mlbb-overlay/${BuildConfig.VERSION_NAME}")
-        when (c.responseCode) {
-            200 -> {}
-            404 -> throw RuntimeException("релизов пока нет")
-            403 -> throw RuntimeException("GitHub временно ограничил запросы, попробуй позже")
-            else -> throw RuntimeException("GitHub HTTP ${c.responseCode}")
-        }
-        val arr = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
-
-        class Item(val code: Int, val tag: String, val sha: String, val body: String, val apk: String, val size: Long)
-        val newer = ArrayList<Item>()
-        for (i in 0 until arr.length()) {
-            val r = arr.getJSONObject(i)
-            if (r.optBoolean("draft") || r.optBoolean("prerelease")) continue
-            val tag = r.optString("tag_name")
-            if (!tag.startsWith("mlbb-v")) continue
-            val code = tag.substringAfterLast('.').toIntOrNull() ?: continue
-            if (code <= BuildConfig.VERSION_CODE) continue
-            val sha = r.optString("target_commitish")
-            // Тот же код, что уже установлен (собран повторно) — не обновление
-            if (BuildConfig.GIT_SHA.isNotEmpty() && sha == BuildConfig.GIT_SHA) continue
-            val assets = r.optJSONArray("assets") ?: continue
-            var apk = ""
-            var size = -1L
-            for (j in 0 until assets.length()) {
-                val a = assets.getJSONObject(j)
-                if (a.getString("name").endsWith(".apk")) {
-                    apk = a.getString("browser_download_url")
-                    size = a.optLong("size", -1)
-                }
-            }
-            if (apk.isEmpty()) continue
-            newer.add(Item(code, tag, sha, r.optString("body", ""), apk, size))
-        }
-        if (newer.isEmpty()) return null
-        // Один коммит часто собирается дважды (ветка и main) — оставляем по одному релизу на коммит
-        val versions = newer.sortedByDescending { it.code }.distinctBy { it.sha.ifEmpty { it.tag } }
-        val latest = versions.first()
-        // Коротко: по строчке на версию — только заголовок, подробности остаются на GitHub
-        val notes = versions.map { shortNote(it.body) }.filter { it.isNotBlank() }.distinct()
-            .ifEmpty { listOf("Исправления и улучшения") }
-            .joinToString("\n") { "• $it" }
-        return Release(latest.code, latest.tag, notes, latest.apk, latest.size)
+        val c = Net.open("https://buninsil-fast-vpn.ru/api/version.php")
+        c.setRequestProperty("Accept", "application/json")
+        c.setRequestProperty("User-Agent", "FastVPN-Android/${BuildConfig.VERSION_NAME}")
+        if (c.responseCode != 200) throw RuntimeException("сервер обновлений HTTP ${c.responseCode}")
+        val json = org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+        if (!json.optBoolean("available", false)) return null
+        val version = json.optString("version")
+        val code = json.optInt("versionCode", 0)
+        if (!version.matches(Regex("""1\\.0\\.\\d{1,8}""")) || code <= BuildConfig.VERSION_CODE) return null
+        val sha = json.optString("sha256").lowercase()
+        if (!sha.matches(Regex("""[a-f0-9]{64}"""))) throw RuntimeException("сервер вернул некорректную контрольную сумму APK")
+        val size = json.optLong("size", -1L)
+        val notes = json.optString("notes").ifBlank { "Исправления и улучшения." }
+        return Release(code, "mlbb-v$version", notes, "https://buninsil-fast-vpn.ru/download.php", size, sha)
     }
 
     /**
@@ -121,7 +90,8 @@ object Updater {
     fun download(ctx: Context, rel: Release, progress: (String) -> Unit): File {
         val out = File(dir(ctx), "mlbb-overlay-${rel.versionCode}.apk")
         cleanup(ctx, keepCode = rel.versionCode)
-        if (out.exists() && rel.apkSize > 0 && out.length() == rel.apkSize) return out
+        if (out.exists() && rel.apkSize > 0 && out.length() == rel.apkSize &&
+            (rel.apkSha256.isBlank() || sha256(out).equals(rel.apkSha256, ignoreCase = true))) return out
         out.delete()
         val c = Net.open(rel.apkUrl)
         c.instanceFollowRedirects = true
@@ -150,8 +120,25 @@ object Updater {
             part.delete()
             throw RuntimeException("загрузка оборвалась, попробуй ещё раз")
         }
+        if (rel.apkSha256.isNotBlank() && !sha256(part).equals(rel.apkSha256, ignoreCase = true)) {
+            part.delete()
+            throw RuntimeException("контрольная сумма APK не совпала — файл удалён")
+        }
         if (!part.renameTo(out)) throw RuntimeException("не удалось сохранить файл обновления")
         return out
+    }
+
+    private fun sha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** true — установщик открыт; false — сначала нужно разрешить установку из этого приложения. */
