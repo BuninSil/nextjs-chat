@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 session_start();
-require dirname(__DIR__, 2) . '/private-loader.php';
+require dirname(__DIR__) . '/private-loader.php';
 function eh(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(24));
 $error = '';
