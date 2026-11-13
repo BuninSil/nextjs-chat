@@ -30,8 +30,12 @@ $vpn = in_array(($in['vpn_state'] ?? ''), ['connected','connecting','off','error
 $network = in_array(($in['network'] ?? ''), ['Wi-Fi','мобильная сеть','Ethernet','другая сеть','нет сети','неизвестно'], true) ? $in['network'] : 'unknown';
 $description = fastvpn_cut(trim((string)($in['description'] ?? '')), 500);
 $diagnostics = fastvpn_cut((string)($in['diagnostics'] ?? ''), 9000);
+$searchText = $description . "\\n" . $diagnostics;
+$category = preg_match('/обнов|\\[UPD\\]|update/i', $searchText) ? 'update'
+    : (($vpn === 'error' || preg_match('/\\[ERR\\]|подключ|connect|tunnel/i', $searchText)) ? 'vpn'
+    : (preg_match('/timeout|dns|сеть|скорост|latency|jitter/i', $searchText) ? 'network' : 'other'));
 $ticket = 'FV-' . gmdate('ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
-$q = $pdo->prepare('INSERT INTO reports (ticket,install_hash,ip_hash,app_version,version_code,manufacturer,device_model,android_version,sdk,vpn_state,network_type,description,diagnostics,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())');
-$q->execute([$ticket,$installHash,$ipHash,$version,$versionCode,$manufacturer,$model,$android,$sdk,$vpn,$network,$description,$diagnostics]);
+$q = $pdo->prepare('INSERT INTO reports (ticket,install_hash,ip_hash,app_version,version_code,category,manufacturer,device_model,android_version,sdk,vpn_state,network_type,description,diagnostics,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())');
+$q->execute([$ticket,$installHash,$ipHash,$version,$versionCode,$category,$manufacturer,$model,$android,$sdk,$vpn,$network,$description,$diagnostics]);
 http_response_code(201);
 echo json_encode(['ok'=>true,'ticket'=>$ticket], JSON_UNESCAPED_UNICODE);
