@@ -94,6 +94,9 @@ class SettingsActivity : AppCompatActivity() {
         top.addView(Ui.backButton(this) { finish() })
         top.addView(Ui.text(this, "Настройки", 22f, bold = true))
         root.addView(top)
+        root.addView(Ui.text(this, "Параметры подключения и работы приложения", 13f, Ui.MUTED).apply {
+            setPadding(d(4f), d(4f), 0, d(8f))
+        })
         val simple = AppSettings.simple
 
         // ---------- Для чего приложение ----------
@@ -107,7 +110,7 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Оформление ----------
         root.addView(section("Оформление"))
         root.addView(Ui.card(this).apply {
-            addView(linkRow("Тема и анимация", appearanceSummary(), { lookSub = it }) {
+            addView(linkRow("Оформление интерфейса", appearanceSummary(), { lookSub = it }) {
                 startActivity(android.content.Intent(this@SettingsActivity, AppearanceActivity::class.java))
             })
         })

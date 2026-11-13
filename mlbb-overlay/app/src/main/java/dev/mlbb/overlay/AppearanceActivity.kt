@@ -48,6 +48,17 @@ class AppearanceActivity : AppCompatActivity() {
         top.addView(Ui.backButton(this) { finish() })
         top.addView(Ui.text(this, "Оформление", 22f, bold = true))
         root.addView(top)
+        root.addView(Ui.text(this, "Настрой внешний вид Fast VPN", 14f, Ui.MUTED).apply {
+            setPadding(d(4f), d(4f), 0, d(4f))
+        })
+        val intro = Ui.card(this).apply {
+            background = Ui.rounded(Ui.SEL, d(18f).toFloat())
+            addView(Ui.text(this@AppearanceActivity, "Персонализация", 17f, bold = true))
+            addView(Ui.text(this@AppearanceActivity,
+                "Цветовая тема, компоновка главного экрана и анимация подключения настраиваются отдельно. Смена дизайна не сбрасывает остальные параметры.",
+                12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
+        }
+        root.addView(intro, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10f) })
 
         // ---------- Экспериментальный дизайн ----------
         root.addView(section("Новый дизайн · бета"))
@@ -55,11 +66,13 @@ class AppearanceActivity : AppCompatActivity() {
             val card = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(d(14f), d(14f), d(14f), d(14f))
-                background = Ui.rounded(Ui.CARD, d(16f).toFloat())
+                background = Ui.rounded(if (AppSettings.newDesign) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
+                    if (AppSettings.newDesign) setStroke(d(2f), Ui.GREEN)
+                }
             }
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            col.addView(Ui.text(this, "Новый дизайн", 15f, bold = true))
-            col.addView(Ui.text(this, "Обновлённое оформление (эксперимент). Если что-то выглядит криво — выключи, вернётся прежний вид.", 12f, Ui.MUTED).apply { setPadding(0, d(3f), 0, 0) })
+            col.addView(Ui.text(this, "Новый интерфейс", 15f, bold = true))
+            col.addView(Ui.text(this, "Меняется расположение элементов, а выбранная цветовая тема и остальные настройки сохраняются.", 12f, Ui.MUTED).apply { setPadding(0, d(3f), 0, 0) })
             card.addView(col, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(10f) })
             val sw = androidx.appcompat.widget.SwitchCompat(this).apply {
                 isChecked = AppSettings.newDesign
@@ -77,7 +90,9 @@ class AppearanceActivity : AppCompatActivity() {
         }
 
         // ---------- Тема ----------
-        root.addView(section("Тема"))
+        root.addView(section("Цветовая тема"))
+        root.addView(Ui.text(this, "Выбери палитру приложения. Изменения применяются сразу ко всем экранам.", 12f, Ui.MUTED)
+            .apply { setPadding(d(4f), 0, d(4f), d(10f)) })
         Ui.THEMES.chunked(2).forEach { pair ->
             val row = LinearLayout(this)
             pair.forEachIndexed { i, t ->
@@ -91,6 +106,7 @@ class AppearanceActivity : AppCompatActivity() {
 
         // ---------- Анимация подключения ----------
         root.addView(section("Анимация подключения"))
+        root.addView(Ui.text(this, "Предпросмотр", 14f, bold = true).apply { setPadding(d(4f), 0, 0, d(8f)) })
         root.addView(preview(), LinearLayout.LayoutParams(-1, d(300f)))
         root.addView(Ui.text(this, "Нажми на кнопку, чтобы посмотреть", 12f, Ui.MUTED).apply {
             gravity = Gravity.CENTER
@@ -255,7 +271,10 @@ class AppearanceActivity : AppCompatActivity() {
                 .apply { shape = GradientDrawable.OVAL }
         }, LinearLayout.LayoutParams(d(18f), d(18f)))
         c.addView(preview, LinearLayout.LayoutParams(-1, -2))
-        c.addView(Ui.text(this, t.title, 14f, bold = selected).apply { setPadding(0, d(8f), 0, 0) })
+        val label = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        label.addView(Ui.text(this, t.title, 14f, bold = selected), LinearLayout.LayoutParams(0, -2, 1f))
+        if (selected) label.addView(Ui.text(this, "✓", 14f, Ui.GREEN, bold = true))
+        c.addView(label, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(8f) })
         c.setOnClickListener {
             if (AppSettings.theme == t.id) return@setOnClickListener
             AppSettings.theme = t.id

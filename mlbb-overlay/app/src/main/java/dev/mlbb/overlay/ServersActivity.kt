@@ -6,12 +6,15 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.text.Editable
+import android.text.TextWatcher
 
 /** Список серверов подписки с пингом; тап — переключиться, ↻ — перемерить все. */
 class ServersActivity : AppCompatActivity() {
@@ -27,6 +30,7 @@ class ServersActivity : AppCompatActivity() {
     private lateinit var header: TextView
     private lateinit var hiddenToggle: TextView
     private var showHidden = false
+    private lateinit var search: EditText
 
     private val refresher = object : Runnable {
         override fun run() {
@@ -64,9 +68,27 @@ class ServersActivity : AppCompatActivity() {
         actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() },
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
         root.addView(actions)
-        root.addView(Ui.text(this, "Круглая стрелка вверху — перемерить пинг. Тап по серверу — подключиться к нему, долгое нажатие — в избранное или скрыть.", 12f, Ui.MUTED)
-            .apply { setPadding(d(4f), d(10f), d(4f), 0) })
-        root.addView(Ui.space(this, 12f))
+        root.addView(Ui.text(this, "Подбор по вашей сети", 17f, bold = true).apply {
+            setPadding(d(2f), d(16f), 0, d(2f))
+        })
+        root.addView(Ui.text(this, "Лучшие серверы для текущего подключения", 12f, Ui.MUTED))
+        search = EditText(this).apply {
+            singleLine = true
+            textSize = 14f
+            setTextColor(Ui.TEXT)
+            setHintTextColor(Ui.HINT)
+            hint = "Поиск страны или сервера"
+            background = Ui.rounded(Ui.INPUT, d(14f).toFloat())
+            setPadding(d(14f), d(11f), d(14f), d(11f))
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    adapter.setQuery(s?.toString().orEmpty())
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        root.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10f); bottomMargin = d(8f) })
 
         // Обход блокировок без сервера (нужен Xray — есть на 64-битных телефонах)
         if (XrayCore.available(this)) {
@@ -101,21 +123,23 @@ class ServersActivity : AppCompatActivity() {
             }
         }
         autoCard.addView(auto)
-        header = Ui.text(this, "", 12f, Ui.MUTED)
-        autoCard.addView(header)
         // Скрытые серверы — по кнопке, чтобы можно было вернуть
         hiddenToggle = Ui.text(this, "", 12f, Ui.GREEN, bold = true).apply {
             setPadding(0, d(8f), 0, 0)
             setOnClickListener { showHidden = !showHidden; AppLog.ui("показать скрытые серверы: $showHidden"); adapter.reload() }
         }
         autoCard.addView(hiddenToggle)
-        root.addView(autoCard)
-        root.addView(Ui.space(this, 10f))
 
+        header = Ui.text(this, "", 11f, Ui.MUTED).apply {
+            setPadding(d(4f), d(5f), d(4f), d(5f))
+        }
         val list = RecyclerView(this)
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = adapter
+        root.addView(header)
         root.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(Ui.space(this, 8f))
+        root.addView(autoCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = d(10f) })
         setContentView(root)
     }
 
@@ -348,6 +372,14 @@ class ServersActivity : AppCompatActivity() {
 
     private inner class Adapter : RecyclerView.Adapter<Holder>() {
         private var rows: List<Row> = emptyList()
+        private var query: String = ""
+
+        fun setQuery(value: String) {
+            val next = value.trim().lowercase()
+            if (query == next) return
+            query = next
+            reload()
+        }
 
         fun reload() {
             // Сначала проверенные по оценке, потом непроверенные, в конце не ответившие
@@ -378,8 +410,13 @@ class ServersActivity : AppCompatActivity() {
             val out = ArrayList<Row>()
             val groups = listOf("") + Subscription.extras(this@ServersActivity)
             for (g in groups) {
-                val list = sorted.filter { it.sub == g }
+                val groupAll = sorted.filter { it.sub == g }
+                val list = if (query.isEmpty()) groupAll else groupAll.filter {
+                    listOf(Ui.cleanName(it), it.name, it.server, it.country, it.type, it.tag)
+                        .joinToString(" ").lowercase().contains(query)
+                }
                 val total = all.count { it.sub == g }
+                if (query.isNotEmpty() && list.isEmpty()) continue
                 val url = if (g.isEmpty()) AppSettings.subUrl else g
                 if (g.isEmpty() && list.isEmpty() && !url.startsWith("http")) continue
                 out += Row.Header(url, g.isEmpty(), total)
@@ -387,9 +424,13 @@ class ServersActivity : AppCompatActivity() {
             }
             out += Row.Add
             rows = out
-            if (!ServerTester.testing && header.text.isEmpty()) {
-                header.text = "${sorted.size} серверов · пинг напрямую до сервера" +
-                    Autopilot.summary(this@ServersActivity).let { if (it.isNotEmpty()) "\n$it" else "" }
+            if (ServerTester.testing) {
+                // Прогресс проверки задаётся из фоновой задачи.
+            } else {
+                val count = if (query.isEmpty()) sorted.size else rows.count { it is Row.Server }
+                header.text = if (query.isEmpty()) "${sorted.size} серверов · пинг напрямую до сервера"
+                    else "Найдено серверов: $count"
+                header.text = header.text + Autopilot.summary(this@ServersActivity).let { if (it.isNotEmpty()) "\n$it" else "" }
             }
             notifyDataSetChanged()
         }
