@@ -178,17 +178,21 @@ class BoxVpnService : VpnService(), PlatformInterface {
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIF_ID, buildNotification("Переключаю сервер…", lastSub))
         Thread {
-            val n = try { ServerTester.switchNext(applicationContext) } catch (e: Exception) { AppLog.err("смена сервера", e); null }
-            if (n != null) {
-                // Выбрал руками — автовыбор не будет возвращать прежний
-                AppSettings.autoSelect = false
-                AppSettings.save(applicationContext)
+            try {
+                val n = try { ServerTester.switchNext(applicationContext) }
+                    catch (e: Exception) { AppLog.err("смена сервера", e); null }
+                if (n != null) {
+                    // Выбрал руками — автовыбор не будет возвращать прежний
+                    AppSettings.autoSelect = false
+                    AppSettings.save(applicationContext)
+                }
+                if (isRunning) nm.notify(NOTIF_ID, buildNotification(
+                    if (n != null) "Сервер сменён" else "Других рабочих серверов нет", lastSub))
+                try { Widget.update(applicationContext) } catch (_: Exception) {}
+            } finally {
+                switching = false
             }
-            if (isRunning) nm.notify(NOTIF_ID, buildNotification(
-                if (n != null) "Сервер сменён" else "Других рабочих серверов нет", lastSub))
-            try { Widget.update(applicationContext) } catch (_: Exception) {}
-            switching = false
-        }.start()
+        }.apply { isDaemon = true; start() }
     }
 
     /** Название выбранного сервера для заголовка уведомления. */
