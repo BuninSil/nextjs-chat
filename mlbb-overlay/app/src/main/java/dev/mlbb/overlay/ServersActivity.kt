@@ -78,7 +78,7 @@ class ServersActivity : AppCompatActivity() {
             setTextColor(Ui.TEXT)
             setHintTextColor(Ui.HINT)
             hint = "Поиск страны или сервера"
-            background = Ui.rounded(Ui.INPUT, d(14f).toFloat())
+            background = if (AppSettings.newDesign) Ui.surface(this@ServersActivity, Ui.INPUT, 15f) else Ui.rounded(Ui.INPUT, d(14f).toFloat())
             setPadding(d(14f), d(11f), d(14f), d(11f))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -490,7 +490,7 @@ class ServersActivity : AppCompatActivity() {
         private fun bindHeader(h: Holder, r: Row.Header) {
             val ctx = h.root.context
             val open = r.url !in collapsed
-            h.root.background = Ui.rounded(Ui.SEL, Ui.dp(ctx, 12f).toFloat())
+            h.root.background = Ui.surface(ctx, Ui.SEL, 15f, selected = true)
             h.root.alpha = 1f
             h.flag.text = if (open) "▾" else "▸"
             h.flag.setTextColor(Ui.MUTED)
@@ -510,7 +510,7 @@ class ServersActivity : AppCompatActivity() {
 
         private fun bindServer(h: Holder, n: Subscription.Node) {
             val selected = n.tag == AppSettings.selectedTag
-            h.root.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
+            h.root.background = if (AppSettings.newDesign) Ui.surface(h.root.context, Ui.CARD, 15f, selected) else Ui.rounded(if (selected) Ui.SEL else Ui.CARD, Ui.dp(h.root.context, 12f).toFloat())
             Ui.setFlag(h.flag, Ui.flagFor(n), 24f)
             h.name.setTextColor(Ui.TEXT)
             val fav = Subscription.isFavorite(n)
