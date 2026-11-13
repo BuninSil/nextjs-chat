@@ -17,8 +17,6 @@ android {
         versionCode = ciVersion
         versionName = "1.0.$ciVersion"
 
-        // Откуда тянуть обновления (GitHub owner/repo), можно поменять в приложении
-        buildConfigField("String", "UPDATE_REPO", "\"BuninSil/nextjs-chat\"")
         buildConfigField("String", "AUTHOR", "\"BuninSil\"")
         // Коммит сборки: апдейтер не предлагает «обновление» на тот же самый код
         buildConfigField("String", "GIT_SHA", "\"${System.getenv("GITHUB_SHA") ?: ""}\"")
