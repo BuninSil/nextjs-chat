@@ -63,8 +63,9 @@ class ServersActivity : AppCompatActivity() {
         root.addView(Ui.space(this, 10f))
         // Отдельные проверки: страна выхода (запоминается) и скорость
         val actions = LinearLayout(this)
-        actions.addView(Ui.tile(this, R.drawable.ic_exits, "Выходы", "в какой стране сервер выходит в интернет") { checkExits() },
-            LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
+        actions.addView(Ui.tile(this, R.drawable.ic_exits, "Выходы", "в какой стране сервер выходит в интернет") { checkExits() }.apply {
+            if (AppSettings.newDesign) background = Ui.surface(this@ServersActivity, Ui.CARD, 16f)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(5f) })
         actions.addView(Ui.tile(this, R.drawable.ic_bolt, "По скорости", "найти и включить самый быстрый") { speedRank() }.apply {
             if (AppSettings.newDesign) background = Ui.surface(this@ServersActivity, Ui.CARD, 16f)
         }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(5f) })
