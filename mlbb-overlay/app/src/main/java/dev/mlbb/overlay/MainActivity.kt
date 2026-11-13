@@ -722,6 +722,7 @@ class MainActivity : AppCompatActivity() {
         if (connectTapAt > 0 && !holding && (realRunning || (!busy && !BoxVpnService.isStarting))) connectTapAt = 0L
         if (afterStop && !busy && !BoxVpnService.isStarting) afterStop = false
         val running = realRunning && !holding
+        val connecting = holding || (!afterStop && (BoxVpnService.isStarting || (busy && !realRunning)))
         val err = BoxVpnService.lastError ?: CaptureVpnService.lastError ?: MonitorService.lastError
 
         statusLine.text = when {
@@ -792,7 +793,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Подключение идёт: VPN поднимается или подбирается сервер, а интернета ещё нет
-        val connecting = holding || (!afterStop && (BoxVpnService.isStarting || (busy && !realRunning)))
         val label = when {
             connecting -> "~connecting"
             running -> "ОТКЛЮЧИТЬ"
