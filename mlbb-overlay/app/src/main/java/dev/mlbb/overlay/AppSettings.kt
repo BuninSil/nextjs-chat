@@ -81,6 +81,8 @@ object AppSettings {
 
     /** Тема оформления: dark (по умолчанию), light, neon, amoled */
     @Volatile var theme = "dark"
+    /** Новый главный экран; выключение возвращает прежний интерфейс без потери настроек VPN. */
+    @Volatile var newInterface = true
 
     /** Анимация подключения: гиперпрыжок (по умолчанию), спидометр, радар */
     const val ANIM_WARP = "warp"
@@ -121,6 +123,7 @@ object AppSettings {
         // Автообновления теперь бесшовные — включаем всем (новый ключ, старый «проверять при запуске» не учитываем)
         autoCheckUpdates = p.getBoolean("updAuto2", true)
         theme = p.getString("theme", "dark") ?: "dark"
+        newInterface = p.getBoolean("newInterface", true)
         anim = p.getString("anim", ANIM_WARP)?.takeIf { it in setOf(ANIM_WARP, ANIM_GAUGE, ANIM_RADAR, ANIM_GLOBE) } ?: ANIM_WARP
         ruDirect = p.getBoolean("ruDirect", true)
         autoOnMobile = p.getBoolean("autoOnMobile", false)
@@ -175,6 +178,7 @@ object AppSettings {
             .putBoolean("updAuto2", autoCheckUpdates)
             .putString("profile", profile)
             .putString("theme", theme)
+            .putBoolean("newInterface", newInterface)
             .putString("anim", anim)
             .putBoolean("ruDirect", ruDirect)
             .putBoolean("autoOnMobile", autoOnMobile)
