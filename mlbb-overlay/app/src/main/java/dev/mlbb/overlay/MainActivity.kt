@@ -64,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var launchSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var launchRow: LinearLayout
     private lateinit var infoLine: TextView
+    private lateinit var speedMetricValue: TextView
+    private lateinit var delayMetricValue: TextView
     private lateinit var setupCard: LinearLayout
     private lateinit var setupTitle: TextView
     private lateinit var setupText: TextView
@@ -631,15 +633,18 @@ class MainActivity : AppCompatActivity() {
         content.addView(Ui.space(this, 14f))
 
         val metrics = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        fun metric(title: String, value: String, icon: String): LinearLayout = LinearLayout(this).apply {
+        speedMetricValue = Ui.text(this, "—", 21f, bold = true).apply { setPadding(0, d(5f), 0, 0) }
+        delayMetricValue = Ui.text(this, "—", 21f, bold = true).apply { setPadding(0, d(5f), 0, 0) }
+        fun metric(title: String, icon: String, valueView: TextView): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = Ui.rounded(Ui.CARD, d(16f).toFloat())
             setPadding(d(14f), d(13f), d(10f), d(13f))
             addView(Ui.text(this@MainActivity, "$icon  $title", 12f, Ui.MUTED))
-            addView(Ui.text(this@MainActivity, value, 21f, bold = true).apply { setPadding(0, d(5f), 0, 0) })
+            addView(valueView)
+            setOnClickListener { startActivity(Intent(this@MainActivity, NetworkStatusActivity::class.java)) }
         }
-        val speedMetric = metric("СКОРОСТЬ", "—", "↓")
-        val lossMetric = metric("ЗАДЕРЖКА", "—", "◷")
+        val speedMetric = metric("СКОРОСТЬ", "↓", speedMetricValue)
+        val lossMetric = metric("ЗАДЕРЖКА", "◷", delayMetricValue)
         metrics.addView(speedMetric, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = d(6f) })
         metrics.addView(lossMetric, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = d(6f) })
         content.addView(metrics)
@@ -687,12 +692,25 @@ class MainActivity : AppCompatActivity() {
         return outer
     }
 
+    private fun formatLiveSpeed(bytesPerSecond: Double): String {
+        if (bytesPerSecond <= 0.0) return "0 КБ/с"
+        val kb = bytesPerSecond / 1024.0
+        return if (kb >= 1024.0) String.format(java.util.Locale.US, "%.1f МБ/с", kb / 1024.0)
+            else String.format(java.util.Locale.US, "%.0f КБ/с", kb)
+    }
+
     private fun nodeByTag(tag: String) = Subscription.usable(this).firstOrNull { it.tag == tag }
 
     private fun anyRunning() = BoxVpnService.isRunning || CaptureVpnService.isRunning || MonitorService.isRunning
 
     private fun refresh() {
         val realRunning = anyRunning()
+        if (::speedMetricValue.isInitialized) {
+            speedMetricValue.text = if (BoxVpnService.isRunning) formatLiveSpeed(BoxVpnService.downBps) else "—"
+            val selected = nodeByTag(AppSettings.selectedTag)
+            val measured = selected?.let { ServerTester.results[it.tag] }
+            delayMetricValue.text = measured?.let { "${it.medianMs} мс" } ?: "—"
+        }
         val sinceTap = android.os.SystemClock.uptimeMillis() - connectTapAt
         // Минимальное время анимации подключения — иначе при быстром подключении её не видно
         val holding = connectTapAt > 0 && sinceTap < MIN_ANIM_MS
