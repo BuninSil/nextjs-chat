@@ -115,7 +115,7 @@ jobs:
           fingerprint: ${{ secrets.SPACEWEB_FINGERPRINT }}
           source: "mlbb-overlay/deploy/fast-vpn.apk"
           target: ${{ secrets.SPACEWEB_INCOMING_PATH }}
-          strip_components: 1
+          strip_components: 2
           overwrite: true
 
       - name: Activate APK on SpaceWeb and remove previous version
