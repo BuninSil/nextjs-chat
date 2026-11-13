@@ -27,8 +27,13 @@ object AutoConnect {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     /** Включил ли VPN автоподключением (тогда его можно и выключить на Wi-Fi). */
-    var autoStarted: Boolean = false
+    @Volatile var autoStarted: Boolean = false
         private set
+
+    private fun setAutoStarted(ctx: Context, value: Boolean) {
+        autoStarted = value
+        prefs(ctx).edit().putBoolean("autoStarted", value).apply()
+    }
 
     /** Поставить задачу «как появится мобильная сеть». delayMs — не раньше чем через. */
     fun arm(ctx: Context, delayMs: Long = 0) {
@@ -47,7 +52,7 @@ object AutoConnect {
 
     /** VPN выключили руками — в этой сети сам больше не включаем. */
     fun onManualStop(ctx: Context) {
-        autoStarted = false
+        setAutoStarted(ctx, false)
         prefs(ctx).edit().putString("autoSuppressNet", ServerTester.netKey(ctx)).apply()
         arm(ctx, 10 * 60 * 1000L)
     }
@@ -56,10 +61,13 @@ object AutoConnect {
     fun onNetworkChanged(ctx: Context) {
         val net = ServerTester.netKey(ctx)
         val p = prefs(ctx)
+        // Состояние переживает выгрузку процесса: иначе после возврата на Wi-Fi
+        // приложение забывало, что VPN включился автоматически.
+        if (!autoStarted && p.getBoolean("autoStarted", false)) autoStarted = true
         // Сеть сменилась — запрет «выключил руками» снимается
         if (p.getString("autoSuppressNet", "") != net) p.edit().remove("autoSuppressNet").apply()
         if (net == "wifi" && autoStarted && AppSettings.autoOffWifi && BoxVpnService.isRunning) {
-            autoStarted = false
+            setAutoStarted(ctx, false)
             AppLog.auto("Wi-Fi — выключаю VPN, который включался сам")
             BoxVpnService.stop(ctx, manual = false)
         }
@@ -91,7 +99,7 @@ object AutoConnect {
         try {
             // Проверяем, что система даёт поднять VPN из фона; дальше — обычное быстрое подключение
             BoxVpnService.start(ctx)
-            autoStarted = true
+            setAutoStarted(ctx, true)
             AppLog.auto("мобильная сеть — включаю VPN")
             Connector.connect(ctx)
         } catch (e: Exception) {
@@ -120,7 +128,7 @@ object AutoConnect {
     fun onNotificationStart(ctx: Context) {
         AppLog.auto("нажали «включить» в уведомлении")
         ctx.getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
-        autoStarted = true
+        setAutoStarted(ctx, true)
         Connector.connect(ctx)
     }
 }
