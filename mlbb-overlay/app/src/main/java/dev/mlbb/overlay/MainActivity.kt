@@ -686,10 +686,36 @@ class MainActivity : AppCompatActivity() {
         wifiCard = LinearLayout(this)
         wifiLine = Ui.text(this, "")
         wifiAdvice = Ui.text(this, "")
-        // В новом интерфейсе тоже оставляем одну заметную точку отправки диагностики.
-        content.addView(Ui.tile(this, R.drawable.ic_log, "Сообщить о проблеме", "автоматическая диагностика · описание по желанию") {
-            Report.show(this)
-        })
+        // Компактное действие в стиле карточек нового интерфейса, без вида отдельной системной плитки.
+        val reportAction = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.surface(this@MainActivity, Ui.CARD2, 16f)
+            setPadding(d(14f), d(12f), d(14f), d(12f))
+
+            val reportIcon = Ui.text(this@MainActivity, "", 20f, Ui.GREEN).apply {
+                gravity = Gravity.CENTER
+                text = Ui.iconText(this@MainActivity, R.drawable.ic_log, "", 20f, tint = Ui.GREEN)
+                background = Ui.surface(this@MainActivity, Ui.SEL, 12f)
+            }
+            addView(reportIcon, LinearLayout.LayoutParams(d(42f), d(42f)))
+
+            val labels = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(d(12f), 0, d(8f), 0)
+                addView(Ui.text(this@MainActivity, "Сообщить о проблеме", 14f, Ui.TEXT, bold = true))
+                addView(Ui.text(this@MainActivity, "Отправить диагностику приложения", 11f, Ui.MUTED).apply {
+                    setPadding(0, d(3f), 0, 0)
+                })
+            }
+            addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(Ui.text(this@MainActivity, "›", 25f, Ui.MUTED))
+            setOnClickListener {
+                AppLog.ui("нажал плитку «Сообщить о проблеме»")
+                Report.show(this@MainActivity)
+            }
+        }
+        content.addView(reportAction)
         content.addView(Ui.space(this, 10f))
         infoLine = Ui.text(this, "", 12f, Ui.MUTED)
 
@@ -863,7 +889,9 @@ class MainActivity : AppCompatActivity() {
                     connecting -> intArrayOf(Ui.VPN_CONNECTING, 0xFFD99A24.toInt())
                     running -> intArrayOf(0xFF3DDB82.toInt(), 0xFF1FAE62.toInt())
                     err != null -> intArrayOf(0xFFE85B55.toInt(), 0xFFB83232.toInt())
-                    else -> intArrayOf(Ui.VPN_OFF, Ui.VPN_OFF)
+                    // В старом интерфейсе выключенная кнопка сохраняет фирменный градиент темы.
+                    // Нейтральный серый используется только в новом интерфейсе.
+                    else -> intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
                 }
                 playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                     .apply { shape = GradientDrawable.OVAL }
