@@ -7,7 +7,7 @@ RewriteCond %{HTTPS} !=on
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 </IfModule>
 
-<FilesMatch "(^\.|\.sql$|\.log$|\.ini$|\.bak$|\.env$|config\.php$)">
+<FilesMatch "(^\.|\.sql$|\.log$|\.ini$|\.bak$|\.env$|config\.php$|private-loader\.php$|\.new$|\.previous$|\.tmp$)">
   Require all denied
 </FilesMatch>
 
