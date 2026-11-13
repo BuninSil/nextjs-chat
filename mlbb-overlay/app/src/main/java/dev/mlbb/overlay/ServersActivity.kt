@@ -73,7 +73,7 @@ class ServersActivity : AppCompatActivity() {
         })
         root.addView(Ui.text(this, "Лучшие серверы для текущего подключения", 12f, Ui.MUTED))
         search = EditText(this).apply {
-            singleLine = true
+            isSingleLine = true
             textSize = 14f
             setTextColor(Ui.TEXT)
             setHintTextColor(Ui.HINT)
@@ -428,9 +428,9 @@ class ServersActivity : AppCompatActivity() {
                 // Прогресс проверки задаётся из фоновой задачи.
             } else {
                 val count = if (query.isEmpty()) sorted.size else rows.count { it is Row.Server }
-                header.text = if (query.isEmpty()) "${sorted.size} серверов · пинг напрямую до сервера"
+                val baseHeader = if (query.isEmpty()) "${sorted.size} серверов · пинг напрямую до сервера"
                     else "Найдено серверов: $count"
-                header.text = header.text + Autopilot.summary(this@ServersActivity).let { if (it.isNotEmpty()) "\n$it" else "" }
+                header.text = baseHeader + Autopilot.summary(this@ServersActivity).let { if (it.isNotEmpty()) "\n$it" else "" }
             }
             notifyDataSetChanged()
         }
