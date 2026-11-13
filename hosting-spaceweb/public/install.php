@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'db_host' => $host, 'db_name' => $name, 'db_user' => $user, 'db_pass' => $pass,
                 'admin_password_hash' => password_hash($adminPassword, PASSWORD_DEFAULT),
                 'publish_secret' => $publishSecret,
-                'client_key' => 'fastvpn-android-v1',
+                'client_key' => 'android-v1',
             ];
             if (!is_dir($privateDir . '/storage/incoming')) mkdir($privateDir . '/storage/incoming', 0700, true);
             $php = "<?php\nreturn " . var_export($config, true) . ";\n";
