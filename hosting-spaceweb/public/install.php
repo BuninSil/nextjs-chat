@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 session_start();
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
 $privateDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'private';
 $keyFile = $privateDir . DIRECTORY_SEPARATOR . 'setup.key';
 $configFile = $privateDir . DIRECTORY_SEPARATOR . 'config.php';
