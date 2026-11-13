@@ -497,15 +497,18 @@ class BoxVpnService : VpnService(), PlatformInterface {
     }
 
     override fun onRevoke() {
+        synchronized(startLock) { stopRequested = true }
         AppLog.vpn("Android отозвал VPN (включили другое VPN-приложение или выключили в настройках)")
-        // Android забирает VPN, когда его включает другое приложение (или его выключили в настройках)
-        if (isRunning) lastError = "VPN отключился: его забрало другое VPN-приложение. Если оно включается само — " +
+        // Отзыв разрешения может произойти и посреди запуска, до isRunning = true.
+        if (isRunning || isStarting) lastError = "VPN отключился: его забрало другое VPN-приложение. Если оно включается само — " +
             "выключи у него автоподключение и «Постоянный VPN» (Настройки → Сеть и интернет → VPN)."
-        Thread { stopBox(); stopSelf() }.start()
+        Thread { stopBox(); stopSelf() }.apply { isDaemon = true; start() }
     }
 
     override fun onDestroy() {
-        if (isRunning) stopBox()
+        synchronized(startLock) { stopRequested = true }
+        // Убираем и частично поднятый Xray/TUN, даже если isRunning ещё не успел стать true.
+        stopBox()
         super.onDestroy()
     }
 
