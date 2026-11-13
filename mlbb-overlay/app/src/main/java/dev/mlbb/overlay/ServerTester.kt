@@ -713,9 +713,14 @@ object ServerTester {
         for (step in 1..minOf(5, ordered.size)) {
             val n = ordered[(cur + step).mod(ordered.size)]
             if (n.tag == AppSettings.selectedTag) continue
-            if (!use(ctx, n.tag)) continue
-            if (BoxVpnService.ports == null || alive(n.tag)) return n
-            AppLog.srv("«${AppLog.name(ctx, n.tag)}» не отвечает — следующий")
+            // Сначала проверяем кандидата через группу probe, не меняя основной маршрут.
+            // Иначе при отказе всех следующих серверов можно было оставить пользователя
+            // подключённым к последнему мёртвому кандидату.
+            if (BoxVpnService.ports != null && !alive(n.tag)) {
+                AppLog.srv("«${AppLog.name(ctx, n.tag)}» не отвечает — следующий")
+                continue
+            }
+            if (use(ctx, n.tag)) return n
         }
         return null
     }
