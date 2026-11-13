@@ -107,6 +107,15 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Оформление ----------
         root.addView(section("Оформление"))
         root.addView(Ui.card(this).apply {
+            addView(switchRow(
+                "Новый дизайн · бета",
+                "Обновлённый главный экран Fast VPN. Выключи, чтобы сразу вернуться к прежнему интерфейсу.",
+                AppSettings.newDesign
+            ) {
+                AppSettings.newDesign = it
+                AppSettings.save(this@SettingsActivity)
+            })
+            addView(divider())
             addView(linkRow("Тема и анимация", appearanceSummary(), { lookSub = it }) {
                 startActivity(android.content.Intent(this@SettingsActivity, AppearanceActivity::class.java))
             })
