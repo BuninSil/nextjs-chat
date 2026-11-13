@@ -341,7 +341,7 @@ class SettingsActivity : AppCompatActivity() {
         // ---------- Помощь ----------
         root.addView(section("Помощь"))
         root.addView(Ui.card(this).apply {
-            addView(Ui.text(this@SettingsActivity, "Что-то не работает? Собери отчёт и отправь его разработчику любым способом.", 12f, Ui.MUTED))
+            addView(Ui.text(this@SettingsActivity, "Что-то не работает? Приложение само соберёт безопасную диагностику и отправит её разработчику. Описание можно не заполнять.", 12f, Ui.MUTED))
             addView(Ui.space(this@SettingsActivity, 10f))
             addView(secondary("Сообщить о проблеме") { Report.show(this@SettingsActivity) })
             addView(Ui.space(this@SettingsActivity, 8f))
