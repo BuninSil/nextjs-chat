@@ -143,11 +143,20 @@ object Ui {
         cornerRadius = radius
     }
 
+    /** Единая поверхность карточек. Новый стиль включается сразу на всех вторичных экранах. */
+    fun surface(ctx: Context, color: Int = CARD, radius: Float = 18f, selected: Boolean = false): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(if (selected) SEL else color)
+            cornerRadius = dp(ctx, if (AppSettings.newDesign) radius + 2f else radius).toFloat()
+            if (AppSettings.newDesign) setStroke(dp(ctx, if (selected) 1.5f else 1f), if (selected) GREEN else DIVIDER)
+            else if (selected) setStroke(dp(ctx, 2f), GREEN)
+        }
+
     fun card(ctx: Context): LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(CARD, dp(ctx, 18f).toFloat())
-        val p = dp(ctx, 16f)
-        setPadding(p, dp(ctx, 14f), p, dp(ctx, 14f))
+        background = if (AppSettings.newDesign) surface(ctx, CARD, 20f) else rounded(CARD, dp(ctx, 18f).toFloat())
+        val p = dp(ctx, if (AppSettings.newDesign) 18f else 16f)
+        setPadding(p, dp(ctx, if (AppSettings.newDesign) 16f else 14f), p, dp(ctx, if (AppSettings.newDesign) 16f else 14f))
     }
 
     fun text(ctx: Context, s: String = "", size: Float = 15f, color: Int = TEXT, bold: Boolean = false) =
@@ -163,7 +172,7 @@ object Ui {
         setTextColor(TEXT)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         gravity = Gravity.CENTER_VERTICAL
-        background = rounded(CARD, dp(ctx, 14f).toFloat())
+        background = if (AppSettings.newDesign) surface(ctx, CARD2, 16f) else rounded(CARD, dp(ctx, 14f).toFloat())
         val p = dp(ctx, 14f)
         setPadding(p, p, p, p)
         setOnClickListener { onClick() }
@@ -172,11 +181,11 @@ object Ui {
     /** Плитка: заголовок + пояснение мелким шрифтом, чтобы было понятно, что делает кнопка. */
     fun tile(ctx: Context, iconRes: Int, title: String, hint: String, onClick: () -> Unit) = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(CARD, dp(ctx, 14f).toFloat())
-        val p = dp(ctx, 14f)
-        setPadding(p, dp(ctx, 12f), p, dp(ctx, 12f))
+        background = if (AppSettings.newDesign) surface(ctx, CARD2, 16f) else rounded(CARD, dp(ctx, 14f).toFloat())
+        val p = dp(ctx, if (AppSettings.newDesign) 15f else 14f)
+        setPadding(p, dp(ctx, 13f), p, dp(ctx, 13f))
         addView(text(ctx, "", 15f, bold = true).apply { maxLines = 1; text = iconText(ctx, iconRes, title, 18f) })
-        addView(text(ctx, hint, 12f, MUTED).apply { setPadding(0, dp(ctx, 3f), 0, 0) })
+        addView(text(ctx, hint, 12f, MUTED).apply { setPadding(0, dp(ctx, 4f), 0, 0) })
         setOnClickListener { AppLog.ui("нажал плитку «$title»"); onClick() }
     }
 
