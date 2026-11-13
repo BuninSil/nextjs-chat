@@ -21,5 +21,6 @@ AddType application/vnd.android.package-archive .apk
 <Files "fast-vpn.apk">
   <IfModule mod_headers.c>
     Header set Cache-Control "no-store"
+    Header set Content-Disposition "attachment; filename=fast-vpn.apk"
   </IfModule>
 </Files>
