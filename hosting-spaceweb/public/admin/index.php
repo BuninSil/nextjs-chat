@@ -1,11 +1,14 @@
 <?php
 declare(strict_types=1);
+ini_set('session.use_strict_mode', '1');
+session_set_cookie_params(['lifetime'=>0, 'path'=>'/admin/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
 session_start();
 require dirname(__DIR__) . '/private-loader.php';
 function eh(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(24));
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_password'])) {
+    if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf'] ?? ''))) { http_response_code(403); exit('CSRF'); }
     $tries = (int)($_SESSION['login_tries'] ?? 0);
     if ($tries >= 8) $error = 'Слишком много попыток. Закрой браузер и повтори позже.';
     elseif (password_verify((string)$_POST['login_password'], $cfg['admin_password_hash'])) {
@@ -22,7 +25,7 @@ if (isset($_GET['logout'])) { $_SESSION = []; session_destroy(); header('Locatio
 if (empty($_SESSION['admin'])):
 ?><!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fast VPN · Админка</title>
 <style>body{background:#0d0f13;color:#eee;font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0}main{width:min(90%,400px);padding:24px;background:#161a21;border:1px solid #2a3039;border-radius:16px}input,button{box-sizing:border-box;width:100%;padding:13px;margin-top:10px;border-radius:9px}input{background:#0f1216;border:1px solid #333;color:white}button{background:#1ed760;border:0;font-weight:bold}.err{color:#ff6b64}</style>
-<main><h1>⚡ Fast VPN</h1><p>Закрытая панель обращений</p><?php if($error):?><p class="err"><?=eh($error)?></p><?php endif;?><form method="post"><input type="password" name="login_password" placeholder="Пароль администратора" required autofocus><button>Войти</button></form></main></html><?php
+<main><h1>⚡ Fast VPN</h1><p>Закрытая панель обращений</p><?php if($error):?><p class="err"><?=eh($error)?></p><?php endif;?><form method="post"><input type="hidden" name="csrf" value="<?=eh($_SESSION['csrf'])?>"><input type="password" name="login_password" placeholder="Пароль администратора" required autofocus><button>Войти</button></form></main></html><?php
 exit; endif;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket'], $_POST['status'])) {
