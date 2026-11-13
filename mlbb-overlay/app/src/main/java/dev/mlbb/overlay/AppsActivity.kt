@@ -118,7 +118,7 @@ class AppsActivity : AppCompatActivity() {
     private fun highlight() {
         for ((mode, card) in modeCards) {
             val sel = mode == AppSettings.appsMode
-            card.background = Ui.rounded(if (sel) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
+            card.background = if (AppSettings.newDesign) Ui.surface(this, Ui.CARD, 18f, sel) else Ui.rounded(if (sel) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
                 if (sel) setStroke(d(2f), Ui.GREEN)
             }
         }
@@ -154,7 +154,7 @@ class AppsActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(d(12f), d(10f), d(8f), d(10f))
                 layoutParams = RecyclerView.LayoutParams(-1, -2).apply { bottomMargin = d(6f) }
-                background = Ui.rounded(Ui.CARD, d(12f).toFloat())
+                background = if (AppSettings.newDesign) Ui.surface(parent.context, Ui.CARD, 14f) else Ui.rounded(Ui.CARD, d(12f).toFloat())
             }
             val h = Holder(row)
             h.icon = ImageView(parent.context)
