@@ -18,11 +18,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      SPACEWEB_HOST: ${{ secrets.SPACEWEB_HOST }}
-      SPACEWEB_USER: ${{ secrets.SPACEWEB_USER }}
-      SPACEWEB_PASSWORD: ${{ secrets.SPACEWEB_PASSWORD }}
-      SPACEWEB_FINGERPRINT: ${{ secrets.SPACEWEB_FINGERPRINT }}
-      SPACEWEB_INCOMING_PATH: ${{ secrets.SPACEWEB_INCOMING_PATH }}
       SPACEWEB_SITE_URL: ${{ secrets.SPACEWEB_SITE_URL }}
       SPACEWEB_PUBLISH_SECRET: ${{ secrets.SPACEWEB_PUBLISH_SECRET }}
     defaults:
@@ -104,32 +99,17 @@ jobs:
           echo "APK_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
           echo "APK_PUBLISH_SIGNATURE=$SIGNATURE" >> "$GITHUB_ENV"
 
-      - name: Upload APK to SpaceWeb (SFTP)
-        if: startsWith(github.ref, 'refs/tags/mlbb-v') && env.SPACEWEB_HOST != '' && env.SPACEWEB_USER != '' && env.SPACEWEB_PASSWORD != '' && env.SPACEWEB_FINGERPRINT != '' && env.SPACEWEB_INCOMING_PATH != '' && env.SPACEWEB_SITE_URL != '' && env.SPACEWEB_PUBLISH_SECRET != ''
+      - name: Publish APK to SpaceWeb over HTTPS
+        if: startsWith(github.ref, 'refs/tags/mlbb-v') && env.SPACEWEB_SITE_URL != '' && env.SPACEWEB_PUBLISH_SECRET != ''
         env:
-          SPACEWEB_HOST: ${{ secrets.SPACEWEB_HOST }}
-          SPACEWEB_USER: ${{ secrets.SPACEWEB_USER }}
-          SPACEWEB_PASSWORD: ${{ secrets.SPACEWEB_PASSWORD }}
-          SPACEWEB_FINGERPRINT: ${{ secrets.SPACEWEB_FINGERPRINT }}
-          SPACEWEB_INCOMING_PATH: ${{ secrets.SPACEWEB_INCOMING_PATH }}
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          ssh-keyscan -p 22 "$SPACEWEB_HOST" > ~/.ssh/known_hosts 2>/dev/null
-          chmod 600 ~/.ssh/known_hosts
-          ACTUAL="$(ssh-keygen -lf ~/.ssh/known_hosts -E sha256 | awk '{print $2}' | sort -u)"
-          printf '%s\n' "$ACTUAL" | grep -Fxq "$SPACEWEB_FINGERPRINT" || { echo "SSH fingerprint не совпал"; exit 1; }
-          lftp -u "$SPACEWEB_USER","$SPACEWEB_PASSWORD" "sftp://$SPACEWEB_HOST:22" \
-            -e "set sftp:auto-confirm no; cd \"$SPACEWEB_INCOMING_PATH\"; put deploy/fast-vpn.apk -o fast-vpn.apk; bye"
-
-      - name: Activate APK on SpaceWeb and remove previous version
-        if: startsWith(github.ref, 'refs/tags/mlbb-v') && env.SPACEWEB_HOST != '' && env.SPACEWEB_USER != '' && env.SPACEWEB_PASSWORD != '' && env.SPACEWEB_FINGERPRINT != '' && env.SPACEWEB_INCOMING_PATH != '' && env.SPACEWEB_SITE_URL != '' && env.SPACEWEB_PUBLISH_SECRET != ''
+          SPACEWEB_SITE_URL: ${{ secrets.SPACEWEB_SITE_URL }}
         run: |
           NOTES="$(git log -1 --pretty=%s "$GITHUB_SHA")"
-          BODY="$(jq -n --arg version "$APK_VERSION" --arg sha "$APK_SHA256" --arg notes "$NOTES" --argjson code "$APK_VERSION_CODE" '{version:$version,version_code:$code,sha256:$sha,notes:$notes}')"
-          curl --fail --silent --show-error --max-time 20 \
+          curl --fail --silent --show-error --max-time 180 \
             -X POST "$SPACEWEB_SITE_URL/api/publish.php" \
-            -H "Content-Type: application/json" \
             -H "X-Publish-Signature: $APK_PUBLISH_SIGNATURE" \
-            --data "$BODY"
+            -F "version=$APK_VERSION" \
+            -F "version_code=$APK_VERSION_CODE" \
+            -F "sha256=$APK_SHA256" \
+            -F "notes=$NOTES" \
+            -F "apk=@deploy/fast-vpn.apk;type=application/vnd.android.package-archive"
