@@ -40,10 +40,20 @@ $filter = (string)($_GET['status'] ?? '');
 $allowed = ['new','in_progress','resolved','duplicate'];
 $categoryLabels = ['vpn'=>'Подключение','network'=>'Сеть и скорость','update'=>'Обновление','other'=>'Другое'];
 $statusLabels = ['new'=>'Новая','in_progress'=>'В работе','resolved'=>'Решена','duplicate'=>'Дубликат'];
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 30;
+$countSql = 'SELECT COUNT(*) FROM reports';
+$countArgs = [];
+if (in_array($filter, $allowed, true)) { $countSql .= ' WHERE status=?'; $countArgs[] = $filter; }
+$countQuery = $pdo->prepare($countSql); $countQuery->execute($countArgs);
+$totalRows = (int)$countQuery->fetchColumn();
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$page = min($page, $totalPages);
+$offset = ($page - 1) * $perPage;
 $sql = 'SELECT ticket,category,app_version,manufacturer,device_model,android_version,vpn_state,network_type,description,diagnostics,status,admin_note,created_at FROM reports';
 $args = [];
 if (in_array($filter, $allowed, true)) { $sql .= ' WHERE status=?'; $args[] = $filter; }
-$sql .= ' ORDER BY id DESC LIMIT 50';
+$sql .= " ORDER BY id DESC LIMIT $perPage OFFSET $offset";
 $q = $pdo->prepare($sql); $q->execute($args); $rows = $q->fetchAll(PDO::FETCH_ASSOC);
 $count = $pdo->query("SELECT status, COUNT(*) c FROM reports GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);
 ?><!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fast VPN · Обращения</title>
@@ -60,4 +70,9 @@ $count = $pdo->query("SELECT status, COUNT(*) c FROM reports GROUP BY status")->
 <select name="status"><?php foreach($allowed as $s):?><option value="<?=$s?>" <?=$r['status']===$s?'selected':''?>><?=eh($statusLabels[$s])?></option><?php endforeach;?></select>
 <textarea name="admin_note" placeholder="Внутренняя заметка, видна только тебе"><?=eh($r['admin_note'])?></textarea><button>Сохранить</button></form></article><?php endforeach;?>
 <?php if(!$rows):?><p class="muted">Обращений пока нет.</p><?php endif;?>
+<?php if($totalPages>1):?><nav class="filters">
+<?php if($page>1):?><a href="?<?=in_array($filter,$allowed,true)?'status='.urlencode($filter).'&':''?>page=<?=$page-1?>">← Новее</a><?php endif;?>
+<span class="muted">Страница <?=$page?> из <?=$totalPages?> · всего <?=$totalRows?></span>
+<?php if($page<$totalPages):?><a href="?<?=in_array($filter,$allowed,true)?'status='.urlencode($filter).'&':''?>page=<?=$page+1?>">Старее →</a><?php endif;?>
+</nav><?php endif;?>
 </main></html>
