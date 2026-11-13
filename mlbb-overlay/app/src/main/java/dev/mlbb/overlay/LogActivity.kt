@@ -139,6 +139,15 @@ class LogActivity : AppCompatActivity() {
             h.line1.text = "${time.format(Date(c.firstSeenMs))}  ${ConnTracker.protoName(c.proto)}  ${c.dstIp}:${c.dstPort}  $place" +
                 if (isBattle) "  · бой" else ""
             h.line1.setTypeface(null, if (isBattle) Typeface.BOLD else Typeface.NORMAL)
+            h.line1.setTextColor(if (isBattle) Ui.GREEN else Ui.TEXT)
+            h.line2.setTextColor(Ui.MUTED)
+            if (AppSettings.newDesign) {
+                (h.itemView as? android.widget.LinearLayout)?.apply {
+                    background = Ui.surface(context, Ui.CARD, 13f)
+                    setPadding(Ui.dp(context, 12f), Ui.dp(context, 9f), Ui.dp(context, 12f), Ui.dp(context, 9f))
+                    (layoutParams as? RecyclerView.LayoutParams)?.let { it.bottomMargin = Ui.dp(context, 6f) }
+                }
+            }
             val rtt = if (c.hsRttMs >= 0) " · hs ${c.hsRttMs} ms" else ""
             h.line2.text = "↑ ${fmt(c.bytesOut)} (${c.pktsOut})  ↓ ${fmt(c.bytesIn)} (${c.pktsIn})$rtt · " +
                 if (c.closed) "закрыто" else "активно"
