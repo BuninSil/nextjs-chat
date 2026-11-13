@@ -808,18 +808,13 @@ class MainActivity : AppCompatActivity() {
                     running -> Ui.RED
                     else -> Ui.GREEN
                 }
-                val stateFill = when {
-                    connecting -> 0x22F5C542
-                    running -> 0x22FF5A52
-                    else -> 0x2234C759
-                }
                 playButton.text = Ui.iconText(
                     this, R.drawable.ic_power, "",
                     if (globeMode) 34f else 58f, tint = stateColor
                 )
                 playButton.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(stateFill)
+                    setColor((stateColor and 0x00FFFFFF) or 0x22000000)
                     setStroke(Ui.dp(this@MainActivity, 4f), stateColor)
                 }
                 playButton.contentDescription = when {
