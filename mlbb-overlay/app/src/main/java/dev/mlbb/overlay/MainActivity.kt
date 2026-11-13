@@ -297,14 +297,13 @@ class MainActivity : AppCompatActivity() {
         val info = infoLine
 
         // Порядок нового экрана: сначала состояние и подключение, затем подсказки и инструменты.
-        val primary = listOfNotNull(header, status, play, hint, setup, launch, stop, wifi, battle, info)
+        val primary = listOfNotNull(header, status, play, hint, setup, launch, stop, wifi, battle)
             .distinct()
-        val rest = original.filterNot { it in primary }
+        val rest = original.filterNot { it in primary || it === info }
         root.removeAllViews()
-        (primary + rest).forEachIndexed { index, view ->
+        (primary + rest + listOfNotNull(info)).forEach { view ->
             val lp = view.layoutParams as? LinearLayout.LayoutParams
                 ?: LinearLayout.LayoutParams(-1, -2)
-            lp.width = -1
             if (view === status || view === setup || view === wifi || view === battle) {
                 lp.bottomMargin = Ui.dp(this, 12f)
             } else if (view === play) {
