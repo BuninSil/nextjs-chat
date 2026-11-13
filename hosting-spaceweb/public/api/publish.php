@@ -8,6 +8,7 @@ $version = (string)($body['version'] ?? '');
 $code = (int)($body['version_code'] ?? 0);
 $sha = strtolower((string)($body['sha256'] ?? ''));
 $sig = (string)($_SERVER['HTTP_X_PUBLISH_SIGNATURE'] ?? '');
+$notes = fastvpn_cut(trim((string)($body['notes'] ?? '')), 1000);
 if (!preg_match('/^1\.0\.\d{1,8}$/', $version) || $code < 1 || !preg_match('/^[a-f0-9]{64}$/', $sha)) { http_response_code(400); exit(json_encode(['error'=>'invalid_metadata'])); }
 $expected = hash_hmac('sha256', $version."\n".$code."\n".$sha, $cfg['publish_secret']);
 if (!hash_equals($expected, $sig)) { http_response_code(403); exit(json_encode(['error'=>'signature'])); }
@@ -27,7 +28,7 @@ if (!rename($next, $target)) {
     if (is_file($backup)) @rename($backup, $target);
     http_response_code(500); exit(json_encode(['error'=>'activate_failed']));
 }
-$meta = ['available'=>true,'version'=>$version,'versionCode'=>$code,'sha256'=>$sha,'size'=>filesize($target),'download'=>'/download.php','publishedAt'=>gmdate('c')];
+$meta = ['available'=>true,'version'=>$version,'versionCode'=>$code,'sha256'=>$sha,'size'=>filesize($target),'notes'=>$notes,'download'=>'/download.php','publishedAt'=>gmdate('c')];
 $tmp = dirname(__DIR__) . '/version.json.tmp';
 $versionFile = dirname(__DIR__) . '/version.json';
 if (file_put_contents($tmp, json_encode($meta, JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT), LOCK_EX) === false || !rename($tmp, $versionFile)) {
