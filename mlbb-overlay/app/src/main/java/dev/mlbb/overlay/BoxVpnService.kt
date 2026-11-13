@@ -225,6 +225,8 @@ class BoxVpnService : VpnService(), PlatformInterface {
     // --------------------- скорость и трафик в уведомлении ---------------------
 
     @Volatile private var ticker: Thread? = null
+    @Volatile private var trafficReader: Thread? = null
+    @Volatile private var tickerGeneration = 0
 
     private fun fmtBytes(b: Double) = when {
         b >= 1_073_741_824 -> String.format(java.util.Locale.US, "%.2f ГБ", b / 1_073_741_824)
@@ -240,21 +242,24 @@ class BoxVpnService : VpnService(), PlatformInterface {
      */
     private fun startTicker() {
         if (ticker?.isAlive == true) return
+        val generation = ++tickerGeneration
         val accDown = java.util.concurrent.atomic.AtomicLong()
         val accUp = java.util.concurrent.atomic.AtomicLong()
         // Читатель потока скорости; при обрыве переподключается, пока VPN работает
-        Thread {
+        trafficReader = Thread {
             var fails = 0
-            while (isRunning) {
+            while (isRunning && generation == tickerGeneration) {
                 val p = ports ?: break
                 try {
                     ClashApi.streamTraffic(p.api, p.secret) { up, down ->
-                        accUp.addAndGet(up)
-                        accDown.addAndGet(down)
+                        if (isRunning && generation == tickerGeneration) {
+                            accUp.addAndGet(up)
+                            accDown.addAndGet(down)
+                        }
                     }
                 } catch (_: Exception) {
                 }
-                if (!isRunning) break
+                if (!isRunning || generation != tickerGeneration) break
                 if (++fails == 5) AppLog.err("уведомление: ядро не отдаёт скорость")
                 try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
             }
@@ -274,7 +279,7 @@ class BoxVpnService : VpnService(), PlatformInterface {
             // Сразу после подключения — «Подключено», дальше каждые 2 секунды скорость и трафик
             if (isRunning) nm.notify(NOTIF_ID, buildNotification(
                 if (AppSettings.gameMode) "Подключено, оверлей следит за сервером игры" else "Подключено", null))
-            while (isRunning) {
+            while (isRunning && generation == tickerGeneration) {
                 try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
                 val t = System.nanoTime()
                 val sec = ((t - lastAt) / 1e9).coerceAtLeast(0.5)
@@ -469,6 +474,13 @@ class BoxVpnService : VpnService(), PlatformInterface {
             tunPfd = null
         }
         try { Widget.update(this) } catch (_: Exception) {}
+        // Старые читатели не должны переживать быстрый restart и цепляться к новому ядру.
+        tickerGeneration++
+        ticker?.interrupt()
+        ticker = null
+        trafficReader?.interrupt()
+        trafficReader = null
+        ClashApi.stopTraffic()
         XrayCore.stop()
         MonitorService.stop(this)
         try { oldBox?.close() } catch (_: Exception) {}
