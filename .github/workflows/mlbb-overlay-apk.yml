@@ -48,6 +48,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleDebug -PversionCode=${{ github.run_number }}
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk /tmp/fast-vpn.apk
 
       - uses: actions/upload-artifact@v4
