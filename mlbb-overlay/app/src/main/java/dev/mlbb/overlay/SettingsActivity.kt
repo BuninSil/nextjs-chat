@@ -104,6 +104,16 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(profileCard(AppSettings.PROFILE_SIMPLE, R.drawable.ic_bolt, "Fast VPN",
             "Только быстрый VPN по подписке, всё про игру скрыто"))
 
+        // ---------- Интерфейс ----------
+        root.addView(section("Интерфейс"))
+        root.addView(Ui.card(this).apply {
+            addView(switchRow("Новый главный экран", "Обновлённый вид Fast VPN. Выключи, чтобы вернуться к прежнему интерфейсу.", AppSettings.newInterface) {
+                AppSettings.newInterface = it
+                AppSettings.save(this@SettingsActivity)
+                AppLog.set("Новый интерфейс", it)
+            })
+        })
+
         // ---------- Оформление ----------
         root.addView(section("Оформление"))
         root.addView(Ui.card(this).apply {
