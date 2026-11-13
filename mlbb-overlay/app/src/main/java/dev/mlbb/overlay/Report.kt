@@ -1,203 +1,175 @@
 package dev.mlbb.overlay
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
-import androidx.core.content.FileProvider
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import android.widget.EditText
+import android.widget.Toast
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.UUID
 
 /**
- * «Сообщить о проблеме»: собирает отчёт в файл и даёт отправить его разработчику любым
- * способом (Telegram, почта…). Ссылки подписки, адресов серверов и паролей в отчёте нет.
+ * Автоматическая отправка безопасной диагностики на собственный сервер Fast VPN.
+ * В отчёт не попадают ссылки подписок, IP-адреса, ключи серверов и содержимое трафика.
  */
 object Report {
-    fun build(ctx: Context): String {
-        AppSettings.load(ctx)
-        val sb = StringBuilder()
-        fun line(k: String, v: Any?) = sb.append(k).append(": ").append(v).append('\n')
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+    private const val ENDPOINT = "https://buninsil-fast-vpn.ru/api/report.php"
+    private const val PREFS = "fastvpn_support"
+    private const val CONSENT = "diagnostics_consent_v1"
+    private const val MAX_DIAGNOSTICS = 9000
 
-        sb.append("=== Fast VPN — отчёт о проблеме ===\n")
-        line("Время", now)
-        line("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.GIT_SHA.take(7)})")
-        line("Телефон", "${Build.MANUFACTURER} ${Build.MODEL}")
-        line("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-        line("Сеть", ServerTester.netKey(ctx))
-
-        sb.append("\n--- Настройки ---\n")
-        line("Режим приложения", if (AppSettings.simple) "Fast VPN" else "Fast VPN + MLBB")
-        line("Режим подключения", AppSettings.mode)
-        line("Игровой режим", AppSettings.gameMode)
-        line("Автовыбор", AppSettings.autoSelect)
-        line("Только игра", AppSettings.onlyGame)
-        line("Матч напрямую", AppSettings.battleDirect)
-        line("Российские сайты напрямую", AppSettings.ruDirect)
-        line("Блок рекламы", AppSettings.adBlock)
-        line("Резерв (бесплатные серверы)", AppSettings.freeReserve)
-        line("Режим совместимости (gVisor)", AppSettings.compatStack)
-        // Частная DNS (DoT) в настройках Android может мешать VPN
-        line("Частный DNS", try {
-            val mode = android.provider.Settings.Global.getString(ctx.contentResolver, "private_dns_mode") ?: "—"
-            val host = android.provider.Settings.Global.getString(ctx.contentResolver, "private_dns_specifier")
-            mode + (host?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
-        } catch (_: Exception) { "не прочитать" })
-        line("Приложения", "режим ${AppSettings.appsMode}, выбрано ${AppSettings.appsList.size}")
-        line("Автоподключение", "мобильный ${AppSettings.autoOnMobile}, выкл. на Wi-Fi ${AppSettings.autoOffWifi}")
-        line("Ускорение Wi-Fi", AppSettings.wifiBoost)
-        line("Тема", AppSettings.theme)
-        line("Анимация", AppSettings.anim)
-
-        sb.append("\n--- VPN ---\n")
-        line("Подключён", BoxVpnService.isRunning)
-        // Если явной ошибки запуска нет — берём последнюю ошибку из журнала (ядро пишет их в CORE)
-        line("Последняя ошибка", BoxVpnService.lastError ?: CaptureVpnService.lastError ?: MonitorService.lastError
-            ?: lastLogError() ?: "нет")
-        line("Сеть сейчас", Autopilot.summary(ctx).ifBlank { ServerTester.netKey(ctx) })
-        val nodes = Subscription.usable(ctx, includeHidden = true)
-        line("Серверов в подписке", nodes.size)
-        Subscription.info?.let { i ->
-            line("Подписка", "использовано ${(i.upload + i.download) / 1_048_576} МБ из ${if (i.total > 0) "${i.total / 1_048_576} МБ" else "∞"}, " +
-                "до ${if (i.expireSec > 0) SimpleDateFormat("dd.MM.yyyy", Locale.US).format(Date(i.expireSec * 1000)) else "—"}")
-        }
-        Subscription.extras(ctx).takeIf { it.isNotEmpty() }?.let { ex ->
-            line("Дополнительные подписки", ex.joinToString { "${AppLog.host(it)} (${Subscription.countFor(ctx, it)})" })
-        }
-        val sel = nodes.firstOrNull { it.tag == AppSettings.selectedTag }
-        line("Выбранный сервер", sel?.let { "${Ui.cleanName(it)} (${it.type})" }
-            ?: if (AppSettings.selectedTag == XrayCore.BYPASS) "обход блокировок без сервера" else "—")
-        if (TelegramRoute.state.isNotEmpty()) line("Telegram", TelegramRoute.state)
-        // Задержка через туннель, тип и страна выхода — без адресов и ключей. Показываем сколько есть (до 15).
-        val measured = nodes.mapNotNull { n -> ServerTester.results[n.tag]?.let { n to it } }.sortedBy { it.second.score }
-        sb.append("Замеры по задержке через туннель (${minOf(measured.size, 15)} из ${measured.size}):\n")
-        measured.take(15).forEach { (n, r) ->
-            sb.append("  ${Ui.cleanName(n)} · ${n.type} · ${r.medianMs} ms ±${r.jitterMs}" +
-                (ServerTester.exitCountry[n.tag]?.let { " · выход $it" } ?: "") +
-                (ServerTester.speed[n.tag]?.takeIf { it > 0 }?.let { String.format(Locale.US, " · %.0f Мбит/с", it) } ?: "") + "\n")
-        }
-        ServerTester.standby?.let { line("Запасной сервер", AppLog.name(ctx, it)) }
-        if (ServerTester.lowTag != null) line("Сервер для звонков/игр", AppLog.name(ctx, ServerTester.lowTag!!))
-        val dead = nodes.count { ServerTester.results.containsKey(it.tag) && ServerTester.results[it.tag] == null }
-        line("Не ответили", dead)
-
-        // Полный журнал: каждое нажатие, экраны, подключение по шагам, замеры, подписка, обновления,
-        // автоподключение, сеть, строки VPN-ядра (CORE) и ошибки — с точным временем
-        sb.append("\n--- Полный журнал действий (последний ~1 МБ) ---\n")
-        sb.append("Категории: UI — нажатия и экраны, SET — настройки, VPN, CONN — подключение, SRV — замеры серверов, ")
-        sb.append("SUB — подписка, UPD — обновления, AUTO — автоподключение, NET — сеть, TILE — плитка/виджет, ")
-        sb.append("SPEED — тест скорости, CORE — VPN-ядро, ERR — ошибки\n\n")
-        sb.append(collapse(redact(stripAnsi(AppLog.all()))).ifBlank { "(пусто)" }).append('\n')
-
-        CrashReport.last(ctx)?.let {
-            sb.append("\n--- Последнее падение ---\n").append(it).append('\n')
-        }
-        return sb.toString()
-    }
-
-    @Volatile private var building = false
-    @Volatile private var lastShowAt = 0L
-
-    /** Копия для буфера: шапка + хвост журнала (~150 КБ), чтобы влезть в лимит Binder (~1 МБ) */
-    private fun forClipboard(text: String): String {
-        if (text.length <= 200_000) return text
-        val head = text.substringBefore("\n--- Полный журнал")
-        val tail = text.takeLast(150_000).let { it.substring(it.indexOf('\n') + 1) } // обрезаем по границе строки
-        return head + "\n\n--- Полный журнал (только конец, ~150 КБ; весь — в файле) ---\n" + tail
-    }
-
-    /** Собрать отчёт и показать окно: отправить файлом, скопировать или закрыть. */
     fun show(a: Activity) {
-        // Дебаунс по времени: два быстрых нажатия (в логе 0.6 с) не должны запускать сборку дважды
-        val now = System.currentTimeMillis()
-        if (building || now - lastShowAt < 2000) {
-            android.widget.Toast.makeText(a, "Отчёт уже собирается…", android.widget.Toast.LENGTH_SHORT).show(); return
-        }
-        lastShowAt = now
-        building = true
-        AppLog.ui("нажал «Сообщить о проблеме» — собираю отчёт")
-        val text = try { build(a) } catch (e: Exception) { "Не удалось собрать отчёт: ${e.message}" }
-        building = false
-        val dir = File(a.cacheDir, "reports").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-        val file = File(dir, "fast-vpn-report-$stamp.txt").apply { writeText(text) }
-
-        android.app.AlertDialog.Builder(a)
-            .setTitle("Отчёт готов")
-            .setMessage(
-                "Отправь этот файл разработчику любым удобным способом — Telegram, почта, что угодно.\n\n" +
-                    "В отчёте полный журнал: все нажатия, подключения, замеры серверов, ошибки — с точным временем. " +
-                    "Ссылки подписки, адресов серверов и паролей в нём нет. В строках VPN-ядра могут встречаться " +
-                    "адреса сайтов, которые открывались."
-            )
-            .setPositiveButton("Отправить") { _, _ ->
-                val uri = FileProvider.getUriForFile(a, "${a.packageName}.files", file)
-                val send = Intent(Intent.ACTION_SEND)
-                    .setType("text/plain")
-                    .putExtra(Intent.EXTRA_STREAM, uri)
-                    .putExtra(Intent.EXTRA_SUBJECT, "Fast VPN — отчёт о проблеме")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                a.startActivity(Intent.createChooser(send, "Отправить отчёт"))
-            }
-            .setNeutralButton("Скопировать") { _, _ ->
-                // Весь лог (~1 МБ) не влезает в буфер обмена (лимит Binder ~1 МБ) — копируем шапку и хвост,
-                // полный лог остаётся в файле. И никогда не падаем на этом.
-                try {
-                    a.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fast VPN report", forClipboard(text)))
-                    android.widget.Toast.makeText(a, "Скопирована шапка и конец лога — полный лог в файле, отправь его", android.widget.Toast.LENGTH_LONG).show()
-                } catch (e: Exception) {
-                    android.widget.Toast.makeText(a, "Не удалось скопировать (${e.message}) — отправь файл", android.widget.Toast.LENGTH_LONG).show()
+        val prefs = a.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val message = "Fast VPN автоматически соберёт техническую диагностику: версию приложения, модель устройства, Android, состояние VPN и последние строки ошибок после очистки адресов и секретов.\n\n" +
+            "Ссылки подписок, ключи серверов, IP-адреса и содержимое трафика не отправляются. Краткое описание проблемы можно добавить по желанию."
+        if (!prefs.getBoolean(CONSENT, false)) {
+            android.app.AlertDialog.Builder(a)
+                .setTitle("Отправка диагностики")
+                .setMessage(message)
+                .setPositiveButton("Продолжить") { _, _ ->
+                    prefs.edit().putBoolean(CONSENT, true).apply()
+                    askDescription(a)
                 }
+                .setNegativeButton("Отмена", null)
+                .show()
+        } else askDescription(a)
+    }
+
+    private fun askDescription(a: Activity) {
+        val input = EditText(a).apply {
+            hint = "Краткое описание (необязательно)"
+            minLines = 2
+            maxLines = 4
+            setSingleLine(false)
+            setPadding(32, 20, 32, 20)
+        }
+        android.app.AlertDialog.Builder(a)
+            .setTitle("Сообщить о проблеме")
+            .setMessage("Диагностика соберётся автоматически.")
+            .setView(input)
+            .setPositiveButton("Отправить отчёт") { _, _ ->
+                send(a, input.text?.toString()?.trim().orEmpty().take(500))
             }
-            .setNegativeButton("Закрыть", null)
+            .setNegativeButton("Отмена", null)
             .show()
     }
 
-    /** Старые журналы (до исправления) могли содержать значение поля secret — вырезаем */
-    private fun redact(log: String): String =
-        log.replace(Regex("""(поле «secret» = ).*"""), "$1(скрыто)")
-
-    /** Цветовые коды ядра (ESC[..m) в текстовом отчёте только мешают — убираем */
-    private fun stripAnsi(s: String): String = s.replace(Regex("\u001B\\[[0-9;]*m"), "")
-
-    /** Время в начале строки журнала («10-25 19:16:50.826 ») — чтобы сравнивать строки по смыслу */
-    private val TS = Regex("""^\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\s+""")
-
-    /**
-     * Схлопывает подряд идущие одинаковые по смыслу строки (ядро плюётся одной ошибкой десятками
-     * раз): остаётся первая с пометкой «×N», чтобы в журнале было видно суть, а не мусор.
-     */
-    private fun collapse(log: String): String {
-        val lines = log.split('\n')
-        val out = StringBuilder()
-        var prevKey: String? = null
-        var first = ""
-        var count = 0
-        fun flush() {
-            if (count == 0) return
-            out.append(first)
-            if (count > 1) out.append("   ×$count")
-            out.append('\n')
-        }
-        for (l in lines) {
-            val key = l.replaceFirst(TS, "")
-            if (key == prevKey) count++
-            else { flush(); prevKey = key; first = l; count = 1 }
-        }
-        flush()
-        return out.toString().trimEnd('\n')
+    private fun installId(ctx: Context): String {
+        val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val saved = p.getString("install_id", null)
+        if (!saved.isNullOrBlank()) return saved
+        val created = UUID.randomUUID().toString()
+        p.edit().putString("install_id", created).apply()
+        return created
     }
 
-    /** Последняя строка журнала, похожая на ошибку — для шапки отчёта, когда явной ошибки запуска нет */
-    private fun lastLogError(): String? =
-        stripAnsi(AppLog.all()).split('\n').lastOrNull { l ->
-            val u = l.uppercase()
-            (u.contains("ERROR") || u.contains("[ERR]") || u.contains(" FAILED") || u.contains("ПАНИКА")) &&
-                !u.contains("0 ERROR")
-        }?.replaceFirst(TS, "")?.take(200)
+    private fun networkType(ctx: Context): String = try {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return "нет сети"
+        val caps = cm.getNetworkCapabilities(network) ?: return "неизвестно"
+        when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная сеть"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+            else -> "другая сеть"
+        }
+    } catch (_: Exception) { "неизвестно" }
+
+    private fun safeDiagnostics(ctx: Context): String {
+        val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://|https?://)")
+        val ip = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
+        val longToken = Regex("""[A-Za-z0-9_+/=-]{36,}""")
+        val selected = AppLog.all().lineSequence()
+            .filter { line ->
+                (line.contains("[ERR]") || line.contains("[VPN]") || line.contains("[CONN]") ||
+                    line.contains("[CORE]") || line.contains("[NET]") || line.contains("[UPD]") ||
+                    line.contains("[AUTO]")) && !forbidden.containsMatchIn(line)
+            }
+            .takeLast(100)
+            .map { it.replace(ip, "[IP скрыт]").replace(longToken, "[токен скрыт]").take(300) }
+            .toList()
+        val crash = CrashReport.last(ctx)?.let {
+            "\nПоследнее падение:\n" + it
+                .replace(ip, "[IP скрыт]")
+                .replace(Regex("(?i)https?://\\S+"), "[адрес скрыт]")
+                .take(2500)
+        }.orEmpty()
+        return (selected.joinToString("\n") + crash).takeLast(MAX_DIAGNOSTICS)
+    }
+
+    private fun payload(ctx: Context, description: String): JSONObject {
+        val vpn = when {
+            BoxVpnService.isRunning -> "connected"
+            BoxVpnService.isStarting -> "connecting"
+            else -> "off"
+        }
+        return JSONObject().apply {
+            put("install_id", installId(ctx))
+            put("version", BuildConfig.VERSION_NAME)
+            put("version_code", BuildConfig.VERSION_CODE)
+            put("manufacturer", Build.MANUFACTURER.take(80))
+            put("model", Build.MODEL.take(100))
+            put("android", Build.VERSION.RELEASE.take(30))
+            put("sdk", Build.VERSION.SDK_INT)
+            put("vpn_state", vpn)
+            put("network", networkType(ctx))
+            put("description", description)
+            put("diagnostics", safeDiagnostics(ctx))
+        }
+    }
+
+    private fun send(a: Activity, description: String) {
+        Toast.makeText(a, "Собираю и отправляю диагностику…", Toast.LENGTH_SHORT).show()
+        Thread {
+            var ticket: String? = null
+            var failure: String? = null
+            var connection: HttpURLConnection? = null
+            try {
+                val body = payload(a.applicationContext, description).toString().toByteArray(Charsets.UTF_8)
+                connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("X-FastVPN-Client", "android-v1")
+                    setFixedLengthStreamingMode(body.size)
+                }
+                connection.outputStream.use { it.write(body) }
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw IllegalStateException("сервер ответил HTTP $code")
+                ticket = JSONObject(response).optString("ticket").takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("сервер не вернул номер обращения")
+            } catch (e: Exception) {
+                failure = when (e) {
+                    is java.net.UnknownHostException -> "домен пока недоступен или нет интернета"
+                    is java.net.SocketTimeoutException -> "сервер не ответил вовремя"
+                    else -> e.message ?: "неизвестная ошибка"
+                }
+                AppLog.err("отправка отчёта: $failure")
+            } finally {
+                connection?.disconnect()
+            }
+            a.runOnUiThread {
+                if (a.isFinishing || a.isDestroyed) return@runOnUiThread
+                if (ticket != null) {
+                    Toast.makeText(a, "Отчёт отправлен · $ticket", Toast.LENGTH_LONG).show()
+                    AppLog.ui("диагностический отчёт отправлен: $ticket")
+                } else {
+                    android.app.AlertDialog.Builder(a)
+                        .setTitle("Не удалось отправить")
+                        .setMessage("Отчёт не потерян намеренно, но отправка не состоялась: $failure.\n\nПопробуй ещё раз, когда появится соединение.")
+                        .setPositiveButton("Понятно", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
 }
