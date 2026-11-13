@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS reports (
   ip_hash CHAR(64) NOT NULL,
   app_version VARCHAR(32) NOT NULL,
   version_code INT UNSIGNED NOT NULL DEFAULT 0,
+  category VARCHAR(16) NOT NULL DEFAULT 'other',
   manufacturer VARCHAR(80) NOT NULL DEFAULT '',
   device_model VARCHAR(100) NOT NULL DEFAULT '',
   android_version VARCHAR(30) NOT NULL DEFAULT '',
