@@ -328,9 +328,13 @@ class BoxVpnService : VpnService(), PlatformInterface {
             val bypass = bypassPort != null && AppSettings.selectedTag == XrayCore.BYPASS
             if (nodes.isEmpty() && !bypass) throw RuntimeException("Нет серверов: добавь ссылку подписки или включи «Обход блокировок» в «Серверах»")
             // Серверы XHTTP — через ядро Xray, каждому свой локальный порт
-            val xrayPorts = if (XrayCore.available(this)) {
-                nodes.filter { it.xrayLink != null }.associate { it.tag to freePort() }
-            } else emptyMap()
+            val xrayNodes = if (XrayCore.available(this)) nodes.filter { node ->
+                val link = node.xrayLink
+                link != null && runCatching { XrayCore.outbound(link, node.tag) }.getOrNull() != null
+            } else emptyList()
+            val unsupportedXray = nodes.count { it.xrayLink != null } - xrayNodes.size
+            if (unsupportedXray > 0) AppLog.err("Xray: пропущено неподдерживаемых XHTTP-серверов: $unsupportedXray")
+            val xrayPorts = xrayNodes.associate { it.tag to freePort() }
             // Обход: сразу способ, найденный лабораторией для этой сети
             XrayCore.presetBypassParams(Autopilot.bypassBest(this)?.params())
             XrayCore.start(this, nodes.filter { it.tag in xrayPorts }.associate { it.tag to (it.xrayLink!! to xrayPorts.getValue(it.tag)) }, bypassPort)
