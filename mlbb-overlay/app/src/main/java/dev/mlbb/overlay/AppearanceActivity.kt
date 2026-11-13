@@ -66,9 +66,7 @@ class AppearanceActivity : AppCompatActivity() {
             val card = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(d(14f), d(14f), d(14f), d(14f))
-                background = Ui.rounded(if (AppSettings.newDesign) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
-                    if (AppSettings.newDesign) setStroke(d(2f), Ui.GREEN)
-                }
+                background = if (AppSettings.newDesign) Ui.surface(this@AppearanceActivity, Ui.CARD, 18f, AppSettings.newDesign) else Ui.rounded(Ui.CARD, d(16f).toFloat())
             }
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             col.addView(Ui.text(this, "Новый интерфейс", 15f, bold = true))
@@ -124,10 +122,7 @@ class AppearanceActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun section(title: String) = Ui.text(this, title.uppercase(), 12f, Ui.MUTED, bold = true).apply {
-        setPadding(d(4f), d(22f), 0, d(8f))
-        letterSpacing = 0.08f
-    }
+    private fun section(title: String) = Ui.sectionLabel(this, title)
 
     /** Превью: та же кнопка и та же анимация, что на главном экране. */
     private fun preview(): FrameLayout {
@@ -233,7 +228,7 @@ class AppearanceActivity : AppCompatActivity() {
         val c = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(d(14f), d(12f), d(14f), d(12f))
-            background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
+            background = if (AppSettings.newDesign) Ui.surface(this@AppearanceActivity, Ui.CARD, 18f, selected) else Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(16f).toFloat()).apply {
                 if (selected) setStroke(d(2f), Ui.GREEN)
             }
         }
