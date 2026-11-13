@@ -20,7 +20,7 @@ object Report {
     private const val ENDPOINT = "https://buninsil-fast-vpn.ru/api/report.php"
     private const val PREFS = "fastvpn_support"
     private const val CONSENT = "diagnostics_consent_v1"
-    private const val MAX_DIAGNOSTICS = 9000
+    private const val MAX_DIAGNOSTICS = 3000
 
     fun show(a: Activity) {
         val prefs = a.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -98,7 +98,8 @@ object Report {
             "\nПоследнее падение:\n" + it
                 .replace(ip, "[IP скрыт]")
                 .replace(Regex("(?i)https?://\\S+"), "[адрес скрыт]")
-                .take(2500)
+                .replace(longToken, "[токен скрыт]")
+                .take(1800)
         }.orEmpty()
         return (selected.joinToString("\n") + crash).takeLast(MAX_DIAGNOSTICS)
     }
