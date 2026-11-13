@@ -799,14 +799,22 @@ class MainActivity : AppCompatActivity() {
             AppSettings.gameMode && AppSettings.autoLaunch -> "ИГРАТЬ"
             else -> "ПОДКЛЮЧИТЬ"
         }
-        if (playKey != label) {
-            playKey = label
+        val visualState = when {
+            connecting -> "connecting"
+            running -> "connected"
+            err != null -> "error"
+            else -> "off"
+        }
+        val drawKey = "$label|$visualState"
+        if (playKey != drawKey) {
+            playKey = drawKey
             if (AppSettings.newDesign) {
-                // Цвет кнопки всегда отражает реальное состояние VPN, а не просто выбранную тему.
+                // Цвет показывает состояние соединения: нейтральный — выключено, зелёный — подключено.
                 val stateColor = when {
                     connecting -> Ui.YELLOW
-                    running -> Ui.RED
-                    else -> Ui.GREEN
+                    running -> Ui.GREEN
+                    err != null -> Ui.RED
+                    else -> Ui.MUTED
                 }
                 playButton.text = Ui.iconText(
                     this, R.drawable.ic_power, "",
@@ -835,9 +843,13 @@ class MainActivity : AppCompatActivity() {
                         else -> 22f
                     })
                 }
-                // Подключено — кнопка красная (отключить), иначе зелёная
-                val colors = if (running) intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
-                else intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
+                // Одинаковая семантика в обеих версиях интерфейса.
+                val colors = when {
+                    connecting -> intArrayOf(Ui.theme.yellow.toInt(), Ui.theme.yellow.toInt())
+                    running -> intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
+                    err != null -> intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
+                    else -> intArrayOf(Ui.theme.muted.toInt(), Ui.theme.muted.toInt())
+                }
                 playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                     .apply { shape = GradientDrawable.OVAL }
             }
