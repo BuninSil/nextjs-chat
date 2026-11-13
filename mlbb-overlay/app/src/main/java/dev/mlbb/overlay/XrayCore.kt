@@ -7,6 +7,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URLDecoder
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.concurrent.TimeUnit
 
 /**
  * Второе ядро — Xray — для серверов с транспортом XHTTP, которого нет в sing-box.
@@ -130,19 +133,25 @@ object XrayCore {
         val inbounds = JSONArray()
         val outbounds = JSONArray()
         val rules = JSONArray()
+        val listenPorts = ArrayList<Int>()
         for ((tag, v) in nodes) {
-            val ob = outbound(v.first, tag) ?: continue
+            val ob = outbound(v.first, tag)
+                ?: throw IllegalArgumentException("Xray: неподдерживаемая конфигурация сервера «$tag»")
+            require(v.second in 1..65535) { "Xray: некорректный локальный порт для «$tag»" }
             outbounds.put(ob)
             inbounds.put(JSONObject().put("tag", "in-$tag").put("listen", "127.0.0.1").put("port", v.second)
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
             rules.put(JSONObject().put("type", "field").put("inboundTag", JSONArray().put("in-$tag")).put("outboundTag", tag))
+            listenPorts.add(v.second)
         }
         if (bypassPort != null) {
             // Параметры, найденные лабораторией обхода, — важнее заготовок
             val (packets, length, interval) = bypassParams
                 ?: BYPASS_PRESETS[AppSettings.bypassPreset.coerceIn(0, BYPASS_PRESETS.size - 1)]
+            require(bypassPort in 1..65535) { "Xray: некорректный локальный порт обхода" }
             inbounds.put(JSONObject().put("tag", "in-$BYPASS").put("listen", "127.0.0.1").put("port", bypassPort)
                 .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
+            listenPorts.add(bypassPort)
             outbounds.put(JSONObject().put("tag", BYPASS).put("protocol", "freedom")
                 .put("settings", JSONObject()
                     .put("fragment", JSONObject().put("packets", packets).put("length", length).put("interval", interval)))
@@ -175,7 +184,31 @@ object XrayCore {
                 }
             } catch (_: Exception) {
             }
-        }, "xray-log").start()
+        }, "xray-log").apply { isDaemon = true; start() }
+
+        // Не отдаём sing-box конфиг с SOCKS-портами, пока Xray действительно не начал слушать.
+        // Иначе VPN формально поднимался, но XHTTP-серверы первые запросы теряли из-за гонки старта.
+        val deadline = System.currentTimeMillis() + 8_000L
+        while (System.currentTimeMillis() < deadline) {
+            if (!p.isAlive) {
+                stop()
+                throw IllegalStateException("Xray завершился при запуске (код " + runCatching { p.exitValue() }.getOrDefault(-1) + ")")
+            }
+            val ready = listenPorts.all { port ->
+                try {
+                    Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 250) }
+                    true
+                } catch (_: Exception) { false }
+            }
+            if (ready) return
+            try { Thread.sleep(100) } catch (_: InterruptedException) {
+                stop()
+                Thread.currentThread().interrupt()
+                throw IllegalStateException("Ожидание запуска Xray прервано")
+            }
+        }
+        stop()
+        throw IllegalStateException("Xray не открыл локальные SOCKS-порты за 8 секунд")
     }
 
     /** Сменить способ обхода на лету: перезапускаем только Xray, VPN не рвётся. */
@@ -195,9 +228,23 @@ object XrayCore {
 
     @Synchronized
     fun stop() {
-        process?.let {
-            try { it.destroy() } catch (_: Exception) {}
-        }
+        val old = process
         process = null
+        if (old != null) {
+            try {
+                if (old.isAlive) {
+                    old.destroy()
+                    if (!old.waitFor(1200, TimeUnit.MILLISECONDS)) {
+                        old.destroyForcibly()
+                        old.waitFor(800, TimeUnit.MILLISECONDS)
+                    }
+                }
+            } catch (_: InterruptedException) {
+                old.destroyForcibly()
+                Thread.currentThread().interrupt()
+            } catch (_: Exception) {
+                try { old.destroyForcibly() } catch (_: Exception) {}
+            }
+        }
     }
 }
