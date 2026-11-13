@@ -481,7 +481,7 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(Ui.TEXT)
             setHintTextColor(Ui.HINT)
             textSize = 15f
-            background = Ui.rounded(Ui.INPUT, d(12f).toFloat())
+            background = if (AppSettings.newDesign) Ui.surface(this@SettingsActivity, Ui.INPUT, 14f) else Ui.rounded(Ui.INPUT, d(12f).toFloat())
             setPadding(d(12f), d(10f), d(12f), d(10f))
             if (number) inputType = InputType.TYPE_CLASS_NUMBER
             if (sensitive) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -525,7 +525,7 @@ class SettingsActivity : AppCompatActivity() {
         c.addView(Ui.text(this, "", 15f, bold = true).apply { text = Ui.iconText(this@SettingsActivity, iconRes, title, 20f, under = if (AppSettings.profile == value) Ui.SEL else Ui.CARD) })
         c.addView(Ui.text(this, sub, 12f, Ui.MUTED).apply { setPadding(0, d(4f), 0, 0) })
         val selected = AppSettings.profile == value
-        c.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
+        c.background = if (AppSettings.newDesign) Ui.surface(this, Ui.CARD, 20f, selected) else Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
             if (selected) setStroke(d(2f), Ui.GREEN)
         }
         c.setOnClickListener {
@@ -557,7 +557,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun highlightMode() {
         for ((mode, card) in modeCards) {
             val selected = mode == AppSettings.mode
-            card.background = Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
+            card.background = if (AppSettings.newDesign) Ui.surface(this, Ui.CARD, 20f, selected) else Ui.rounded(if (selected) Ui.SEL else Ui.CARD, d(18f).toFloat()).apply {
                 if (selected) setStroke(d(2f), Ui.GREEN)
             }
         }
