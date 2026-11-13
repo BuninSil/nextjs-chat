@@ -88,9 +88,12 @@ object Updater {
      */
     fun download(ctx: Context, rel: Release, progress: (String) -> Unit): File {
         val out = File(dir(ctx), "mlbb-overlay-${rel.versionCode}.apk")
-        cleanup(ctx, keepCode = rel.versionCode)
+        // Старую загруженную сборку не удаляем, пока новая не скачана и не проверена.
         if (out.exists() && rel.apkSize > 0 && out.length() == rel.apkSize &&
-            (rel.apkSha256.isBlank() || sha256(out).equals(rel.apkSha256, ignoreCase = true))) return out
+            (rel.apkSha256.isBlank() || sha256(out).equals(rel.apkSha256, ignoreCase = true))) {
+            cleanup(ctx, keepCode = rel.versionCode)
+            return out
+        }
         out.delete()
         val c = Net.open(rel.apkUrl)
         c.instanceFollowRedirects = true
@@ -124,6 +127,8 @@ object Updater {
             throw RuntimeException("контрольная сумма APK не совпала — файл удалён")
         }
         if (!part.renameTo(out)) throw RuntimeException("не удалось сохранить файл обновления")
+        // Только после успешной загрузки и SHA-256 удаляем предыдущие скачанные APK.
+        cleanup(ctx, keepCode = rel.versionCode)
         return out
     }
 
