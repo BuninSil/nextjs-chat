@@ -187,6 +187,7 @@ class MainActivity : AppCompatActivity() {
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
                 toast("Скопировано")
             }
+            .setNeutralButton("Отправить отчёт") { _, _ -> Report.show(this) }
             .setNegativeButton("Закрыть", null)
             .show()
     }
@@ -481,6 +482,12 @@ class MainActivity : AppCompatActivity() {
                 Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача") { speedTest() },
             ))
         }
+
+        // Единая точка отправки: приложение само соберёт диагностику, описание необязательно.
+        root.addView(Ui.space(this, 10f))
+        root.addView(Ui.tile(this, R.drawable.ic_log, "Сообщить о проблеме", "автоматическая диагностика · описание по желанию") {
+            Report.show(this)
+        })
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
         root.addView(infoLine)
@@ -811,10 +818,10 @@ class MainActivity : AppCompatActivity() {
             if (AppSettings.newDesign) {
                 // Цвет показывает состояние соединения: нейтральный — выключено, зелёный — подключено.
                 val stateColor = when {
-                    connecting -> Ui.YELLOW
-                    running -> Ui.GREEN
-                    err != null -> Ui.RED
-                    else -> Ui.MUTED
+                    connecting -> Ui.VPN_CONNECTING
+                    running -> Ui.VPN_ON
+                    err != null -> Ui.VPN_ERROR
+                    else -> Ui.VPN_OFF
                 }
                 playButton.text = Ui.iconText(
                     this, R.drawable.ic_power, "",
@@ -845,10 +852,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 // Одинаковая семантика в обеих версиях интерфейса.
                 val colors = when {
-                    connecting -> intArrayOf(Ui.theme.yellow.toInt(), Ui.theme.yellow.toInt())
-                    running -> intArrayOf(Ui.theme.accentTop.toInt(), Ui.theme.accentBottom.toInt())
-                    err != null -> intArrayOf(Ui.theme.redTop.toInt(), Ui.theme.redBottom.toInt())
-                    else -> intArrayOf(Ui.theme.muted.toInt(), Ui.theme.muted.toInt())
+                    connecting -> intArrayOf(Ui.VPN_CONNECTING, 0xFFD99A24.toInt())
+                    running -> intArrayOf(0xFF3DDB82.toInt(), 0xFF1FAE62.toInt())
+                    err != null -> intArrayOf(0xFFE85B55.toInt(), 0xFFB83232.toInt())
+                    else -> intArrayOf(Ui.VPN_OFF, Ui.VPN_OFF)
                 }
                 playButton.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
                     .apply { shape = GradientDrawable.OVAL }
