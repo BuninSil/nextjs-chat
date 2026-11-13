@@ -2,16 +2,11 @@ package dev.mlbb.overlay
 
 import org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
 import java.net.Proxy
-import java.net.Socket
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 /**
  * Clash API (external controller) VPN-клиента: Karing, Hiddify (sing-box),
