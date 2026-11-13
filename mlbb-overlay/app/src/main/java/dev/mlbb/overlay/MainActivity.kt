@@ -1206,9 +1206,7 @@ class MainActivity : AppCompatActivity() {
         val d = { v: Float -> Ui.dp(this, v) }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = if (AppSettings.newDesign) Ui.surface(this@MainActivity, Ui.CARD, 20f)
-                else Ui.rounded(Ui.CARD, d(18f).toFloat())
-            setPadding(d(16f), d(14f), d(16f), d(12f))
+            setPadding(d(20f), d(8f), d(20f), 0)
         }
         box.addView(TextView(this).apply {
             text = "Ссылка подписки — та же, что в Karing, Hiddify или v2rayNG.\n" +
@@ -1265,9 +1263,7 @@ class MainActivity : AppCompatActivity() {
             for ((i, url) in all.withIndex()) {
                 val row = LinearLayout(this).apply {
                     gravity = android.view.Gravity.CENTER_VERTICAL
-                    background = if (AppSettings.newDesign) Ui.surface(this@MainActivity, Ui.CARD2, 12f)
-                        else Ui.rounded(Ui.CARD2, d(12f).toFloat())
-                    setPadding(d(10f), d(8f), d(10f), d(8f))
+                    setPadding(0, d(6f), 0, d(6f))
                 }
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 col.addView(TextView(this).apply {
@@ -1315,11 +1311,9 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Отмена", null)
             .create()
         // Ссылка с токеном — не в скриншоты, запись экрана и превью «Недавних».
-        // Оформление окна наследует только текущую тему и выбранный вариант интерфейса.
-        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        // Оставляем штатное окно AlertDialog: его фон и размеры задаёт текущая палитра темы.
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
         val titleId = resources.getIdentifier("alertTitle", "id", "android")
