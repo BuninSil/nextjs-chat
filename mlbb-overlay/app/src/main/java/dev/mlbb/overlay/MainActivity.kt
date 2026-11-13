@@ -184,8 +184,11 @@ class MainActivity : AppCompatActivity() {
             .setMessage("Скопируй и скинь разработчику — по этому тексту видно причину.\n\n" + text.take(3000))
             .setPositiveButton("Скопировать") { _, _ ->
                 val cm = getSystemService(ClipboardManager::class.java)
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
-                toast("Скопировано")
+                // Clipboard IPC is limited by Binder's transaction size (~1 MB).
+                // Crash details are already useful in a compact form; never copy an unbounded log.
+                val copyText = text.take(12_000)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", copyText))
+                toast(if (text.length > copyText.length) "Скопирована краткая диагностика" else "Скопировано")
             }
             .setNeutralButton("Отправить отчёт") { _, _ -> Report.show(this) }
             .setNegativeButton("Закрыть", null)
