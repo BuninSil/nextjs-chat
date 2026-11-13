@@ -28,7 +28,7 @@ exit; endif;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket'], $_POST['status'])) {
     if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf'] ?? ''))) { http_response_code(403); exit('CSRF'); }
     $status = in_array($_POST['status'], ['new','in_progress','resolved','duplicate'], true) ? $_POST['status'] : 'new';
-    $note = mb_substr(trim((string)($_POST['admin_note'] ?? '')), 0, 2000);
+    $note = fastvpn_cut(trim((string)($_POST['admin_note'] ?? '')), 2000);
     $q = $pdo->prepare('UPDATE reports SET status=?, admin_note=?, updated_at=UTC_TIMESTAMP() WHERE ticket=?');
     $q->execute([$status, $note, (string)$_POST['ticket']]);
     header('Location: /admin/'); exit;
