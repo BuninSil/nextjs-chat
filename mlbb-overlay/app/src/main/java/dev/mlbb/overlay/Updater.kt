@@ -21,7 +21,7 @@ object Updater {
      * чтобы при прыжке через несколько версий было видно всё, что поменялось.
      */
     fun check(): Release? {
-        val c = Net.open("https://buninsil-fast-vpn.ru/api/version.php")
+        val c = Net.open("https://vladisl140.temp.swtest.ru/api/version.php")
         c.setRequestProperty("Accept", "application/json")
         c.setRequestProperty("User-Agent", "FastVPN-Android/${BuildConfig.VERSION_NAME}")
         if (c.responseCode != 200) throw RuntimeException("сервер обновлений HTTP ${c.responseCode}")
@@ -34,7 +34,7 @@ object Updater {
         if (!sha.matches(Regex("""[a-f0-9]{64}"""))) throw RuntimeException("сервер вернул некорректную контрольную сумму APK")
         val size = json.optLong("size", -1L)
         val notes = json.optString("notes").ifBlank { "Исправления и улучшения." }
-        return Release(code, "mlbb-v$version", notes, "https://buninsil-fast-vpn.ru/download.php", size, sha)
+        return Release(code, "mlbb-v$version", notes, "https://vladisl140.temp.swtest.ru/download.php", size, sha)
     }
 
     /**
