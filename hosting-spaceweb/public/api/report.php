@@ -30,7 +30,7 @@ $vpn = in_array(($in['vpn_state'] ?? ''), ['connected','connecting','off','error
 $network = in_array(($in['network'] ?? ''), ['Wi-Fi','мобильная сеть','Ethernet','другая сеть','нет сети','неизвестно'], true) ? $in['network'] : 'unknown';
 $description = fastvpn_cut(trim((string)($in['description'] ?? '')), 500);
 $diagnostics = fastvpn_cut((string)($in['diagnostics'] ?? ''), 9000);
-$searchText = $description . "\\n" . $diagnostics;
+$searchText = $description . "\n" . $diagnostics;
 $category = preg_match('/обнов|\\[UPD\\]|update/i', $searchText) ? 'update'
     : (($vpn === 'error' || preg_match('/\\[ERR\\]|подключ|connect|tunnel/i', $searchText)) ? 'vpn'
     : (preg_match('/timeout|dns|сеть|скорост|latency|jitter/i', $searchText) ? 'network' : 'other'));
