@@ -1303,15 +1303,9 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        val scroll = android.widget.ScrollView(this).apply {
-            isFillViewport = false
-            clipToPadding = false
-            setPadding(0, 0, 0, 0)
-            addView(box, android.widget.ScrollView.LayoutParams(-1, -2))
-        }
         dialog = AlertDialog.Builder(this)
             .setTitle("Подписка")
-            .setView(scroll)
+            .setView(box)
             .setPositiveButton("Сохранить и обновить") { _, _ ->
                 // Не трогали маску — значит, ссылка прежняя
                 val t = input.text.toString().trim().let { if (it == masked) saved else it }
@@ -1325,8 +1319,6 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
-        val maxContentHeight = (resources.displayMetrics.heightPixels * 0.62f).toInt()
-        scroll.layoutParams = scroll.layoutParams.apply { height = maxContentHeight }
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
