@@ -20,7 +20,7 @@ object Report {
     private const val ENDPOINT = "http://vladisl140.temp.swtest.ru/api/report.php"
     private const val PREFS = "fastvpn_support"
     private const val CONSENT = "diagnostics_consent_v1"
-    private const val MAX_DIAGNOSTICS = 3000
+    private const val MAX_DIAGNOSTICS = 5500
 
     fun show(a: Activity) {
         val prefs = a.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -82,26 +82,32 @@ object Report {
     }
 
     private fun safeDiagnostics(ctx: Context): String {
-        val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://|https?://)")
+        // Секретные строки исключаем целиком, а адреса и длинные токены дополнительно маскируем.
+        val forbidden = Regex("(?i)(подписк|subscription|secret|password|token|private dns|частн(ый|ого) dns|vless://|vmess://|trojan://|ss://)")
         val ip = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
         val ipv6 = Regex("""(?i)\b(?:[0-9a-f]{1,4}:){2,}[0-9a-f:]{2,}\b""")
         val longToken = Regex("""[A-Za-z0-9_+/=-]{36,}""")
+        val url = Regex("""(?i)https?://\S+""")
+        val categories = listOf("[APP]", "[UI]", "[SET]", "[ERR]", "[VPN]", "[CONN]", "[CORE]",
+            "[NET]", "[UPD]", "[AUTO]", "[SRV]", "[SUB]", "[TILE]")
         val selected = AppLog.all().lineSequence()
-            .filter { line ->
-                (line.contains("[ERR]") || line.contains("[VPN]") || line.contains("[CONN]") ||
-                    line.contains("[CORE]") || line.contains("[NET]") || line.contains("[UPD]") ||
-                    line.contains("[AUTO]")) && !forbidden.containsMatchIn(line)
-            }
+            .filter { line -> categories.any(line::contains) && !forbidden.containsMatchIn(line) }
             .toList()
-            .takeLast(100)
-            .map { it.replace(ip, "[IP скрыт]").replace(ipv6, "[IPv6 скрыт]").replace(longToken, "[токен скрыт]").take(300) }
+            .takeLast(220)
+            .map { line ->
+                line.replace(url, "[адрес скрыт]")
+                    .replace(ip, "[IP скрыт]")
+                    .replace(ipv6, "[IPv6 скрыт]")
+                    .replace(longToken, "[токен скрыт]")
+                    .take(450)
+            }
         val crash = CrashReport.last(ctx)?.let {
             "\nПоследнее падение:\n" + it
+                .replace(url, "[адрес скрыт]")
                 .replace(ip, "[IP скрыт]")
                 .replace(ipv6, "[IPv6 скрыт]")
-                .replace(Regex("(?i)https?://\\S+"), "[адрес скрыт]")
                 .replace(longToken, "[токен скрыт]")
-                .take(1800)
+                .take(3200)
         }.orEmpty()
         return (selected.joinToString("\n") + crash).takeLast(MAX_DIAGNOSTICS)
     }
