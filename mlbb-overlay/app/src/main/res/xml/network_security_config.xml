@@ -5,4 +5,10 @@
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
     </domain-config>
+
+    <!-- ВРЕМЕННО: тестовый технический домен SpaceWeb без SSL.
+         Перед релизом удалить этот блок и вернуть HTTPS в Updater.kt и Report.kt. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">vladisl140.temp.swtest.ru</domain>
+    </domain-config>
 </network-security-config>
