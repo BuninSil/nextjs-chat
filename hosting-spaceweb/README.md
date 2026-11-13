@@ -95,10 +95,10 @@
 Автопубликация включается после того, как SSH/SFTP доступ SpaceWeb реально доступен. В бесплатном тестовом периоде SFTP может быть выключен; SpaceWeb пишет, что SSH включается в панели после тестового периода.
 
 В GitHub → Settings → Secrets and variables → Actions добавь:
-- `SPACEWEB_SFTP_HOST` — сервер из панели SpaceWeb;
-- `SPACEWEB_SFTP_USER` — логин хостинга;
-- `SPACEWEB_SFTP_PASSWORD` — пароль для SFTP;
-- `SPACEWEB_SFTP_FINGERPRINT` — проверенный SHA256 fingerprint SSH-хоста;
+- `SPACEWEB_HOST` — сервер из панели SpaceWeb;
+- `SPACEWEB_USER` — логин хостинга;
+- `SPACEWEB_PASSWORD` — пароль для SFTP;
+- `SPACEWEB_FINGERPRINT` — проверенный SHA256 fingerprint SSH-хоста;
 - `SPACEWEB_INCOMING_PATH` — абсолютный путь к `/private/storage/incoming/`;
 - `SPACEWEB_SITE_URL` — `https://buninsil-fast-vpn.ru`;
 - `SPACEWEB_PUBLISH_SECRET` — секрет, который показал установщик.
