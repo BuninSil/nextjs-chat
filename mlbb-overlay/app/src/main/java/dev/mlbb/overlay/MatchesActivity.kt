@@ -76,15 +76,13 @@ class MatchesActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10f) })
 
         // Список матчей
-        root.addView(Ui.text(this, "ПОСЛЕДНИЕ МАТЧИ", 12f, Ui.MUTED, bold = true).apply {
-            setPadding(d(4f), d(20f), 0, d(8f)); letterSpacing = 0.08f
-        })
+        root.addView(Ui.sectionLabel(this, "Последние матчи"))
         val fmt = SimpleDateFormat("d MMM, HH:mm", Locale("ru"))
         for (m in list.take(60)) {
             val row = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(d(14f), d(10f), d(14f), d(10f))
-                background = Ui.rounded(Ui.CARD, d(14f).toFloat())
+                background = if (AppSettings.newDesign) Ui.surface(this@MatchesActivity, Ui.CARD, 16f) else Ui.rounded(Ui.CARD, d(14f).toFloat())
             }
             val flag = Ui.text(this, "", 24f).apply { Ui.setFlag(this, if (m.country.length == 2) GeoDb.flag(m.country) else "🌐", 24f) }
             row.addView(flag)
