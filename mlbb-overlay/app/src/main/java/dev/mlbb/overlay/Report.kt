@@ -17,7 +17,7 @@ import java.util.UUID
  * В отчёт не попадают ссылки подписок, IP-адреса, ключи серверов и содержимое трафика.
  */
 object Report {
-    private const val ENDPOINT = "https://vladisl140.temp.swtest.ru/api/report.php"
+    private const val ENDPOINT = "http://vladisl140.temp.swtest.ru/api/report.php"
     private const val PREFS = "fastvpn_support"
     private const val CONSENT = "diagnostics_consent_v1"
     private const val MAX_DIAGNOSTICS = 3000
