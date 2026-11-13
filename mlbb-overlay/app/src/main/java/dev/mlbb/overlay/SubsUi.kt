@@ -14,6 +14,16 @@ import android.widget.Toast
 object SubsUi {
     private fun alive(a: Activity) = !a.isFinishing && !a.isDestroyed
 
+    private fun styleDialog(a: Activity, dialog: AlertDialog) {
+        if (!AppSettings.newDesign) return
+        dialog.window?.setBackgroundDrawable(Ui.rounded(Ui.CARD, Ui.dp(a, 20f).toFloat()))
+        dialog.findViewById<TextView>(android.R.id.alertTitle)?.setTextColor(Ui.TEXT)
+        dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Ui.SUB)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.GREEN)
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.MUTED)
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(Ui.MUTED)
+    }
+
     /** Название подписки в списках: хост ссылки или «Свои серверы» для вставленных вручную */
     fun title(url: String) = if (url.startsWith("http")) AppLog.host(url) else "Свои серверы"
 
@@ -36,6 +46,7 @@ object SubsUi {
     /** Долгая операция с окном прогресса; итог — всплывающим сообщением или окном ошибки. */
     private fun background(a: Activity, title: String, work: () -> String, onDone: () -> Unit) {
         val progress = AlertDialog.Builder(a).setTitle(title).setMessage("Секунду…").setCancelable(false).show()
+        styleDialog(a, progress)
         Thread {
             val (ok, msg) = try { true to work() } catch (e: Exception) { false to (e.message ?: "не получилось") }
             a.runOnUiThread {
@@ -45,7 +56,7 @@ object SubsUi {
                 }
                 try { if (progress.isShowing) progress.dismiss() } catch (_: Exception) {}
                 if (ok) Toast.makeText(a, msg, Toast.LENGTH_LONG).show()
-                else AlertDialog.Builder(a).setTitle(title).setMessage(msg).setPositiveButton("Понятно", null).show()
+                else AlertDialog.Builder(a).setTitle(title).setMessage(msg).setPositiveButton("Понятно", null).show().also { styleDialog(a, it) }
                 onDone()
             }
         }.start()
@@ -85,7 +96,7 @@ object SubsUi {
                 }, onDone)
             }
             .setNegativeButton("Отмена", null)
-            .show()
+            .show().also { styleDialog(a, it) }
     }
 
     /** Окно «Добавить подписку»; onUrl получает введённую ссылку. */
@@ -119,5 +130,6 @@ object SubsUi {
         // Ссылка с токеном — не в скриншоты
         dlg.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         dlg.show()
+        styleDialog(a, dlg)
     }
 }
