@@ -44,10 +44,7 @@ class NetworkStatusActivity : AppCompatActivity() {
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(Ui.text(this, "Состояние сети", 23f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(Ui.text(this, "‹", 30f, Ui.TEXT).apply {
-            gravity = Gravity.CENTER
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(d(40f), d(44f)))
+        header.addView(Ui.backButton(this) { finish() })
         root.addView(header)
         root.addView(Ui.text(this, "Текущие показатели подключения", 13f, Ui.MUTED).apply {
             setPadding(0, d(3f), 0, d(16f))
@@ -56,8 +53,11 @@ class NetworkStatusActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun section(name: String): LinearLayout {
-            val card = Ui.card(this).apply { setPadding(d(16f), d(15f), d(16f), d(15f)) }
-            card.addView(Ui.text(this, name, 14f, Ui.MUTED, bold = true))
+            val card = Ui.card(this).apply {
+                setPadding(d(18f), d(16f), d(18f), d(16f))
+                if (AppSettings.newDesign) background = Ui.surface(this@NetworkStatusActivity, Ui.CARD, 20f)
+            }
+            card.addView(Ui.sectionLabel(this, name))
             body.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = d(10f) })
             return card
         }
@@ -133,6 +133,7 @@ class NetworkStatusActivity : AppCompatActivity() {
         if (!::connectionValue.isInitialized) return
         val running = BoxVpnService.isRunning
         connectionValue.text = if (running) "Подключён" else if (BoxVpnService.isStarting) "Подключение…" else "Отключён"
+        connectionValue.setTextColor(if (running) Ui.GREEN else if (BoxVpnService.isStarting) Ui.YELLOW else Ui.MUTED)
         networkValue.text = networkType()
         val node = Subscription.usable(this).firstOrNull { it.tag == AppSettings.selectedTag }
         val result = node?.let { ServerTester.results[it.tag] }
