@@ -20,16 +20,16 @@ if ((int)$rate->fetchColumn() > 0) { http_response_code(429); exit(json_encode([
 $rate = $pdo->prepare('SELECT COUNT(*) FROM reports WHERE ip_hash=? AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)');
 $rate->execute([$ipHash]);
 if ((int)$rate->fetchColumn() >= 12) { http_response_code(429); exit(json_encode(['error'=>'daily_limit'])); }
-$version = mb_substr(trim((string)($in['version'] ?? 'unknown')), 0, 32);
+$version = fastvpn_cut(trim((string)($in['version'] ?? 'unknown')), 32);
 $versionCode = max(0, min(4294967295, (int)($in['version_code'] ?? 0)));
-$manufacturer = mb_substr(trim((string)($in['manufacturer'] ?? '')), 0, 80);
-$model = mb_substr(trim((string)($in['model'] ?? '')), 0, 100);
-$android = mb_substr(trim((string)($in['android'] ?? '')), 0, 30);
+$manufacturer = fastvpn_cut(trim((string)($in['manufacturer'] ?? '')), 80);
+$model = fastvpn_cut(trim((string)($in['model'] ?? '')), 100);
+$android = fastvpn_cut(trim((string)($in['android'] ?? '')), 30);
 $sdk = max(0, min(1000, (int)($in['sdk'] ?? 0)));
 $vpn = in_array(($in['vpn_state'] ?? ''), ['connected','connecting','off'], true) ? $in['vpn_state'] : 'unknown';
 $network = in_array(($in['network'] ?? ''), ['Wi-Fi','мобильная сеть','Ethernet','другая сеть','нет сети','неизвестно'], true) ? $in['network'] : 'unknown';
-$description = mb_substr(trim((string)($in['description'] ?? '')), 0, 500);
-$diagnostics = mb_substr((string)($in['diagnostics'] ?? ''), 0, 9000);
+$description = fastvpn_cut(trim((string)($in['description'] ?? '')), 500);
+$diagnostics = fastvpn_cut((string)($in['diagnostics'] ?? ''), 9000);
 $ticket = 'FV-' . gmdate('ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
 $q = $pdo->prepare('INSERT INTO reports (ticket,install_hash,ip_hash,app_version,version_code,manufacturer,device_model,android_version,sdk,vpn_state,network_type,description,diagnostics,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())');
 $q->execute([$ticket,$installHash,$ipHash,$version,$versionCode,$manufacturer,$model,$android,$sdk,$vpn,$network,$description,$diagnostics]);
