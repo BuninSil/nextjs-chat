@@ -1,9 +1,10 @@
 <resources>
-    <!-- Тёмная тема с зелёным акцентом — как на главном экране -->
+    <!-- Новый тёмный интерфейс -->
     <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
         <item name="colorPrimary">#0D0F13</item>
         <item name="colorPrimaryDark">#0D0F13</item>
         <item name="colorAccent">#1ED760</item>
+        <item name="android:colorAccent">#1ED760</item>
         <item name="android:windowBackground">#0D0F13</item>
         <item name="android:statusBarColor">#0D0F13</item>
         <item name="android:navigationBarColor">#0D0F13</item>
@@ -12,41 +13,129 @@
         <item name="alertDialogTheme">@style/AppDialog</item>
         <item name="android:alertDialogTheme">@style/AppDialogFramework</item>
     </style>
-
     <style name="AppDialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="colorAccent">#1ED760</item>
+        <item name="android:colorAccent">#1ED760</item>
         <item name="android:windowBackground">@drawable/dialog_bg</item>
         <item name="android:textColorPrimary">#EBEBEF</item>
+        <item name="android:textColorSecondary">#8A9099</item>
     </style>
-
-    <!-- Для android.app.AlertDialog: тот же вид на базе системной темы -->
     <style name="AppDialogFramework" parent="android:Theme.Material.Dialog.Alert">
         <item name="android:colorAccent">#1ED760</item>
         <item name="android:windowBackground">@drawable/dialog_bg</item>
         <item name="android:textColorPrimary">#EBEBEF</item>
+        <item name="android:textColorSecondary">#8A9099</item>
     </style>
 
-    <!-- Светлая тема: системные окна (AlertDialog) светлые -->
+    <!-- Классическая тёмная тема -->
+    <style name="AppTheme.DarkClassic" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#121417</item>
+        <item name="colorPrimaryDark">#121417</item>
+        <item name="colorAccent">#34C759</item>
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">#121417</item>
+        <item name="android:statusBarColor">#121417</item>
+        <item name="android:navigationBarColor">#121417</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+        <item name="alertDialogTheme">@style/AppDialog.DarkClassic</item>
+        <item name="android:alertDialogTheme">@style/AppDialogFramework.DarkClassic</item>
+    </style>
+    <style name="AppDialog.DarkClassic" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#34C759</item>
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_dark_classic</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+    </style>
+    <style name="AppDialogFramework.DarkClassic" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_dark_classic</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+    </style>
+
+    <!-- Неоновая тема: холодный циан и фиолетовые поверхности -->
+    <style name="AppTheme.Neon" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#07070F</item>
+        <item name="colorPrimaryDark">#07070F</item>
+        <item name="colorAccent">#00E5FF</item>
+        <item name="android:colorAccent">#00E5FF</item>
+        <item name="android:windowBackground">#07070F</item>
+        <item name="android:statusBarColor">#07070F</item>
+        <item name="android:navigationBarColor">#07070F</item>
+        <item name="android:textColorPrimary">#EAF6FF</item>
+        <item name="android:textColorSecondary">#8C90BE</item>
+        <item name="alertDialogTheme">@style/AppDialog.Neon</item>
+        <item name="android:alertDialogTheme">@style/AppDialogFramework.Neon</item>
+    </style>
+    <style name="AppDialog.Neon" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#00E5FF</item>
+        <item name="android:colorAccent">#00E5FF</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_neon</item>
+        <item name="android:textColorPrimary">#EAF6FF</item>
+        <item name="android:textColorSecondary">#8C90BE</item>
+    </style>
+    <style name="AppDialogFramework.Neon" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#00E5FF</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_neon</item>
+        <item name="android:textColorPrimary">#EAF6FF</item>
+        <item name="android:textColorSecondary">#8C90BE</item>
+    </style>
+
+    <!-- AMOLED -->
+    <style name="AppTheme.Amoled" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#000000</item>
+        <item name="colorPrimaryDark">#000000</item>
+        <item name="colorAccent">#34C759</item>
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+        <item name="alertDialogTheme">@style/AppDialog.Amoled</item>
+        <item name="android:alertDialogTheme">@style/AppDialogFramework.Amoled</item>
+    </style>
+    <style name="AppDialog.Amoled" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#34C759</item>
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_amoled</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+    </style>
+    <style name="AppDialogFramework.Amoled" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#34C759</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_amoled</item>
+        <item name="android:textColorPrimary">#E8EAED</item>
+        <item name="android:textColorSecondary">#8B9098</item>
+    </style>
+
+    <!-- Светлая тема -->
     <style name="AppTheme.Light" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="colorPrimary">#F3F5F7</item>
         <item name="colorPrimaryDark">#F3F5F7</item>
         <item name="colorAccent">#1FA34A</item>
+        <item name="android:colorAccent">#1FA34A</item>
         <item name="android:windowBackground">#F3F5F7</item>
+        <item name="android:statusBarColor">#F3F5F7</item>
+        <item name="android:navigationBarColor">#F3F5F7</item>
         <item name="android:textColorPrimary">#15181C</item>
         <item name="android:textColorSecondary">#6B7280</item>
         <item name="alertDialogTheme">@style/AppDialog.Light</item>
         <item name="android:alertDialogTheme">@style/AppDialogFramework.Light</item>
     </style>
-
     <style name="AppDialog.Light" parent="Theme.AppCompat.Light.Dialog.Alert">
         <item name="colorAccent">#1FA34A</item>
+        <item name="android:colorAccent">#1FA34A</item>
         <item name="android:windowBackground">@drawable/dialog_bg_light</item>
         <item name="android:textColorPrimary">#15181C</item>
+        <item name="android:textColorSecondary">#6B7280</item>
     </style>
-
     <style name="AppDialogFramework.Light" parent="android:Theme.Material.Light.Dialog.Alert">
         <item name="android:colorAccent">#1FA34A</item>
         <item name="android:windowBackground">@drawable/dialog_bg_light</item>
         <item name="android:textColorPrimary">#15181C</item>
+        <item name="android:textColorSecondary">#6B7280</item>
     </style>
 </resources>
