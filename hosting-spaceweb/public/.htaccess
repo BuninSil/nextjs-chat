@@ -3,6 +3,9 @@ DirectoryIndex index.html index.php
 
 <IfModule mod_rewrite.c>
 RewriteEngine On
+# The temporary SpaceWeb technical host has no SSL on this plan.
+# Keep HTTPS enforcement for the real production domain only.
+RewriteCond %{HTTP_HOST} ^(www\.)?buninsil-fast-vpn\.ru$ [NC]
 RewriteCond %{HTTPS} !=on
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 </IfModule>
