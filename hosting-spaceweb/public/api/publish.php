@@ -25,7 +25,7 @@ if ($size < 1000000 || $size > 100000000 || $size !== filesize($upload['tmp_name
     http_response_code(413); exit(json_encode(['error'=>'file_size']));
 }
 $magic = file_get_contents($upload['tmp_name'], false, null, 0, 4);
-if ($magic !== "PK\\x03\\x04") { http_response_code(400); exit(json_encode(['error'=>'not_apk'])); }
+if ($magic !== "PK\x03\x04") { http_response_code(400); exit(json_encode(['error'=>'not_apk'])); }
 $actual = hash_file('sha256', $upload['tmp_name']);
 if (!hash_equals($sha, $actual)) { http_response_code(400); exit(json_encode(['error'=>'sha_mismatch'])); }
 
