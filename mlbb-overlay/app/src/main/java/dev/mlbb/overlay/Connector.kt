@@ -15,6 +15,13 @@ import android.net.VpnService
  * сам переключает на рабочий.
  */
 object Connector {
+    /**
+     * Стабильная тестовая конфигурация: оставляем быстрый первичный выбор и аварийный failover,
+     * но убираем конкурирующие фоновые полные сканы и переключения только по колебаниям пинга.
+     */
+    private const val STABILITY_BUILD = true
+    private val rankingInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /** Идёт подключение или подбор сервера */
     @Volatile var busy = false
     /** Что сейчас происходит — для строки статуса и виджета */
@@ -214,6 +221,7 @@ object Connector {
     @Volatile private var xhttpSkipLogged = 0L
 
     private fun bypassLabInBackground(ctx: Context) {
+        if (STABILITY_BUILD) return
         if (!XrayCore.available(ctx) || AppSettings.gameMode || BypassLab.running) return
         // Xray обслуживает и XHTTP-серверы: если выбран такой — перезапуски оборвут соединения
         val nodes = Subscription.usable(ctx)
@@ -322,26 +330,35 @@ object Connector {
      */
     private fun quickRefine(ctx: Context) {
         if (!BoxVpnService.isRunning || AppSettings.gameMode || !AppSettings.autoSelect) return
-        val byTag = Subscription.usable(ctx)
-            .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) }
-            .associateBy { it.tag }
-        if (byTag.isEmpty()) return
-        val order = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
-        // firstWins: при ручном подключении переключаемся с первого же замера, если кандидат на 20%+
-        // быстрее — иначе второй замер был бы только на плановой проверке через полчаса, и «выключил-включил»
-        // держалось бы за старый сервер
-        ServerTester.pickFastest(ctx, order, candidates = 4, firstWins = true)
+        // Только один фоновый подбор за раз: два измерения не должны одновременно менять proxy selector.
+        if (!rankingInProgress.compareAndSet(false, true)) return
+        try {
+            val byTag = Subscription.usable(ctx)
+                .filterNot { ServerTester.isSeparator(it) || Subscription.isReserve(it) || ServerTester.exitsRussia(it) }
+                .associateBy { it.tag }
+            if (byTag.isEmpty()) return
+            val order = Autopilot.order(ctx, byTag.keys.toList(), byTag) { ServerTester.results[it]?.medianMs }
+            // Ограниченный подбор по четырём лучшим кандидатам: не гоняем всю подписку по мобильному каналу.
+            ServerTester.pickFastest(ctx, order, candidates = 4, firstWins = true)
+        } finally {
+            rankingInProgress.set(false)
+        }
     }
 
     /** Сверка скорости без смены рабочего сервера на «первый попавшийся»: меняет, только если другой заметно быстрее. */
     private fun refine(ctx: Context) {
-        if (!BoxVpnService.isRunning) return
-        busyText = "Меряю пинг до серверов…"
-        val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
-        if (ranked.isEmpty() || !BoxVpnService.isRunning) return
-        // Это путь подключения (лидер) — переключаемся с первого замера, не ждём второй
-        ServerTester.pickFastest(ctx, ranked, firstWins = true) { done, total -> busyText = "Проверяю скорость: $done из $total" }
-        if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
+        // Полный прогон оставлен только игровому сценарию, где нужен выбор российского выхода.
+        if (STABILITY_BUILD || !BoxVpnService.isRunning) return
+        if (!rankingInProgress.compareAndSet(false, true)) return
+        try {
+            busyText = "Меряю пинг до серверов…"
+            val ranked = ServerTester.measure(ctx) { done, total -> busyText = "Меряю пинг: $done из $total" }
+            if (ranked.isEmpty() || !BoxVpnService.isRunning) return
+            ServerTester.pickFastest(ctx, ranked, firstWins = true) { done, total -> busyText = "Проверяю скорость: $done из $total" }
+            if (BoxVpnService.isRunning) ServerTester.markRanked(ctx)
+        } finally {
+            rankingInProgress.set(false)
+        }
     }
 
     /** Полный подбор при работающем VPN; прогресс — в busyText. Прерывается, если VPN выключили. */
@@ -366,8 +383,12 @@ object Connector {
             }
             onWorking() // готово — пользуемся сразу
             Widget.update(ctx)
-            // Полный пинг всех серверов и выбор лучшего — в фоне, не задерживая подключение
-            if (BoxVpnService.isRunning) Thread {
+            // После быстрого подключения проверяем только несколько лучших по истории сети.
+            // Это сохраняет шанс улучшить скорость, но не запускает тяжёлый скан всей подписки.
+            if (STABILITY_BUILD && BoxVpnService.isRunning) Thread {
+                try { quickRefine(ctx) } catch (e: Exception) { AppLog.err("быстрый подбор", e) }
+            }.start()
+            else if (BoxVpnService.isRunning) Thread {
                 try {
                     val ranked = ServerTester.measure(ctx) { _, _ -> }
                     if (ranked.isNotEmpty() && BoxVpnService.isRunning) {
@@ -585,7 +606,7 @@ object Connector {
                 }
                 // Раз в 30 минут — нет ли сервера быстрее. Не во время скачивания или видео
                 // (больше ~1,5 МБ/с): на время замера новые соединения идут через проверяемые серверы
-                if (System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
+                if (!STABILITY_BUILD && System.currentTimeMillis() - lastRank > RERANK_MS && BoxVpnService.downBps < 1_500_000 &&
                     ServerTester.netKey(ctx) != "none" && System.currentTimeMillis() - BoxVpnService.upAt > 60_000L
                 ) {
                     lastRank = System.currentTimeMillis()
@@ -656,7 +677,7 @@ object Connector {
                         val bad = qWin.count { it.second }
                         val twoInRow = qWin.size >= 2 && qWin.last().second && qWin.elementAt(qWin.size - 2).second
                         // И не дёргаем сервер в первую минуту после подключения (ему надо прогреться)
-                        val trigger = (bad >= 3 || twoInRow) && tNow > qPauseUntil && tNow - qSwitchAt > 3 * 60_000L &&
+                        val trigger = !STABILITY_BUILD && (bad >= 3 || twoInRow) && tNow > qPauseUntil && tNow - qSwitchAt > 3 * 60_000L &&
                             tNow - BoxVpnService.upAt > 60_000L
                         if (slow) {
                             val badList = qWin.filter { it.second }.joinToString(", ") { "${it.first}" }
