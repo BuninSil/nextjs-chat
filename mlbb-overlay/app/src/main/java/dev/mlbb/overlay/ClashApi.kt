@@ -76,8 +76,8 @@ object ClashApi {
             c.inputStream.bufferedReader().use { r ->
                 while (true) {
                     val line = r.readLine() ?: break
-                    val up = Regex("\\\"up\\\":(\\\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
-                    val down = Regex("\\\"down\\\":(\\\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                    val up = Regex("\"up\":(\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                    val down = Regex("\"down\":(\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull() ?: continue
                     onSecond(up, down)
                 }
             }
