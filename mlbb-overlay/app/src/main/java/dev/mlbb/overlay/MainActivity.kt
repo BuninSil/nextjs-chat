@@ -774,12 +774,30 @@ class MainActivity : AppCompatActivity() {
         if (playKey != label) {
             playKey = label
             if (AppSettings.newDesign) {
-                // Новый дизайн: кнопка-кольцо с иконкой питания (зелёная), без надписей внутри — текст под кнопкой
-                playButton.text = Ui.iconText(this, R.drawable.ic_power, "", if (globeMode) 34f else 58f, tint = Ui.GREEN)
+                // Цвет кнопки всегда отражает реальное состояние VPN, а не просто выбранную тему.
+                val stateColor = when {
+                    connecting -> Ui.YELLOW
+                    running -> Ui.RED
+                    else -> Ui.GREEN
+                }
+                val stateFill = when {
+                    connecting -> 0x22F5C542
+                    running -> 0x22FF5A52
+                    else -> 0x2234C759
+                }
+                playButton.text = Ui.iconText(
+                    this, R.drawable.ic_power, "",
+                    if (globeMode) 34f else 58f, tint = stateColor
+                )
                 playButton.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(0x00000000)
-                    setStroke(Ui.dp(this@MainActivity, 4f), Ui.GREEN)
+                    setColor(stateFill)
+                    setStroke(Ui.dp(this@MainActivity, 4f), stateColor)
+                }
+                playButton.contentDescription = when {
+                    connecting -> "Подключение к VPN"
+                    running -> "Отключить VPN"
+                    else -> "Подключить VPN"
                 }
             } else {
                 if (connecting) {
