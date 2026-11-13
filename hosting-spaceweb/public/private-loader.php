@@ -5,7 +5,9 @@ $configFile = $privateDir . DIRECTORY_SEPARATOR . 'config.php';
 if (!is_file($configFile)) { http_response_code(503); exit('Fast VPN backend is not installed.'); }
 $cfg = require $configFile;
 function fastvpn_cut(string $value, int $limit): string {
-    return function_exists('mb_substr') ? mb_substr($value, 0, $limit, 'UTF-8') : substr($value, 0, $limit * 4);
+    if (function_exists('mb_substr')) return mb_substr($value, 0, $limit, 'UTF-8');
+    if (preg_match('/^.{0,' . (int)$limit . '}/us', $value, $match)) return $match[0];
+    return substr($value, 0, $limit);
 }
 try {
     $pdo = new PDO(
