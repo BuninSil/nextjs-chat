@@ -21,11 +21,24 @@
 - старый APK удаляется после успешной проверки нового;
 - не используем email-уведомления.
 
+## Тестовый адрес
+
+Пока основной домен не настроен, тестовая среда использует постоянный технический адрес SpaceWeb:
+
+- Сайт: `https://vladisl140.temp.swtest.ru/`
+- API версии: `https://vladisl140.temp.swtest.ru/api/version.php`
+- Отправка отчётов: `https://vladisl140.temp.swtest.ru/api/report.php`
+- Загрузка APK: `https://vladisl140.temp.swtest.ru/download.php`
+
+В приложении на тестовой ветке адрес уже переключён на этот хост. Перед первым тестом включи для технического домена бесплатный Let's Encrypt в панели SpaceWeb и дождись выпуска сертификата. Не используй HTTP: приложение намеренно не разрешает незашифрованные запросы к серверу.
+
+Это именно тестовая конфигурация. После проверки перед релизом нужно будет заменить базовый адрес в `Updater.kt`, `Report.kt` и GitHub Actions Secret `SPACEWEB_SITE_URL` на основной домен, затем собрать отдельный APK.
+
 ## Размещение
 
 ### 1. Подготовить домен и сайт
 
-1. Привяжи `buninsil-fast-vpn.ru` к аккаунту SpaceWeb.
+1. Привяжи `vladisl140.temp.swtest.ru` к аккаунту SpaceWeb.
 2. Включи HTTPS/Let's Encrypt и проверь, что сайт открывается по HTTPS.
 3. В панели открой настройки сайта и посмотри фактическую папку сайта (обычно `public_html`).
 4. Включи PHP 8.2 или новее.
@@ -68,7 +81,7 @@
 
 В каталоге `/private/` создай текстовый файл `setup.key` со случайной строкой не короче 40 символов. Не используй пароль от SpaceWeb. Этот файл не загружается в публичную папку.
 
-Открой `https://buninsil-fast-vpn.ru/install.php`, введи ключ из `setup.key` и реквизиты MySQL. Установщик:
+Открой `https://vladisl140.temp.swtest.ru/install.php`, введи ключ из `setup.key` и реквизиты MySQL. Установщик:
 - создаст таблицы;
 - создаст `/private/config.php`;
 - сгенерирует случайный пароль администратора и секрет публикации APK;
@@ -85,8 +98,8 @@
 ### 5. Проверить API
 
 Открой:
-- `https://buninsil-fast-vpn.ru/api/version.php` — до первой публикации вернёт `available: false`.
-- `https://buninsil-fast-vpn.ru/download.php` — сообщит, что APK пока не опубликован.
+- `https://vladisl140.temp.swtest.ru/api/version.php` — до первой публикации вернёт `available: false`.
+- `https://vladisl140.temp.swtest.ru/download.php` — сообщит, что APK пока не опубликован.
 
 Отчёт из приложения появится в `/admin/` после того, как новая сборка приложения с сетевой отправкой будет установлена и домен настроен.
 
@@ -95,7 +108,7 @@
 Публикация работает **через HTTPS напрямую на PHP-хостинг**. SSH, SFTP, FTP и доступ к GitHub из браузера пользователей не нужны.
 
 В GitHub → Settings → Secrets and variables → Actions добавь только два секрета:
-- `SPACEWEB_SITE_URL` — `https://buninsil-fast-vpn.ru`;
+- `SPACEWEB_SITE_URL` — `https://vladisl140.temp.swtest.ru`;
 - `SPACEWEB_PUBLISH_SECRET` — секрет, который показал установщик.
 
 При выпуске официального тега `mlbb-v*` GitHub Actions:
