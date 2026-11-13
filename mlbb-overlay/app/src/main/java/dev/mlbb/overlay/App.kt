@@ -68,11 +68,24 @@ object CrashReport {
         File(ctx.filesDir, KOTLIN).takeIf { it.exists() }?.let {
             parts.add(it.readText()); it.delete()
         }
-        File(ctx.filesDir, GO).takeIf { it.exists() && it.length() > 0 }?.let {
-            val t = it.readText()
+        File(ctx.filesDir, GO).takeIf { it.exists() && it.length() > 0 }?.let { file ->
+            // stderr нативного ядра может разрастись за долгую сессию. Читаем только хвост,
+            // чтобы сбор отчёта после сбоя не пыталась загрузить весь файл в память.
+            val maxBytes = 64 * 1024
+            val tail = try {
+                java.io.RandomAccessFile(file, "r").use { raf ->
+                    val start = (raf.length() - maxBytes).coerceAtLeast(0L)
+                    raf.seek(start)
+                    val bytes = ByteArray((raf.length() - start).toInt())
+                    raf.readFully(bytes)
+                    String(bytes, Charsets.UTF_8)
+                }
+            } catch (_: Exception) { "" }
             // В stderr ядра пишутся только паники и фатальные ошибки
-            if (t.contains("panic") || t.contains("fatal")) parts.add("Ядро VPN:\n" + t.takeLast(6000))
-            it.delete()
+            if (tail.contains("panic", true) || tail.contains("fatal", true)) {
+                parts.add("Ядро VPN:\n" + (if (file.length() > maxBytes) "[показан хвост stderr]\\n" else "") + tail.takeLast(6000))
+            }
+            file.delete()
         }
         val text = parts.joinToString("\n\n").ifBlank { null }
         // Копия для отчёта — с версией, в которой случилось падение (берём из текста «Версия X», а не
