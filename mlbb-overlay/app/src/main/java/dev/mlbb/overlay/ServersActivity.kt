@@ -393,6 +393,10 @@ class ServersActivity : AppCompatActivity() {
             hiddenToggle.text = if (showHidden) "Убрать скрытые из списка" else "Показать скрытые ($hiddenCount)"
             // Рабочие сверху; в игровом режиме среди них российские первыми
             val game = AppSettings.gameMode
+            // Снимок не меняется во время сортировки. Чтение ConcurrentHashMap из comparator
+            // напрямую позволяло фоновым замерам менять порядок прямо посреди TimSort,
+            // из-за чего он падал с «Comparison method violates its general contract».
+            val resultSnapshot = ServerTester.results.snapshot()
             // Избранные — всегда сверху, скрытые — в самом низу
             val sorted = all.sortedWith(compareBy<Subscription.Node> {
                 when {
@@ -402,12 +406,12 @@ class ServersActivity : AppCompatActivity() {
                 }
             }.thenBy {
                 when {
-                    !ServerTester.results.containsKey(it.tag) -> 1
-                    ServerTester.results[it.tag] == null -> 2
+                    it.tag !in resultSnapshot -> 1
+                    resultSnapshot[it.tag] == null -> 2
                     else -> 0
                 }
             }.thenBy { if (game && !ServerTester.isRussian(it)) 1 else 0 }
-                .thenBy { ServerTester.results[it.tag]?.score ?: Int.MAX_VALUE })
+                .thenBy { resultSnapshot[it.tag]?.score ?: Int.MAX_VALUE })
             // Группы по подпискам: основная, потом дополнительные в порядке добавления
             val out = ArrayList<Row>()
             val groups = listOf("") + Subscription.extras(this@ServersActivity)

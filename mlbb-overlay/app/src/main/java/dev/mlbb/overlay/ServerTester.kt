@@ -40,9 +40,14 @@ object ServerTester {
 
         operator fun get(tag: String): Result? = ok[tag]
         fun containsKey(tag: String) = ok.containsKey(tag) || failed.contains(tag)
-        fun clear() { ok.clear(); failed.clear() }
-        fun put(tag: String, r: Result?) {
+        @Synchronized fun clear() { ok.clear(); failed.clear() }
+        @Synchronized fun put(tag: String, r: Result?) {
             if (r == null) { ok.remove(tag); failed.add(tag) } else { failed.remove(tag); ok[tag] = r }
+        }
+        /** Снимок для сортировки UI: результат и признак «не ответил» читаются атомарно. */
+        @Synchronized fun snapshot(): Map<String, Result?> = LinkedHashMap<String, Result?>().apply {
+            ok.forEach { (tag, result) -> put(tag, result) }
+            failed.forEach { tag -> put(tag, null) }
         }
         fun ranked(): List<String> = ok.entries.sortedBy { it.value.score }.map { it.key }
     }

@@ -607,6 +607,12 @@ object Subscription {
             val udp = types[type] ?: continue
             val tag = "n${out.size}"
             val name = o.optString("tag").ifEmpty { tag }
+            // Sing-box 1.11.4 принимает только семейные имена uTLS. В подписках от Xray
+            // часто приходят точные ClientHello ID (hellofirefox_120 и т.п.).
+            o.optJSONObject("tls")?.optJSONObject("utls")?.let { utls ->
+                val fingerprint = utls.optString("fingerprint")
+                if (fingerprint.isNotBlank()) utls.put("fingerprint", singBoxFingerprint(fingerprint))
+            }
             o.remove("multiplex") // mux для игры вреден
             o.remove("detour")
             o.put("tag", tag)
@@ -710,6 +716,38 @@ object Subscription {
 
     private fun dec(s: String?): String = if (s == null) "" else URLDecoder.decode(s.replace("+", "%2B"), "UTF-8")
 
+    /**
+     * Приводит имена uTLS из Xray/v2rayNG к набору, который понимает sing-box 1.11.4.
+     * Для XHTTP-серверов исходная ссылка уходит напрямую в Xray и здесь не меняется.
+     */
+    private fun singBoxFingerprint(value: String): String {
+        val fp = value.trim().lowercase()
+        return when {
+            fp in setOf(
+                "chrome", "chrome_psk", "chrome_psk_shuffle", "chrome_padding_psk_shuffle",
+                "chrome_pq", "firefox", "edge", "safari", "360", "qq", "ios", "android",
+                "random", "randomized",
+            ) -> fp
+            fp.startsWith("hellofirefox_") -> "firefox"
+            fp.startsWith("hellochrome_") -> when {
+                fp.contains("padding_psk") -> "chrome_padding_psk_shuffle"
+                fp.contains("psk") -> "chrome_psk_shuffle"
+                fp.endsWith("_pq") || fp.endsWith("_pq_psk") -> "chrome_pq"
+                else -> "chrome"
+            }
+            fp.startsWith("helloios_") -> "ios"
+            fp.startsWith("helloedge_") -> "edge"
+            fp.startsWith("hellosafari_") -> "safari"
+            fp.startsWith("hello360_") -> "360"
+            fp.startsWith("helloqq_") -> "qq"
+            fp.startsWith("helloandroid_") -> "android"
+            fp.startsWith("hellorandomized") -> "randomized"
+            // У sing-box нет отдельного профиля Go TLS и неизвестных ClientHello ID.
+            // Лучше использовать стандартный Chrome, чем валить запуск всего VPN.
+            else -> "chrome"
+        }
+    }
+
     private fun tls(q: (String) -> String?, server: String, defaultOn: Boolean): JSONObject? {
         val security = q("security") ?: if (defaultOn) "tls" else "none"
         if (security == "none" || security.isEmpty()) return null
@@ -722,9 +760,9 @@ object Subscription {
             t.put("reality", JSONObject().put("enabled", true)
                 .put("public_key", q("pbk") ?: "")
                 .put("short_id", q("sid") ?: ""))
-            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", fp ?: "chrome"))
+            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", singBoxFingerprint(fp ?: "chrome"))
         } else if (fp != null) {
-            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", fp))
+            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", singBoxFingerprint(fp)))
         }
         return t
     }
