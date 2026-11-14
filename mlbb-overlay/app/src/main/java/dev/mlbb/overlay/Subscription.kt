@@ -760,7 +760,7 @@ object Subscription {
             t.put("reality", JSONObject().put("enabled", true)
                 .put("public_key", q("pbk") ?: "")
                 .put("short_id", q("sid") ?: ""))
-            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", singBoxFingerprint(fp ?: "chrome"))
+            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", singBoxFingerprint(fp ?: "chrome")))
         } else if (fp != null) {
             t.put("utls", JSONObject().put("enabled", true).put("fingerprint", singBoxFingerprint(fp)))
         }
