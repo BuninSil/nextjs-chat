@@ -41,6 +41,10 @@ class DiagnosticsActivity : AppCompatActivity() {
         summary = Ui.text(this, "", 13f, Ui.SUB)
         root.addView(summary)
         root.addView(Ui.space(this, 10f))
+        root.addView(Ui.primaryBtn(this, "Отправить полную диагностику на сервер") {
+            confirmUpload()
+        })
+        root.addView(Ui.space(this, 8f))
         root.addView(Ui.primaryBtn(this, "Экспорт полного архива · ZIP") {
             val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             createArchive.launch("fastvpn-diagnostics-$stamp.zip")
@@ -61,6 +65,15 @@ class DiagnosticsActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = Ui.dp(this@DiagnosticsActivity, 8f) })
         setContentView(root)
         refresh()
+    }
+
+    private fun confirmUpload() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Отправить полную диагностику?")
+            .setMessage("Будут отправлены технические события за последние 7 дней и текстовый журнал приложения. Перед отправкой адреса, IP и длинные токены маскируются. Отправка выполняется только после этого подтверждения.")
+            .setPositiveButton("Отправить") { _, _ -> DiagnosticsUploader.upload(this) }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private fun refresh() {
