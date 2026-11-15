@@ -471,8 +471,18 @@ class BoxVpnService : VpnService(), PlatformInterface {
     private fun stopBox(keepForeground: Boolean = false) {
         val oldBox: BoxService?
         val oldTun: ParcelFileDescriptor?
+        val sessionStarted = upAt
+        if (isRunning && sessionStarted > 0L) {
+            val duration = (System.currentTimeMillis() - sessionStarted).coerceAtLeast(0L)
+            val hours = duration / 3_600_000L
+            val minutes = (duration / 60_000L) % 60L
+            val seconds = (duration / 1000L) % 60L
+            AppLog.vpn("сессия завершена · сервер «${AppLog.name(this, AppSettings.selectedTag)}» · время работы ${hours}ч ${minutes}м ${seconds}с" +
+                if (keepForeground) " · перезапуск ядра" else "")
+        }
         synchronized(startLock) {
             isRunning = false
+            upAt = 0L
             downBps = 0.0
             upBps = 0.0
             ports = null
