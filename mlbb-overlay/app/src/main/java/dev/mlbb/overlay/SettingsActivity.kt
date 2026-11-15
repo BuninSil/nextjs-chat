@@ -345,6 +345,9 @@ class SettingsActivity : AppCompatActivity() {
             addView(Ui.space(this@SettingsActivity, 10f))
             addView(secondary("Сообщить о проблеме") { Report.show(this@SettingsActivity) })
             addView(Ui.space(this@SettingsActivity, 8f))
+            addView(secondary("Полная диагностика · история и экспорт") {
+                startActivity(android.content.Intent(this@SettingsActivity, DiagnosticsActivity::class.java))
+            })
         })
 
         root.addView(Ui.slogan(this, 13f, bold = true).apply {
