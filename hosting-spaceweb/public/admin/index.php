@@ -5,6 +5,7 @@ $isSecureRequest = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
 session_set_cookie_params(['lifetime'=>0, 'path'=>'/admin/', 'secure'=>$isSecureRequest, 'httponly'=>true, 'samesite'=>'Strict']);
 session_start();
 require dirname(__DIR__) . '/private-loader.php';
+$pdo->exec("CREATE TABLE IF NOT EXISTS device_logs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,batch_id CHAR(64) NOT NULL,install_hash CHAR(64) NOT NULL,app_version VARCHAR(32) NOT NULL DEFAULT '',device_model VARCHAR(100) NOT NULL DEFAULT '',android_version VARCHAR(30) NOT NULL DEFAULT '',part_no SMALLINT UNSIGNED NOT NULL,total_parts SMALLINT UNSIGNED NOT NULL,log_text MEDIUMTEXT NOT NULL,created_at DATETIME NOT NULL,PRIMARY KEY(id),UNIQUE KEY uq_batch_part(batch_id,part_no),KEY idx_created(created_at),KEY idx_install_created(install_hash,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 function eh(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(24));
 $error = '';
@@ -56,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: /admin/' . (in_array($redirectFilter, ['new','in_progress','resolved','duplicate'], true) ? '?status=' . urlencode($redirectFilter) : ''));
     exit;
 }
+$viewLogs = (($_GET['view'] ?? '') === 'logs');
+$selectedBatch = preg_replace('/[^a-f0-9-]/i', '', (string)($_GET['batch'] ?? ''));
 $filter = (string)($_GET['status'] ?? '');
 $allowed = ['new','in_progress','resolved','duplicate'];
 $categoryLabels = ['vpn'=>'Подключение','network'=>'Сеть и скорость','update'=>'Обновление','other'=>'Другое'];
@@ -77,6 +80,11 @@ $args = [];
 if (in_array($filter, $allowed, true)) { $sql .= ' WHERE status=?'; $args[] = $filter; }
 $sql .= " ORDER BY created_at DESC, id DESC LIMIT $perPage OFFSET $offset";
 $q = $pdo->prepare($sql); $q->execute($args); $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+$logBatches = []; $logParts = [];
+if ($viewLogs) {
+    if ($selectedBatch !== '') { $q=$pdo->prepare('SELECT app_version,device_model,android_version,part_no,total_parts,log_text,created_at FROM device_logs WHERE batch_id=? ORDER BY part_no ASC'); $q->execute([$selectedBatch]); $logParts=$q->fetchAll(PDO::FETCH_ASSOC); }
+    else { $logBatches=$pdo->query('SELECT batch_id,app_version,device_model,android_version,COUNT(*) received_parts,MAX(total_parts) total_parts,MIN(created_at) created_at,SUM(OCTET_LENGTH(log_text)) bytes FROM device_logs GROUP BY batch_id,app_version,device_model,android_version ORDER BY MAX(created_at) DESC LIMIT 100')->fetchAll(PDO::FETCH_ASSOC); }
+}
 $flash = (string)($_SESSION['flash'] ?? ''); unset($_SESSION['flash']);
 $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе','resolved'=>'Решённые','duplicate'=>'Дубликаты'];
 ?><!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fast VPN · Обращения</title>
@@ -84,9 +92,14 @@ $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе',
 *{box-sizing:border-box}body{margin:0;background:#0d0f13;color:#eceff3;font:14px system-ui}header{padding:20px max(4%,calc((100% - 1100px)/2));border-bottom:1px solid #292f38;display:flex;justify-content:space-between;align-items:center}main{max-width:1100px;margin:auto;padding:22px 4%}.stats{display:flex;gap:10px;flex-wrap:wrap}.stat,.ticket{background:#161a21;border:1px solid #2a3039;border-radius:12px;padding:14px}.stat{min-width:110px}.stat b{display:block;font-size:24px}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.filters a{color:#cbd2dc;text-decoration:none;border:1px solid #333b46;border-radius:20px;padding:8px 13px}.filters a.active{background:#1b3327;border-color:#247a46;color:#7cf0a5}.ticket{margin:12px 0}.muted{color:#929ba7;font-size:12px}.ticket h3{margin:0 0 8px}.desc{white-space:pre-wrap;margin:10px 0}.diag{white-space:pre-wrap;overflow-wrap:anywhere;max-height:70vh;overflow:auto;background:#0e1217;padding:12px;border-radius:8px;color:#b7c1ce;line-height:1.55}.diag-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.copy-diag{margin:0;padding:6px 10px;font-size:12px;cursor:pointer}.copy-state{color:#929ba7;font-size:12px}input,select,textarea{background:#0e1217;color:#eee;border:1px solid #343b46;border-radius:8px;padding:9px}textarea{width:100%;min-height:55px;margin-top:8px}button{background:#1ed760;color:#07140d;border:0;border-radius:8px;padding:10px 14px;font-weight:700;margin-top:8px;cursor:pointer}.danger{background:#422126;color:#ffb8bd;border:1px solid #78383f}.tag{color:#1ed760}a{color:#aeb8c5}.ticket-top{display:flex;gap:10px;align-items:flex-start}.ticket-top input{margin-top:3px;accent-color:#1ed760}.toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:12px;background:#141820;border:1px solid #29313b;border-radius:12px}.flash{padding:10px 13px;border:1px solid #315c42;background:#14251b;border-radius:9px;color:#a9efbf;margin:14px 0}.empty{padding:30px;text-align:center;color:#929ba7}
 </style><header><b>⚡ Fast VPN · Центр обращений</b><a href="?logout=1">Выйти</a></header><main>
 <div class="stats"><?php foreach(['new'=>'Новые','in_progress'=>'В работе','resolved'=>'Решённые','duplicate'=>'Дубликаты'] as $k=>$label):?><div class="stat"><b><?= (int)($count[$k]??0)?></b><span class="muted"><?=eh($label)?></span></div><?php endforeach;?></div>
-<nav class="filters"><?php foreach($tabLabels as $key=>$label):?><a class="<?=($filter===$key?'active':'')?>" href="<?= $key===''?'/admin/':'?status='.eh($key) ?>"><?=eh($label)?><?php if($key!=='' ):?> · <?= (int)($count[$key]??0) ?><?php else:?> · <?=array_sum(array_map('intval',$count))?><?php endif;?></a><?php endforeach;?></nav>
+<nav class="filters"><a class="<?=(!$viewLogs?'active':'')?>" href="/admin/">Обращения</a><a class="<?=($viewLogs?'active':'')?>" href="?view=logs">Логи телефонов</a><?php if(!$viewLogs): foreach($tabLabels as $key=>$label):?><a class="<?=($filter===$key?'active':'')?>" href="<?= $key===''?'/admin/':'?status='.eh($key) ?>"><?=eh($label)?><?php if($key!=='' ):?> · <?= (int)($count[$key]??0) ?><?php else:?> · <?=array_sum(array_map('intval',$count))?><?php endif;?></a><?php endforeach; endif;?></nav>
 <?php if($flash!==''):?><div class="flash"><?=eh($flash)?></div><?php endif;?>
 <?php if(in_array($filter,['resolved','duplicate'],true)):?><form id="bulkDelete" method="post" onsubmit="return confirm('Удалить выбранные решённые обращения и дубликаты без возможности восстановления?')"><input type="hidden" name="csrf" value="<?=eh($_SESSION['csrf'])?>"><input type="hidden" name="action" value="delete_selected"><input type="hidden" name="return_status" value="<?=eh($filter)?>"></form><div class="toolbar"><label><input type="checkbox" id="selectAll"> Выбрать все на странице</label><button class="danger" type="submit" form="bulkDelete">Удалить выбранные</button></div><?php endif;?>
+<?php if($viewLogs): ?>
+<?php if($selectedBatch!==''): ?><div class="toolbar"><a href="?view=logs">← Все загрузки логов</a><span class="muted">Пакет <?=eh($selectedBatch)?></span><button type="button" onclick="copyAllPhoneLogs()">Копировать весь лог</button></div>
+<?php if(!$logParts): ?><div class="empty">Пакет не найден.</div><?php else: ?><div class="ticket"><h3>Полная история телефона</h3><div class="muted"><?=eh($logParts[0]['app_version'])?> · <?=eh($logParts[0]['device_model'])?> · Android <?=eh($logParts[0]['android_version'])?> · частей <?=count($logParts)?> / <?= (int)$logParts[0]['total_parts'] ?></div><?php foreach($logParts as $partRow): ?><pre class="diag phone-log-part"><?=eh($partRow['log_text'])?></pre><?php endforeach; ?></div><?php endif; ?>
+<?php else: ?><?php foreach($logBatches as $b): ?><article class="ticket"><h3>📱 <?=eh($b['device_model'] ?: 'Неизвестное устройство')?> <span class="tag">· <?=eh($b['app_version'])?></span></h3><div class="muted">Android <?=eh($b['android_version'])?> · <?=eh($b['created_at'])?> UTC · получено <?= (int)$b['received_parts'] ?> / <?= (int)$b['total_parts'] ?> частей · <?=number_format((int)$b['bytes']/1024,1,'.',' ')?> КБ</div><p><a href="?view=logs&amp;batch=<?=eh($b['batch_id'])?>">Открыть полную историю →</a></p></article><?php endforeach; ?><?php if(!$logBatches): ?><div class="empty">Полных логов пока нет. Они появятся после отправки истории из приложения.</div><?php endif; ?><?php endif; ?>
+<?php else: ?>
 <?php foreach($rows as $r):?><article class="ticket"><div class="ticket-top"><?php if(in_array($filter,['resolved','duplicate'],true)):?><input type="checkbox" name="tickets[]" value="<?=eh($r['ticket'])?>" form="bulkDelete" aria-label="Выбрать <?=eh($r['ticket'])?>"><?php endif;?><div style="flex:1;min-width:0"><h3><?=eh($r['ticket'])?> <span class="tag">· <?=eh($statusLabels[$r['status']] ?? $r['status'])?></span> <span class="muted">· <?=eh($categoryLabels[$r['category']] ?? 'Другое')?></span></h3>
 <div class="muted"><?=eh($r['created_at'])?> UTC · <?=eh($r['app_version'])?> · <?=eh($r['manufacturer'].' '.$r['device_model'])?> · Android <?=eh($r['android_version'])?> · <?=eh($r['network_type'])?> · VPN <?=eh($r['vpn_state'])?></div></div></div>
 <?php if($r['description']!==''):?><p class="desc"><?=eh($r['description'])?></p><?php endif;?>
@@ -94,13 +107,15 @@ $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе',
 <form method="post"><input type="hidden" name="csrf" value="<?=eh($_SESSION['csrf'])?>"><input type="hidden" name="ticket" value="<?=eh($r['ticket'])?>"><input type="hidden" name="return_status" value="<?=eh($filter)?>">
 <select name="status"><?php foreach($allowed as $s):?><option value="<?=$s?>" <?=$r['status']===$s?'selected':''?>><?=eh($statusLabels[$s])?></option><?php endforeach;?></select>
 <textarea name="admin_note" placeholder="Внутренняя заметка, видна только тебе"><?=eh($r['admin_note'])?></textarea><button name="action" value="save">Сохранить</button><?php if(in_array($r['status'],['resolved','duplicate'],true)):?> <button class="danger" type="submit" name="action" value="delete_one" onclick="return confirm('Удалить это обращение без возможности восстановления?')">Удалить</button><?php endif;?></form></article><?php endforeach;?>
-<?php if(!$rows):?><div class="empty">В этой вкладке пока пусто. Даже у багов иногда выходной.</div><?php endif;?>
-<?php if($totalPages>1):?><nav class="filters">
+<?php endif; ?>
+<?php if(!$viewLogs && !$rows):?><div class="empty">В этой вкладке пока пусто. Даже у багов иногда выходной.</div><?php endif;?>
+<?php if(!$viewLogs && $totalPages>1):?><nav class="filters">
 <?php if($page>1):?><a href="?<?=in_array($filter,$allowed,true)?'status='.urlencode($filter).'&':''?>page=<?=$page-1?>">← Новее</a><?php endif;?>
 <span class="muted">Страница <?=$page?> из <?=$totalPages?> · всего <?=$totalRows?></span>
 <?php if($page<$totalPages):?><a href="?<?=in_array($filter,$allowed,true)?'status='.urlencode($filter).'&':''?>page=<?=$page+1?>">Старее →</a><?php endif;?>
 </nav><?php endif;?>
 </main><script>
+async function copyAllPhoneLogs() { const text=Array.from(document.querySelectorAll('.phone-log-part')).map(x=>x.textContent).join('\\n'); try { await navigator.clipboard.writeText(text); } catch (_) { alert('Не удалось скопировать лог'); } }
 async function copyDiag(button) {
     const details = button.closest('details');
     const text = details ? details.querySelector('.diag')?.textContent || '' : '';
