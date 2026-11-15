@@ -199,9 +199,10 @@ class MonitorService : Service() {
                     failures = 0
                 } catch (e: Exception) {
                     Log.w(TAG, "poll failed", e)
-                    AppLog.err("MON: ошибка опроса соединений ($failures-я попытка)", e)
+                    val failureCount = ++failures
+                    AppLog.err("MON: ошибка опроса соединений ($failureCount-я попытка)", e)
                     reader = null
-                    if (++failures >= 5) {
+                    if (failureCount >= 5) {
                         handler.post {
                             lastError = if (useShizuku) {
                                 "Shizuku перестал отвечать (${e.message}). Скорее всего, телефон перезагружался — запусти Shizuku заново."
