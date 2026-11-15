@@ -223,9 +223,24 @@ object Report {
                 val code = connection.responseCode
                 val stream = if (code in 200..299) connection.inputStream else connection.errorStream
                 val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (code !in 200..299) throw IllegalStateException("сервер ответил HTTP $code")
-                ticket = JSONObject(response).optString("ticket").takeIf { it.isNotBlank() }
-                    ?: throw IllegalStateException("сервер не вернул номер обращения")
+                if (code == 429) {
+                    val error = runCatching { JSONObject(response) }.getOrNull()
+                    val reason = error?.optString("error").orEmpty()
+                    val retryAfter = error?.optInt("retry_after", 30)?.coerceAtLeast(1) ?: 30
+                    failure = when (reason) {
+                        "rate_limit" -> "Слишком частая отправка отчётов. Повтори через $retryAfter сек."
+                        "daily_limit" -> "Достигнут дневной лимит отчётов с этой сети. Попробуй позже."
+                        else -> "Сервер временно ограничил отправку (HTTP 429). Попробуй позже."
+                    }
+                    AppLog.err("отправка отчёта: $failure")
+                } else {
+                    if (code !in 200..299) {
+                        val detail = runCatching { JSONObject(response).optString("error") }.getOrNull().orEmpty()
+                        throw IllegalStateException("сервер ответил HTTP $code" + if (detail.isNotBlank()) " ($detail)" else "")
+                    }
+                    ticket = JSONObject(response).optString("ticket").takeIf { it.isNotBlank() }
+                        ?: throw IllegalStateException("сервер не вернул номер обращения")
+                }
             } catch (e: Exception) {
                 failure = when (e) {
                     is java.net.UnknownHostException -> "домен пока недоступен или нет интернета"
