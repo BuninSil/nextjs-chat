@@ -62,6 +62,27 @@ object HistoryStore {
         return result
     }
 
+    /** Полная хронология за последние семь дней для ручной отправки. */
+    @Synchronized
+    fun exportText(maxChars: Int = 12_000_000): String {
+        val db = helper?.readableDatabase ?: return ""
+        val cutoff = System.currentTimeMillis() - KEEP_DAYS * 24L * 60L * 60L * 1000L
+        val out = StringBuilder()
+        try {
+            db.rawQuery(
+                "SELECT time_ms,category,message FROM events WHERE time_ms>=? ORDER BY time_ms ASC,id ASC",
+                arrayOf(cutoff.toString())
+            ).use { c ->
+                while (c.moveToNext() && out.length < maxChars) {
+                    val line = "${c.getLong(0)} [${c.getString(1)}] ${c.getString(2)}\\n"
+                    val remaining = maxChars - out.length
+                    out.append(if (line.length <= remaining) line else line.take(remaining))
+                }
+            }
+        } catch (_: Exception) {}
+        return out.toString()
+    }
+
     @Synchronized
     fun count(): Long = try {
         helper?.readableDatabase?.rawQuery("SELECT COUNT(*) FROM events", null)?.use {
