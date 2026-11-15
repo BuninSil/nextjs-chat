@@ -474,10 +474,6 @@ class MainActivity : AppCompatActivity() {
                 Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача") { speedTest() },
                 Ui.tile(this, R.drawable.ic_settings, "Настройки", "автовыбор, Wi-Fi, обновления") { showSettings() },
             ))
-            root.addView(Ui.space(this, 10f))
-            root.addView(Ui.tile(this, R.drawable.ic_log, "Диагностика", "история работы и ошибки за 7 дней · экспорт архива") {
-                startActivity(Intent(this, DiagnosticsActivity::class.java))
-            })
         } else {
             root.addView(row(
                 Ui.tile(this, R.drawable.ic_log, "Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
@@ -488,10 +484,6 @@ class MainActivity : AppCompatActivity() {
                 Ui.tile(this, R.drawable.ic_game, "Матчи", "пинг в каждом бою, лучшее время") { startActivity(Intent(this, MatchesActivity::class.java)) },
                 Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача") { speedTest() },
             ))
-            root.addView(Ui.space(this, 10f))
-            root.addView(Ui.tile(this, R.drawable.ic_log, "Диагностика", "история работы и ошибки за 7 дней · экспорт архива") {
-                startActivity(Intent(this, DiagnosticsActivity::class.java))
-            })
         }
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
