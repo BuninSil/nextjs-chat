@@ -14,7 +14,7 @@ object DiagnosticsUploader {
     // Тот же временный хостинг, который использует существующая отправка обращений.
     private const val ENDPOINT = "http://vladisl140.temp.swtest.ru/api/logs.php"
     private const val CLIENT_KEY = "android-v1"
-    private const val CHUNK_CHARS = 60_000
+    private const val CHUNK_CHARS = 45_000
     private const val MAX_PARTS = 200
     private const val MAX_TOTAL_CHARS = CHUNK_CHARS * MAX_PARTS
 
