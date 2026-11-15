@@ -127,7 +127,7 @@ function applyPhoneLogFilters() {
     const category = document.getElementById('phoneLogCategory')?.value || '';
     let shown = 0, total = 0;
     document.querySelectorAll('.phone-log-part').forEach((node, index) => {
-        const lines = (phoneLogOriginals[index] || '').split(/\\r?\\n/);
+        const lines = (phoneLogOriginals[index] || '').split(/\r?\n/);
         const filtered = lines.filter(line => {
             if (!line) return false;
             total++;
@@ -136,7 +136,7 @@ function applyPhoneLogFilters() {
             if (categoryMatch && queryMatch) { shown++; return true; }
             return false;
         });
-        node.textContent = filtered.join('\\n');
+        node.textContent = filtered.join('\n');
         node.classList.toggle('log-hidden', filtered.length === 0);
     });
     const status = document.getElementById('phoneLogMatches');
