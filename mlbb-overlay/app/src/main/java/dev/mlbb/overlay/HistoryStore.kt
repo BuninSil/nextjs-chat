@@ -4,7 +4,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import java.io.File
 
 /**
  * Постоянная история событий Fast VPN. Хранит структурированные события отдельно
@@ -17,6 +16,7 @@ object HistoryStore {
     private const val MAX_ESTIMATED_BYTES = 100L * 1024 * 1024
     private const val TRIM_TO_BYTES = 80L * 1024 * 1024
     @Volatile private var helper: Helper? = null
+    private var lastPruneAt = 0L
 
     data class Event(val id: Long, val timeMs: Long, val category: String, val message: String)
 
@@ -36,7 +36,10 @@ object HistoryStore {
                 put("message", message)
             }
             h.writableDatabase.insert("events", null, values)
-            if (timeMs % 64_000L < 1000L) prune()
+            if (timeMs - lastPruneAt >= 60_000L) {
+                lastPruneAt = timeMs
+                prune()
+            }
         } catch (_: Exception) {
             // Диагностика никогда не должна мешать работе VPN.
         }
@@ -81,6 +84,7 @@ object HistoryStore {
     private fun prune() {
         val db = helper?.writableDatabase ?: return
         try {
+            lastPruneAt = System.currentTimeMillis()
             val cutoff = System.currentTimeMillis() - KEEP_DAYS * 24L * 60L * 60L * 1000L
             db.delete("events", "time_ms < ?", arrayOf(cutoff.toString()))
             var bytes = estimatedBytes(db)
