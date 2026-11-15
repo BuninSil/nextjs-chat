@@ -167,6 +167,7 @@ class MonitorService : Service() {
         pinger = Pinger(minValidMs = 3, socksPort = socksPort)
         val useShizuku = !builtIn && ShizukuSource.granted()
         sourceName = if (useShizuku) "Shizuku" else "Clash API"
+        AppLog.add("MON", "мониторинг запущен · источник $sourceName · порт $port · игра $gameUid")
         ConnTracker.metricBytes = !useShizuku
         // У Shizuku нет счётчиков трафика: боевой — самый свежий UDP-сокет игры
         ConnTracker.battleOverride = if (useShizuku) ({ newestGameUdp() }) else null
@@ -198,6 +199,7 @@ class MonitorService : Service() {
                     failures = 0
                 } catch (e: Exception) {
                     Log.w(TAG, "poll failed", e)
+                    AppLog.err("MON: ошибка опроса соединений ($failures-я попытка)", e)
                     reader = null
                     if (++failures >= 5) {
                         handler.post {
@@ -336,6 +338,7 @@ class MonitorService : Service() {
     }
 
     private fun stopMonitor() {
+        if (isRunning) AppLog.add("MON", "мониторинг остановлен")
         MatchTracker.finish(this)
         handler.removeCallbacks(ticker)
         isRunning = false
