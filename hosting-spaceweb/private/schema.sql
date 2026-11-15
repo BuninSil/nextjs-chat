@@ -24,3 +24,20 @@ CREATE TABLE IF NOT EXISTS reports (
   KEY idx_install_created (install_hash, created_at),
   KEY idx_ip_created (ip_hash, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS device_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  batch_id CHAR(64) NOT NULL,
+  install_hash CHAR(64) NOT NULL,
+  app_version VARCHAR(32) NOT NULL DEFAULT '',
+  device_model VARCHAR(100) NOT NULL DEFAULT '',
+  android_version VARCHAR(30) NOT NULL DEFAULT '',
+  part_no SMALLINT UNSIGNED NOT NULL,
+  total_parts SMALLINT UNSIGNED NOT NULL,
+  log_text MEDIUMTEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_batch_part (batch_id, part_no),
+  KEY idx_created (created_at),
+  KEY idx_install_created (install_hash, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
