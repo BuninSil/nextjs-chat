@@ -39,8 +39,9 @@ object AppLog {
                 val now = System.currentTimeMillis()
                 val line = "${time.format(Date(now))} [$cat] $part"
                 Log.i("FastVPN", line)
-                f.appendText(line + "\n")
+                // Сначала SQLite: если текстовый лог недоступен, хронология всё равно сохранится.
                 HistoryStore.record(now, cat, part)
+                f.appendText(line + "\n")
             }
             if (f.length() > MAX_BYTES) trim(f)
         } catch (e: Exception) {
