@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Понятный гайд по всем функциям Fast VPN">
+<meta name="theme-color" content="#070b09">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>Fast VPN — инструкция</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -266,6 +268,66 @@ footer{border-top-color:#203328;color:var(--faint)}
 @media(prefers-reduced-motion:reduce){
   body::before,.hero::before{animation:none!important}
   .back-link,.faq details,.dl-btn{transition:none!important}
+}
+
+
+/* Финальное выравнивание с дизайн-системой главной страницы */
+:root{
+  --bg:#070b09;--panel:#0e1712;--card:#121f18;--card-2:#192a20;
+  --line:#2a4032;--line-soft:#1c2b22;--fg:#f3fbf5;
+  --muted:#a2b2a7;--faint:#718277;--accent:#54f58a;
+  --accent-strong:#35d978;--accent-ink:#052412;
+  --warn-bg:rgba(255,190,92,.10);--warn-fg:#f3d69a;
+  --font-display:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --maxw:1160px;
+}
+body{background:var(--bg);color:var(--fg);padding-bottom:64px}
+.hero{background:
+  radial-gradient(ellipse 48% 70% at 83% 45%,rgba(52,199,89,.12),transparent 72%),
+  linear-gradient(115deg,rgba(13,15,19,.96),rgba(15,23,19,.88) 58%,rgba(12,18,16,.94))}
+.guide-topbar{display:flex;justify-content:flex-start;align-items:center;width:100%;margin:0 0 34px}
+.back-link{min-height:42px;padding:10px 15px;border:1px solid #304538;border-radius:10px;
+  background:rgba(18,29,22,.78);color:#b3c2b8;font-size:13px;font-weight:800;
+  box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.back-link:hover{color:var(--fg);border-color:rgba(84,245,138,.5);background:rgba(37,67,46,.5)}
+.hero .brand-icon{border-color:rgba(110,220,143,.28);box-shadow:0 0 0 6px rgba(84,245,138,.045),0 0 34px rgba(52,199,89,.15)}
+.hero .lead{color:#b3c2b8}
+.note{background:linear-gradient(130deg,rgba(18,33,23,.94),rgba(10,18,13,.94));border-color:#2a4132;color:#aebfb3}
+section{background:linear-gradient(145deg,rgba(24,30,27,.96),rgba(18,22,27,.96));border-color:rgba(255,255,255,.065)}
+section p,section li{color:#a8b8ad}
+section b,section strong{color:var(--fg)}
+nav.toc details{background:rgba(13,21,16,.66);border-color:rgba(255,255,255,.055)}
+nav.toc summary{color:var(--accent)}
+nav.toc a{border-left-color:var(--line)}
+nav.toc a:hover{border-left-color:var(--accent);background:rgba(84,245,138,.07)}
+.back-link,.dl-btn,.faq details{transition:transform .22s ease,border-color .22s ease,background .22s ease,filter .22s ease}
+@media(max-width:900px){
+  .wrap{grid-template-columns:1fr;gap:20px}
+  nav.toc{position:relative;top:auto;max-height:none;overflow:visible}
+}
+@media(max-width:800px){
+  .hero{background:linear-gradient(160deg,rgba(13,15,19,.97),rgba(15,23,19,.94))}
+  .hero::before{width:95vw;right:-48%;top:16%}
+  .with-shot{grid-template-columns:minmax(0,1fr) 190px;gap:18px}
+}
+@media(max-width:560px){
+  body{padding-inline:13px;font-size:15px}
+  .hero{padding:18px 0 30px;margin-bottom:20px}
+  .guide-topbar{margin-bottom:25px}
+  .back-link{min-height:40px;padding:9px 12px}
+  .hero .brand-icon{width:50px;height:50px;border-radius:13px}
+  h1{font-size:clamp(29px,8vw,38px)}
+  .hero .lead{font-size:15px}
+  nav.toc ol{grid-template-columns:1fr}
+  main{gap:13px}
+  section{padding:20px 17px;border-radius:13px}
+  .with-shot{grid-template-columns:1fr;gap:16px}
+  figure img{max-width:min(100%,300px);margin-inline:auto}
+  figcaption{text-align:center;margin-inline:auto}
+  dl.gloss{grid-template-columns:1fr;gap:2px}
+}
+@media(prefers-reduced-motion:reduce){
+  .back-link,.dl-btn,.faq details{transition:none!important}
 }
 
 </style>
