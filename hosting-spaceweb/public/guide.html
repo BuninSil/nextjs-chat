@@ -331,6 +331,55 @@ nav.toc a:hover{border-left-color:var(--accent);background:rgba(84,245,138,.07)}
   .back-link,.dl-btn,.faq details{transition:none!important}
 }
 
+
+/* Единая шапка и фирменный знак: те же элементы, что и на главной */
+:root{
+  --bg:#070b09;
+  --panel:#0e1712;
+  --card:#121f18;
+  --card-2:#192a20;
+  --line:#2a4032;
+  --line-soft:#1c2b22;
+  --fg:#f3fbf5;
+  --muted:#a2b2a7;
+  --faint:#718277;
+  --accent:#54f58a;
+  --accent-strong:#35d978;
+  --accent-ink:#052412;
+  --font-display:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-body:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+body{background:var(--bg);font-family:var(--font-body)}
+h1,h2,h3{font-family:var(--font-display)}
+.hero{
+  background:transparent!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  border-bottom:1px solid var(--line-soft);
+}
+.hero::before{display:none!important;content:none!important}
+.hero .brand-row{display:flex;align-items:center;gap:12px}
+.hero .mark{display:flex;align-items:center;gap:12px}
+.hero .mark .dot{
+  width:42px;height:42px;flex:none;display:grid;place-items:center;
+  border-radius:13px;background:linear-gradient(150deg,#54f58a,#1ebd61);
+  box-shadow:0 0 0 6px rgba(84,245,138,.08),0 0 38px rgba(84,245,138,.28);
+}
+.hero .mark .dot svg{display:block;width:21px;height:21px;color:#052412}
+.hero .mark .name{
+  font-family:"Unbounded", "Arial Black", sans-serif;
+  font-weight:700;font-size:20px;letter-spacing:-.055em;color:var(--fg)
+}
+.hero .lead{font-family:var(--font-body);color:var(--muted)}
+.guide-topbar{margin-bottom:30px}
+.back-link{background:transparent;box-shadow:none;border-color:var(--line);color:var(--muted)}
+.back-link:hover{background:rgba(84,245,138,.055)}
+section{font-family:var(--font-body)}
+@media(max-width:680px){
+  .hero .mark .dot{width:38px;height:38px}
+  .hero .mark .name{font-size:18px}
+}
 </style>
 </head>
 <body>
@@ -341,29 +390,13 @@ nav.toc a:hover{border-left-color:var(--accent);background:rgba(84,245,138,.07)}
     <a class="back-link" href="/">← <span>На главную Fast VPN</span></a>
   </div>
   <div class="hero-content">
-    <div class="brand-row">
-      <span class="brand-icon" aria-hidden="true">
-        <svg viewBox="0 0 108 108">
-          <defs>
-            <radialGradient id="ibg" cx="60" cy="54" r="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#173D2A"/><stop offset="1" stop-color="#0E1013"/></radialGradient>
-            <linearGradient id="ibl" x1="66" y1="24" x2="48" y2="84" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFE45C"/><stop offset="1" stop-color="#2FD27A"/></linearGradient>
-          </defs>
-          <rect width="108" height="108" fill="url(#ibg)"/>
-          <g transform="translate(54 54) scale(.85) translate(-54 -54)">
-            <g stroke-linecap="round" stroke-width="4" fill="none">
-              <path d="M27,45H43" stroke="#2FD27A"/><path d="M23,55H40" stroke="#2FD27A" stroke-opacity=".65"/><path d="M29,65H41" stroke="#2FD27A" stroke-opacity=".4"/>
-            </g>
-            <path d="M68,23L44,57L57,57L50,85L79,47L65,47L73,23Z" fill="url(#ibl)"/>
-          </g>
-        </svg>
+    <div class="mark">
+      <span class="dot" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4.5 13.5H11L10 22l9.5-12.5H13L13 2Z"/></svg>
       </span>
-      <div>
-        <h1>Fast VPN</h1>
-        <div class="slogan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13,2L3,14h9l-1,8 10,-12h-9l1,-8z" fill="currentColor"/></svg>Быстрее нас — только свет</div>
-      </div>
+      <span class="name">Fast&nbsp;VPN</span>
     </div>
     <p class="lead">Полный гайд по Fast VPN: установка, подключение и основные функции.</p>
-    <div class="note">Инструкция относится к официальному выпуску Fast VPN, доступному на этом сайте.</div>
   </div>
 </header>
 
