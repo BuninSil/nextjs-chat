@@ -475,14 +475,9 @@ class MainActivity : AppCompatActivity() {
                 Ui.tile(this, R.drawable.ic_settings, "Настройки", "автовыбор, Wi-Fi, обновления") { showSettings() },
             ))
             root.addView(Ui.space(this, 10f))
-            root.addView(row(
-                Ui.tile(this, R.drawable.ic_log, "Диагностика", "история работы и ошибки за 7 дней") {
-                    startActivity(Intent(this, DiagnosticsActivity::class.java))
-                },
-                Ui.tile(this, R.drawable.ic_log, "Архив", "экспорт полной истории") {
-                    startActivity(Intent(this, DiagnosticsActivity::class.java))
-                },
-            ))
+            root.addView(Ui.tile(this, R.drawable.ic_log, "Диагностика", "история работы и ошибки за 7 дней · экспорт архива") {
+                startActivity(Intent(this, DiagnosticsActivity::class.java))
+            })
         } else {
             root.addView(row(
                 Ui.tile(this, R.drawable.ic_log, "Лог", "куда подключалась игра") { startActivity(Intent(this, LogActivity::class.java)) },
