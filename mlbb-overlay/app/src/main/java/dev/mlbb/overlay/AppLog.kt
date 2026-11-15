@@ -25,6 +25,7 @@ object AppLog {
         val f = File(ctx.filesDir, FILE)
         file = f
         trim(f)
+        HistoryStore.init(ctx)
         add("APP", "запуск · версия ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · " +
             "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
     }
@@ -35,9 +36,11 @@ object AppLog {
         try {
             // Каждая строка получает собственную метку времени и категорию, включая stack trace.
             msg.lineSequence().forEach { part ->
-                val line = "${time.format(Date())} [$cat] $part"
+                val now = System.currentTimeMillis()
+                val line = "${time.format(Date(now))} [$cat] $part"
                 Log.i("FastVPN", line)
                 f.appendText(line + "\n")
+                HistoryStore.record(now, cat, part)
             }
             if (f.length() > MAX_BYTES) trim(f)
         } catch (e: Exception) {
