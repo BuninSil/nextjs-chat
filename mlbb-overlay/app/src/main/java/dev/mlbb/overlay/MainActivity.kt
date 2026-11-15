@@ -488,6 +488,10 @@ class MainActivity : AppCompatActivity() {
                 Ui.tile(this, R.drawable.ic_game, "Матчи", "пинг в каждом бою, лучшее время") { startActivity(Intent(this, MatchesActivity::class.java)) },
                 Ui.tile(this, R.drawable.ic_speedtest, "Тест скорости", "пинг, загрузка и отдача") { speedTest() },
             ))
+            root.addView(Ui.space(this, 10f))
+            root.addView(Ui.tile(this, R.drawable.ic_log, "Диагностика", "история работы и ошибки за 7 дней · экспорт архива") {
+                startActivity(Intent(this, DiagnosticsActivity::class.java))
+            })
         }
 
         infoLine = Ui.text(this, "", 12f, Ui.MUTED).apply { setPadding(0, d(14f), 0, 0) }
