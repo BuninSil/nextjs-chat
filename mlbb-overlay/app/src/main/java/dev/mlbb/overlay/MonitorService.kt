@@ -175,7 +175,9 @@ class MonitorService : Service() {
         } catch (_: Exception) {
             -1
         }
-        AppLog.add("MON", "мониторинг запущен · источник $sourceName · порт $port · UID игры $gameUid")
+        // Явно фиксируем UID до запуска фонового потока: поток использует неизменяемый снимок.
+        val pollingGameUid = gameUid
+        AppLog.add("MON", "мониторинг запущен · источник $sourceName · порт $port · UID игры $pollingGameUid")
 
         pollThread = Thread({
             var failures = 0
@@ -186,7 +188,7 @@ class MonitorService : Service() {
                         val r = reader ?: ShizukuSource.bind() ?: throw RuntimeException("Shizuku не отвечает")
                         reader = r
                         val now = System.currentTimeMillis()
-                        poll(ShizukuSource.sockets(r, gameUid).map {
+                        poll(ShizukuSource.sockets(r, pollingGameUid).map {
                             ClashApi.Conn(
                                 id = (if (it.udp) "u" else "t") + it.inode + ":" + it.remoteIp + ":" + it.remotePort,
                                 udp = it.udp, dstIp = it.remoteIp, dstPort = it.remotePort, srcPort = it.localPort,
