@@ -71,13 +71,13 @@ object DiagnosticsUploader {
         val history = HistoryStore.exportText()
         val textLog = AppLog.all()
         val combined = buildString {
-            append("Fast VPN full diagnostics\\n")
-            append("App: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\\n")
-            append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\\n')
-            append("Android: ").append(Build.VERSION.RELEASE).append(" / SDK ").append(Build.VERSION.SDK_INT).append("\\n")
-            append("History window: last 7 days\\n\\n=== TIMELINE ===\\n")
+            append("Fast VPN full diagnostics\n")
+            append("App: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
+            append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+            append("Android: ").append(Build.VERSION.RELEASE).append(" / SDK ").append(Build.VERSION.SDK_INT).append("\n")
+            append("History window: last 7 days\n\n=== TIMELINE ===\n")
             append(history)
-            append("\\n=== APP LOG ===\\n")
+            append("\n=== APP LOG ===\n")
             append(textLog)
         }
         val safe = combined.lineSequence().mapNotNull { line ->
@@ -86,7 +86,7 @@ object DiagnosticsUploader {
                 .replace(ipv4, "[IP скрыт]")
                 .replace(ipv6, "[IPv6 скрыт]")
                 .replace(longToken, "[длинный токен скрыт]")
-        }.joinToString("\\n")
+        }.joinToString("\n")
         // Сервер принимает максимум 200 частей. Оставляем самый свежий хвост.
         return safe.takeLast(MAX_TOTAL_CHARS)
     }
