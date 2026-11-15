@@ -167,7 +167,6 @@ class MonitorService : Service() {
         pinger = Pinger(minValidMs = 3, socksPort = socksPort)
         val useShizuku = !builtIn && ShizukuSource.granted()
         sourceName = if (useShizuku) "Shizuku" else "Clash API"
-        AppLog.add("MON", "мониторинг запущен · источник $sourceName · порт $port · игра $gameUid")
         ConnTracker.metricBytes = !useShizuku
         // У Shizuku нет счётчиков трафика: боевой — самый свежий UDP-сокет игры
         ConnTracker.battleOverride = if (useShizuku) ({ newestGameUdp() }) else null
@@ -176,6 +175,7 @@ class MonitorService : Service() {
         } catch (_: Exception) {
             -1
         }
+        AppLog.add("MON", "мониторинг запущен · источник $sourceName · порт $port · UID игры $gameUid")
 
         pollThread = Thread({
             var failures = 0
