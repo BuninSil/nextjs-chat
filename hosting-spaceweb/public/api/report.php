@@ -14,12 +14,20 @@ if (strlen($install) < 16 || strlen($install) > 64) { http_response_code(400); e
 $installHash = hash_hmac('sha256', $install, $cfg['publish_secret']);
 $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
 $ipHash = hash_hmac('sha256', $ip, $cfg['publish_secret']);
-$rate = $pdo->prepare('SELECT COUNT(*) FROM reports WHERE install_hash=? AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)');
+$rate = $pdo->prepare('SELECT COUNT(*) FROM reports WHERE install_hash=? AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 SECOND)');
 $rate->execute([$installHash]);
-if ((int)$rate->fetchColumn() > 0) { http_response_code(429); exit(json_encode(['error'=>'rate_limit'])); }
+if ((int)$rate->fetchColumn() > 0) {
+    header('Retry-After: 30');
+    http_response_code(429);
+    exit(json_encode(['error'=>'rate_limit','retry_after'=>30], JSON_UNESCAPED_UNICODE));
+}
 $rate = $pdo->prepare('SELECT COUNT(*) FROM reports WHERE ip_hash=? AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)');
 $rate->execute([$ipHash]);
-if ((int)$rate->fetchColumn() >= 12) { http_response_code(429); exit(json_encode(['error'=>'daily_limit'])); }
+if ((int)$rate->fetchColumn() >= 30) {
+    header('Retry-After: 86400');
+    http_response_code(429);
+    exit(json_encode(['error'=>'daily_limit','retry_after'=>86400], JSON_UNESCAPED_UNICODE));
+}
 $version = fastvpn_cut(trim((string)($in['version'] ?? 'unknown')), 32);
 $versionCode = max(0, min(4294967295, (int)($in['version_code'] ?? 0)));
 $manufacturer = fastvpn_cut(trim((string)($in['manufacturer'] ?? '')), 80);
