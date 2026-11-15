@@ -74,7 +74,7 @@ object HistoryStore {
                 arrayOf(cutoff.toString())
             ).use { c ->
                 while (c.moveToNext() && out.length < maxChars) {
-                    val line = "${c.getLong(0)} [${c.getString(1)}] ${c.getString(2)}\\n"
+                    val line = "${c.getLong(0)} [${c.getString(1)}] ${c.getString(2)}\n"
                     val remaining = maxChars - out.length
                     out.append(if (line.length <= remaining) line else line.take(remaining))
                 }
