@@ -38,6 +38,13 @@ class DiagnosticsActivity : AppCompatActivity() {
                 Ui.dp(this@DiagnosticsActivity, 16f), Ui.dp(this@DiagnosticsActivity, 16f))
             setBackgroundColor(Ui.BG)
         }
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Ui.backButton(this@DiagnosticsActivity) { finish() })
+        top.addView(Ui.text(this, "Диагностика", 22f, bold = true).apply {
+            setPadding(Ui.dp(this@DiagnosticsActivity, 8f), 0, 0, 0)
+        })
+        root.addView(top)
+        root.addView(Ui.space(this, 8f))
         summary = Ui.text(this, "", 13f, Ui.SUB)
         root.addView(summary)
         root.addView(Ui.space(this, 10f))
