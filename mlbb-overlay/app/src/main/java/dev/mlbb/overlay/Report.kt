@@ -23,7 +23,10 @@ object Report {
     private const val ENDPOINT = "http://vladisl140.temp.swtest.ru/api/report.php"
     private const val PREFS = "fastvpn_support"
     private const val CONSENT = "diagnostics_consent_v1"
-    private const val MAX_DIAGNOSTICS = 5500
+    // Сервер ограничивает тело запроса 16 КБ и поле diagnostics 9000 символами.
+    // Оставляем запас под JSON, описание и многобайтовый UTF-8.
+    private const val MAX_DIAGNOSTICS = 6500
+    private const val MAX_LOG_LINES = 1000
 
     /**
      * Собственное окно вместо системного AlertDialog: одинаково выглядит в старом
@@ -153,11 +156,11 @@ object Report {
         val longToken = Regex("""[A-Za-z0-9_+/=-]{36,}""")
         val url = Regex("""(?i)https?://\S+""")
         val categories = listOf("[APP]", "[UI]", "[SET]", "[ERR]", "[VPN]", "[CONN]", "[CORE]",
-            "[NET]", "[UPD]", "[AUTO]", "[SRV]", "[SUB]", "[TILE]")
+            "[NET]", "[UPD]", "[AUTO]", "[SRV]", "[SUB]", "[TILE]", "[MON]", "[SPEED]")
         val selected = AppLog.all().lineSequence()
             .filter { line -> categories.any(line::contains) && !forbidden.containsMatchIn(line) }
             .toList()
-            .takeLast(220)
+            .takeLast(MAX_LOG_LINES)
             .map { line ->
                 line.replace(url, "[адрес скрыт]")
                     .replace(ip, "[IP скрыт]")
@@ -229,7 +232,7 @@ object Report {
                     is java.net.SocketTimeoutException -> "сервер не ответил вовремя"
                     else -> e.message ?: "неизвестная ошибка"
                 }
-                AppLog.err("отправка отчёта: $failure")
+                AppLog.err("отправка отчёта: $failure", e)
             } finally {
                 connection?.disconnect()
             }
