@@ -101,10 +101,10 @@ $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе',
 <?php $allPhoneLog = implode("\n", array_column($logParts, 'log_text')); $errorCount = preg_match_all('/\\[(ERR|ERROR|FATAL)\\]/i', $allPhoneLog); $eventCount = preg_match_all('/^.*\\[[A-Z_]+\\].*$/m', $allPhoneLog); ?>
 <div class="ticket"><h3>Полная история телефона</h3><div class="muted"><?=eh($logParts[0]['app_version'])?> · <?=eh($logParts[0]['device_model'])?> · Android <?=eh($logParts[0]['android_version'])?> · частей <?=count($logParts)?> / <?= (int)$logParts[0]['total_parts'] ?></div>
 <div class="log-meta"><span class="log-pill"><?=number_format(strlen($allPhoneLog),0,'.',' ')?> байт</span><span class="log-pill"><?=number_format((int)$eventCount,0,'.',' ')?> строк с категориями</span><span class="log-pill <?=((int)$errorCount>0?'err':'ok')?>">Ошибок: <?= (int)$errorCount ?></span><span class="log-pill">Принято: <?=eh($logParts[0]['created_at'])?> UTC</span></div>
-<div class="log-tools"><input id="phoneLogSearch" type="search" placeholder="Поиск: ошибка, сервер, подключение, DNS…"><select id="phoneLogCategory"><option value="">Все категории</option><option value="APP">APP · запуск</option><option value="UI">UI · интерфейс</option><option value="SET">SET · настройки</option><option value="ERR">ERR · ошибки</option><option value="VPN">VPN · состояние</option><option value="CONN">CONN · соединение</option><option value="CORE">CORE · ядро</option><option value="NET">NET · сеть</option><option value="UPD">UPD · обновления</option><option value="AUTO">AUTO · автовыбор</option><option value="SRV">SRV · серверы</option><option value="MON">MON · мониторинг</option><option value="SPEED">SPEED · скорость</option></select><button type="button" class="copy-diag" onclick="resetPhoneLogFilters()">Сбросить</button></div>
+<div class="log-tools"><input id="phoneLogSearch" type="search" placeholder="Поиск: ошибка, сервер, подключение, DNS…"><select id="phoneLogCategory"><option value="">Все категории</option><option value="APP">APP · запуск</option><option value="UI">UI · интерфейс</option><option value="SET">SET · настройки</option><option value="ERR">ERR · ошибки</option><option value="VPN">VPN · состояние</option><option value="CONN">CONN · соединение</option><option value="CORE">CORE · ядро</option><option value="NET">NET · сеть</option><option value="UPD">UPD · обновления</option><option value="AUTO">AUTO · автовыбор</option><option value="SRV">SRV · серверы</option><option value="MON">MON · мониторинг</option><option value="SPEED">SPEED · скорость</option></select><select id="phoneLogSort" aria-label="Сортировка"><option value="asc">Сначала старые</option><option value="desc">Сначала новые</option></select><button type="button" class="copy-diag" onclick="resetPhoneLogFilters()">Сбросить</button></div>
 <div class="muted" id="phoneLogMatches" aria-live="polite">Показаны все строки</div>
-<?php foreach($logParts as $partRow): ?><pre class="diag phone-log-part"><?=eh($partRow['log_text'])?></pre><?php endforeach; ?></div><?php endif; ?>
-<?php else: ?><?php foreach($logBatches as $b): ?><article class="ticket"><h3>📱 <?=eh($b['device_model'] ?: 'Неизвестное устройство')?> <span class="tag">· <?=eh($b['app_version'])?></span></h3><div class="muted">Android <?=eh($b['android_version'])?> · <?=eh($b['created_at'])?> UTC · получено <?= (int)$b['received_parts'] ?> / <?= (int)$b['total_parts'] ?> частей · <?=number_format((int)$b['bytes']/1024,1,'.',' ')?> КБ</div><p><a href="?view=logs&amp;batch=<?=eh($b['batch_id'])?>">Открыть полную историю →</a></p></article><?php endforeach; ?><?php if(!$logBatches): ?><div class="empty">Полных логов пока нет. Они появятся после отправки истории из приложения.</div><?php endif; ?><?php endif; ?>
+<pre class="diag" id="phoneLogText"><?=eh($allPhoneLog)?></pre></div><?php endif; ?>
+<?php else: ?><div class="log-tools"><select id="batchSort" aria-label="Сортировка загрузок"><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option><option value="device">По устройству А–Я</option><option value="version">По версии</option></select></div><?php foreach($logBatches as $b): ?><article class="ticket log-batch" data-time="<?= (int)(strtotime($b['created_at'].' UTC') ?: 0) ?>" data-device="<?=eh(mb_strtolower($b['device_model']))?>" data-version="<?=eh(mb_strtolower($b['app_version']))?>"><h3>📱 <?=eh($b['device_model'] ?: 'Неизвестное устройство')?> <span class="tag">· <?=eh($b['app_version'])?></span></h3><div class="muted">Android <?=eh($b['android_version'])?> · <?=eh($b['created_at'])?> UTC · получено <?= (int)$b['received_parts'] ?> / <?= (int)$b['total_parts'] ?> частей · <?=number_format((int)$b['bytes']/1024,1,'.',' ')?> КБ</div><p><a href="?view=logs&amp;batch=<?=eh($b['batch_id'])?>">Открыть полную историю →</a></p></article><?php endforeach; ?><?php if(!$logBatches): ?><div class="empty">Полных логов пока нет. Они появятся после отправки истории из приложения.</div><?php endif; ?><?php endif; ?>
 <?php else: ?>
 <?php foreach($rows as $r):?><article class="ticket"><div class="ticket-top"><?php if(in_array($filter,['resolved','duplicate'],true)):?><input type="checkbox" name="tickets[]" value="<?=eh($r['ticket'])?>" form="bulkDelete" aria-label="Выбрать <?=eh($r['ticket'])?>"><?php endif;?><div style="flex:1;min-width:0"><h3><?=eh($r['ticket'])?> <span class="tag">· <?=eh($statusLabels[$r['status']] ?? $r['status'])?></span> <span class="muted">· <?=eh($categoryLabels[$r['category']] ?? 'Другое')?></span></h3>
 <div class="muted"><?=eh($r['created_at'])?> UTC · <?=eh($r['app_version'])?> · <?=eh($r['manufacturer'].' '.$r['device_model'])?> · Android <?=eh($r['android_version'])?> · <?=eh($r['network_type'])?> · VPN <?=eh($r['vpn_state'])?></div></div></div>
@@ -121,26 +121,53 @@ $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе',
 <?php if($page<$totalPages):?><a href="?<?=in_array($filter,$allowed,true)?'status='.urlencode($filter).'&':''?>page=<?=$page+1?>">Старее →</a><?php endif;?>
 </nav><?php endif;?>
 </main><script>
-const phoneLogOriginals = Array.from(document.querySelectorAll('.phone-log-part')).map(x => x.textContent || '');
+const phoneLogRaw = document.getElementById('phoneLogText')?.textContent || '';
+function parseLogTime(line) {
+    let m = line.match(/^(\\d{13})\\s/);
+    if (m) return Number(m[1]);
+    m = line.match(/^(\\d{2})-(\\d{2}) (\\d{2}:\\d{2}:\\d{2}\\.\\d{3})/);
+    if (m) {
+        const year = new Date().getFullYear();
+        const d = new Date(year + '-' + m[1] + '-' + m[2] + 'T' + m[3]);
+        return Number.isNaN(d.getTime()) ? null : d.getTime();
+    }
+    return null;
+}
+function formatLogDate(ms) {
+    return ms == null ? 'Дата не определена' : new Date(ms).toLocaleString('ru-RU');
+}
+function buildLogEvents() {
+    const events = [];
+    for (const line of phoneLogRaw.split(/\\r?\\n/)) {
+        if (!line) continue;
+        const time = parseLogTime(line);
+        if (time != null || events.length === 0) events.push({time, lines:[line]});
+        else events[events.length - 1].lines.push(line);
+    }
+    return events;
+}
+const phoneLogEvents = buildLogEvents();
 function applyPhoneLogFilters() {
     const query = (document.getElementById('phoneLogSearch')?.value || '').toLocaleLowerCase();
     const category = document.getElementById('phoneLogCategory')?.value || '';
-    let shown = 0, total = 0;
-    document.querySelectorAll('.phone-log-part').forEach((node, index) => {
-        const lines = (phoneLogOriginals[index] || '').split(/\r?\n/);
-        const filtered = lines.filter(line => {
-            if (!line) return false;
-            total++;
-            const categoryMatch = !category || line.includes('[' + category + ']');
-            const queryMatch = !query || line.toLocaleLowerCase().includes(query);
-            if (categoryMatch && queryMatch) { shown++; return true; }
-            return false;
-        });
-        node.textContent = filtered.join('\n');
-        node.classList.toggle('log-hidden', filtered.length === 0);
+    const sort = document.getElementById('phoneLogSort')?.value || 'asc';
+    const events = phoneLogEvents.slice().sort((a,b) => {
+        const av = a.time ?? 0, bv = b.time ?? 0;
+        return sort === 'desc' ? bv-av : av-bv;
     });
+    let shown = 0;
+    const output = [];
+    for (const event of events) {
+        const block = event.lines.join('\\n');
+        if (category && !event.lines.some(line => line.includes('[' + category + ']'))) continue;
+        if (query && !block.toLocaleLowerCase().includes(query)) continue;
+        shown++;
+        output.push('[' + formatLogDate(event.time) + ']\\n' + block);
+    }
+    const node = document.getElementById('phoneLogText');
+    if (node) node.textContent = output.join('\\n\\n');
     const status = document.getElementById('phoneLogMatches');
-    if (status) status.textContent = 'Показано строк: ' + shown + ' из ' + total;
+    if (status) status.textContent = 'Показано событий: ' + shown + ' из ' + phoneLogEvents.length;
 }
 function resetPhoneLogFilters() {
     const q = document.getElementById('phoneLogSearch'), cat = document.getElementById('phoneLogCategory');
@@ -148,7 +175,23 @@ function resetPhoneLogFilters() {
 }
 document.getElementById('phoneLogSearch')?.addEventListener('input', applyPhoneLogFilters);
 document.getElementById('phoneLogCategory')?.addEventListener('change', applyPhoneLogFilters);
-function getAllPhoneLogs() { return Array.from(document.querySelectorAll('.phone-log-part')).map(x=>x.textContent).join('\\n'); }\nfunction downloadPhoneLogs() { const blob=new Blob([getAllPhoneLogs()],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='fastvpn-phone-log.txt'; a.click(); URL.revokeObjectURL(url); }\nasync function copyAllPhoneLogs() { try { await navigator.clipboard.writeText(getAllPhoneLogs()); } catch (_) { alert('Не удалось скопировать лог'); } }
+document.getElementById('phoneLogSort')?.addEventListener('change', applyPhoneLogFilters);
+function getAllPhoneLogs() { return phoneLogRaw; }
+function downloadPhoneLogs() { const blob=new Blob([getAllPhoneLogs()],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='fastvpn-phone-log.txt'; a.click(); URL.revokeObjectURL(url); }
+async function copyAllPhoneLogs() { try { await navigator.clipboard.writeText(getAllPhoneLogs()); } catch (_) { alert('Не удалось скопировать лог'); } }
+const batchSort = document.getElementById('batchSort');
+if (batchSort) {
+    batchSort.addEventListener('change', () => {
+        const list = Array.from(document.querySelectorAll('.log-batch'));
+        const mode = batchSort.value;
+        list.sort((a,b) => mode === 'oldest' ? Number(a.dataset.time)-Number(b.dataset.time)
+            : mode === 'device' ? a.dataset.device.localeCompare(b.dataset.device,'ru')
+            : mode === 'version' ? a.dataset.version.localeCompare(b.dataset.version,'ru')
+            : Number(b.dataset.time)-Number(a.dataset.time));
+        const parent = list[0]?.parentElement;
+        if (parent) list.forEach(item => parent.appendChild(item));
+    });
+}
 async function copyDiag(button) {
     const details = button.closest('details');
     const text = details ? details.querySelector('.diag')?.textContent || '' : '';
