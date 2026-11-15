@@ -123,9 +123,9 @@ $tabLabels = [''=>'Все','new'=>'Новые','in_progress'=>'В работе',
 </main><script>
 const phoneLogRaw = document.getElementById('phoneLogText')?.textContent || '';
 function parseLogTime(line) {
-    let m = line.match(/^(\\d{13})\\s/);
+    let m = line.match(/^(\d{13})\s/);
     if (m) return Number(m[1]);
-    m = line.match(/^(\\d{2})-(\\d{2}) (\\d{2}:\\d{2}:\\d{2}\\.\\d{3})/);
+    m = line.match(/^(\d{2})-(\d{2}) (\d{2}:\d{2}:\d{2}\.\d{3})/);
     if (m) {
         const year = new Date().getFullYear();
         const d = new Date(year + '-' + m[1] + '-' + m[2] + 'T' + m[3]);
@@ -138,7 +138,7 @@ function formatLogDate(ms) {
 }
 function buildLogEvents() {
     const events = [];
-    for (const line of phoneLogRaw.split(/\\r?\\n/)) {
+    for (const line of phoneLogRaw.split(/\r?\n/)) {
         if (!line) continue;
         const time = parseLogTime(line);
         if (time != null || events.length === 0) events.push({time, lines:[line]});
@@ -158,14 +158,14 @@ function applyPhoneLogFilters() {
     let shown = 0;
     const output = [];
     for (const event of events) {
-        const block = event.lines.join('\\n');
+        const block = event.lines.join('\n');
         if (category && !event.lines.some(line => line.includes('[' + category + ']'))) continue;
         if (query && !block.toLocaleLowerCase().includes(query)) continue;
         shown++;
-        output.push('[' + formatLogDate(event.time) + ']\\n' + block);
+        output.push('[' + formatLogDate(event.time) + ']\n' + block);
     }
     const node = document.getElementById('phoneLogText');
-    if (node) node.textContent = output.join('\\n\\n');
+    if (node) node.textContent = output.join('\n\n');
     const status = document.getElementById('phoneLogMatches');
     if (status) status.textContent = 'Показано событий: ' + shown + ' из ' + phoneLogEvents.length;
 }
